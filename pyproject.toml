@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "isingmark"
+version = "0.1.0"
+description = "Annealer-agnostic Ising model benchmarking tool"
+requires-python = ">=3.11"
+license = "AGPL-3.0-or-later"
+dependencies = [
+    "numpy",
+    "click",
+    "dimod",
+    "dwave-samplers",
+]
+
+[project.optional-dependencies]
+viz = ["matplotlib"]
+dwave = ["dwave-system"]
+dev = ["pytest", "scipy"]
+
+[project.scripts]
+isingmark = "isingmark.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
