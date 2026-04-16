@@ -16,10 +16,15 @@ from isingmark.models import BenchmarkConfig
 from isingmark.params.adaptor import DefaultParamsAdaptor
 from isingmark.problems import get_generator
 from isingmark.results.storage import append_solution_jsonl, read_solutions_jsonl, write_summary_json
+from isingmark.results.aggregator import aggregate_solutions
+from isingmark.results.comparator import ks_distance
 from isingmark.runners.comparative import run_comparative
+from isingmark.runners.reproducibility import run_reproducibility
+from isingmark.runners.scaling import run_scaling
 from isingmark.runners.sweep import run_sweep
 from isingmark.runners.throughput import run_throughput
 from isingmark.runners.ttt import run_ttt
+from isingmark.viz.tables import format_comparison_table
 
 _DURATION_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*([smhSMH])$")
 _UNIT_SECONDS = {"s": 1.0, "m": 60.0, "h": 3600.0}
@@ -509,6 +514,284 @@ def ttt(
     ttt_path = out_path / f"ttt_{ts}.json"
     write_summary_json(ttt_path, summary)
     click.echo(f"\nTTT summary written to: {ttt_path}")
+
+
+@main.command()
+@click.option(
+    "--file-a",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, readable=True),
+    help="Path to the first JSONL results file.",
+)
+@click.option(
+    "--file-b",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, readable=True),
+    help="Path to the second JSONL results file.",
+)
+@click.option("--plot", is_flag=True, default=False, help="Plot energy distributions (requires matplotlib).")
+@click.option(
+    "--output-dir",
+    default=".",
+    show_default=True,
+    type=click.Path(file_okay=False, writable=True),
+    help="Directory for output files.",
+)
+def compare(file_a: str, file_b: str, plot: bool, output_dir: str) -> None:
+    """Compare two JSONL benchmark result files.
+
+    Loads both files, prints a comparison table, and computes the KS distance
+    between the two energy distributions.
+    """
+    results_a = read_solutions_jsonl(file_a)
+    results_b = read_solutions_jsonl(file_b)
+
+    if not results_a or not results_b:
+        click.echo("One or both files are empty.", err=True)
+        raise SystemExit(1)
+
+    summary_a = aggregate_solutions(results_a)
+    summary_b = aggregate_solutions(results_b)
+    summary_a["annealer_name"] = results_a[0].annealer_name
+    summary_b["annealer_name"] = results_b[0].annealer_name
+    summary_a["problems_per_min"] = 0.0
+    summary_b["problems_per_min"] = 0.0
+
+    click.echo(format_comparison_table([summary_a, summary_b]))
+
+    energies_a = [s.best_energy for s in results_a]
+    energies_b = [s.best_energy for s in results_b]
+    ks_stat, p_val = ks_distance(energies_a, energies_b)
+
+    click.echo(f"\nKS distance: {ks_stat:.4f}  p-value: {p_val:.4f}")
+
+    if plot:
+        try:
+            from isingmark.viz.curves import plot_energy_distributions
+
+            out_path = Path(output_dir)
+            out_path.mkdir(parents=True, exist_ok=True)
+            fig = plot_energy_distributions(
+                {
+                    summary_a["annealer_name"]: energies_a,
+                    summary_b["annealer_name"]: energies_b,
+                },
+                output_path=out_path / "energy_distributions.png",
+            )
+            import matplotlib.pyplot as plt  # type: ignore[import]
+
+            plt.close(fig)
+            click.echo(f"Plot saved to {out_path / 'energy_distributions.png'}")
+        except ImportError as exc:
+            click.echo(f"Plotting skipped: {exc}", err=True)
+
+
+@main.command()
+@click.option("--annealer", default="sa-dimod", show_default=True, help="Annealer adapter name.")
+@click.option(
+    "--problem-type", default="random_ising", show_default=True, help="Problem generator name."
+)
+@click.option(
+    "--hardness", default=0.5, show_default=True, type=float, help="Problem hardness in [0, 1]."
+)
+@click.option(
+    "--sizes",
+    required=True,
+    help="Comma-separated node counts, e.g. '10,20,50,100'.",
+)
+@click.option("--seed", default=0, show_default=True, type=int, help="Base seed.")
+@click.option(
+    "--output-dir",
+    default=".",
+    show_default=True,
+    type=click.Path(file_okay=False, writable=True),
+    help="Directory for output files.",
+)
+def scaling(
+    annealer: str,
+    problem_type: str,
+    hardness: float,
+    sizes: str,
+    seed: int,
+    output_dir: str,
+) -> None:
+    """Run scaling benchmark across problem sizes.
+
+    For each size, generates a random graph and runs several Ising problems,
+    printing per-size energy and timing statistics.
+    """
+    try:
+        size_list = [int(s.strip()) for s in sizes.split(",") if s.strip()]
+    except ValueError as exc:
+        raise click.BadParameter(f"Invalid --sizes: {exc}") from exc
+
+    if not size_list:
+        raise click.BadParameter("--sizes must contain at least one value.")
+
+    adapter = get_adapter(annealer)
+    generator = get_generator(problem_type)
+    params_adaptor = DefaultParamsAdaptor()
+
+    config = BenchmarkConfig(
+        mode="scaling",
+        annealer_name=annealer,
+        problem_type=problem_type,
+        hardness=hardness,
+        output_dir=output_dir,
+    )
+
+    click.echo(
+        f"Running scaling: annealer={annealer}, problem={problem_type}, "
+        f"hardness={hardness:.2f}, sizes={size_list}"
+    )
+
+    results = run_scaling(
+        config=config,
+        annealer=adapter,
+        params_adaptor=params_adaptor,
+        generator=generator,
+        sizes=size_list,
+        base_seed=seed,
+        show_progress=True,
+    )
+
+    click.echo("\n--- Scaling Summary ---")
+    click.echo(f"  {'Size':>6}  {'N':>5}  {'Min E':>10}  {'Mean E':>10}  {'Mean t(s)':>10}")
+    click.echo("  " + "-" * 50)
+
+    all_summaries: list[dict[str, Any]] = []
+    for size in size_list:
+        sols = results.get(size, [])
+        if not sols:
+            continue
+        energies = np.array([s.best_energy for s in sols])
+        timings = np.array([s.wall_time_s for s in sols])
+        click.echo(
+            f"  {size:>6}  {len(sols):>5}  {np.min(energies):>10.4f}  "
+            f"{np.mean(energies):>10.4f}  {np.mean(timings):>10.4f}"
+        )
+        all_summaries.append(
+            {
+                "size": size,
+                "n": len(sols),
+                "min_energy": float(np.min(energies)),
+                "mean_energy": float(np.mean(energies)),
+                "mean_time_s": float(np.mean(timings)),
+            }
+        )
+
+    ts = int(time.time())
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    summary_path = out_path / f"scaling_{ts}.json"
+    write_summary_json(
+        summary_path,
+        {
+            "benchmark_mode": "scaling",
+            "annealer_name": annealer,
+            "problem_type": problem_type,
+            "hardness": hardness,
+            "sizes": all_summaries,
+        },
+    )
+    click.echo(f"\nScaling summary written to: {summary_path}")
+
+
+@main.command()
+@click.option("--annealer", default="sa-dimod", show_default=True, help="Annealer adapter name.")
+@click.option(
+    "--problem-type", default="random_ising", show_default=True, help="Problem generator name."
+)
+@click.option(
+    "--hardness", default=0.5, show_default=True, type=float, help="Problem hardness in [0, 1]."
+)
+@click.option(
+    "--num-problems", default=20, show_default=True, type=int, help="Number of problems per run."
+)
+@click.option("--seed", default=0, show_default=True, type=int, help="Base seed.")
+@click.option(
+    "--topology",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, readable=True),
+    help="Path to JSON topology file with 'nodes' and 'edges' keys.",
+)
+@click.option(
+    "--output-dir",
+    default=".",
+    show_default=True,
+    type=click.Path(file_okay=False, writable=True),
+    help="Directory for output files.",
+)
+def reproducibility(
+    annealer: str,
+    problem_type: str,
+    hardness: float,
+    num_problems: int,
+    seed: int,
+    topology: str | None,
+    output_dir: str,
+) -> None:
+    """Run reproducibility benchmark: compare two identical runs.
+
+    Runs the same set of problems twice and reports the KS statistic and
+    p-value for the resulting energy distributions.
+    """
+    nodes, edges = _load_topology(topology)
+    adapter = get_adapter(annealer)
+    generator = get_generator(problem_type)
+    params_adaptor = DefaultParamsAdaptor()
+
+    config = BenchmarkConfig(
+        mode="reproducibility",
+        annealer_name=annealer,
+        problem_type=problem_type,
+        hardness=hardness,
+        output_dir=output_dir,
+    )
+
+    seeds = list(_seed_sequence(seed))[:num_problems]
+
+    click.echo(
+        f"Running reproducibility: annealer={annealer}, problem={problem_type}, "
+        f"hardness={hardness:.2f}, num_problems={num_problems}, nodes={len(nodes)}"
+    )
+
+    report = run_reproducibility(
+        config=config,
+        annealer=adapter,
+        params_adaptor=params_adaptor,
+        generator=generator,
+        nodes=nodes,
+        edges=edges,
+        seeds=seeds,
+        show_progress=True,
+    )
+
+    click.echo("\n--- Reproducibility Summary ---")
+    click.echo(f"  Problems per run  : {report['num_problems']}")
+    click.echo(f"  KS statistic      : {report['ks_statistic']:.4f}")
+    click.echo(f"  p-value           : {report['p_value']:.4f}")
+    consistent_str = "yes" if report["consistent"] else "no"
+    click.echo(f"  Consistent        : {consistent_str}")
+
+    ts = int(time.time())
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    summary_path = out_path / f"reproducibility_{ts}.json"
+    write_summary_json(
+        summary_path,
+        {
+            "benchmark_mode": "reproducibility",
+            "annealer_name": annealer,
+            "problem_type": problem_type,
+            "hardness": hardness,
+            "num_problems": report["num_problems"],
+            "ks_statistic": report["ks_statistic"],
+            "p_value": report["p_value"],
+            "consistent": report["consistent"],
+        },
+    )
+    click.echo(f"\nReproducibility summary written to: {summary_path}")
 
 
 if __name__ == "__main__":
