@@ -45,3 +45,4 @@ def list_generators() -> list[str]:
 # Import generators to trigger their registration
 from isingmark.problems import random_ising as _random_ising  # noqa: E402, F401
 from isingmark.problems import planted_solution as _planted_solution  # noqa: E402, F401
+from isingmark.problems import max_cut as _max_cut  # noqa: E402, F401
