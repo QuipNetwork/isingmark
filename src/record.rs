@@ -53,6 +53,15 @@ pub struct JobRecord {
 /// Append `rec` as one JSON line to `path`, creating the file if it does not
 /// exist and appending to it if it does.
 ///
+/// The line is written with a single `write_all` call (JSON payload and
+/// trailing newline in one buffer) rather than `writeln!`'s separate writes,
+/// so a process killed mid-append cannot leave a complete-but-newline-less
+/// record followed by a second, unrelated write landing on the same
+/// physical line. This is not formal atomicity — a crash can still land
+/// inside the one `write`, and short writes are possible in principle — but
+/// for a sub-4KiB append to a regular file opened in append mode, that does
+/// not occur in practice, and it removes the two-syscall window entirely.
+///
 /// # Errors
 ///
 /// Returns an error if `path` cannot be opened for appending, if `rec`
@@ -60,16 +69,22 @@ pub struct JobRecord {
 pub fn append_jsonl(path: &Path, rec: &JobRecord) -> io::Result<()> {
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
     let line = serde_json::to_string(rec)?;
-    writeln!(file, "{line}")
+    file.write_all(format!("{line}\n").as_bytes())
 }
 
-/// Read all records from a JSONL file at `path`, in file order. Blank lines
-/// (including a trailing blank line) are skipped.
+/// Read all records from a JSONL file at `path`, in file order.
+///
+/// Blank lines are skipped, and so is any line that fails to parse as a
+/// [`JobRecord`] — for example a partial line left behind by a process
+/// killed mid-`append_jsonl`, or that partial line merged with the next
+/// record's write (see [`append_jsonl`]). A single corrupt line is data
+/// loss for that one record, but it does not cost every record before or
+/// after it, and the file remains readable.
 ///
 /// # Errors
 ///
-/// Returns an error if `path` cannot be opened or read, or if any non-blank
-/// line fails to parse as a [`JobRecord`].
+/// Returns an error if `path` cannot be opened, or if a line cannot be read
+/// (for example, invalid UTF-8).
 pub fn read_jsonl(path: &Path) -> io::Result<Vec<JobRecord>> {
     let file = File::open(path)?;
     let mut records = Vec::new();
@@ -78,7 +93,9 @@ pub fn read_jsonl(path: &Path) -> io::Result<Vec<JobRecord>> {
         if line.trim().is_empty() {
             continue;
         }
-        records.push(serde_json::from_str(&line)?);
+        if let Ok(rec) = serde_json::from_str(&line) {
+            records.push(rec);
+        }
     }
     Ok(records)
 }
@@ -95,15 +112,23 @@ pub struct Totals {
 }
 
 /// Identifying shape of the topology a run benchmarked against.
+///
+/// `num_nodes`/`num_edges` capture the graph's size only, not its structure
+/// or allowed-value sets — two topologies can share both counts and still
+/// draw materially different problems. `topology_hash` disambiguates them:
+/// it is the hex encoding of `topology::TopologySpec::topology_hash()`,
+/// which covers sorted nodes, canonically-sorted edges, and all three
+/// allowed-value sets.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TopologyInfo {
-    /// Topology name (a fixture/preset name, or a hex topology hash when no
-    /// human-readable name applies).
+    /// Human-readable topology label (a fixture/preset name).
     pub name: String,
     /// Node count.
     pub num_nodes: usize,
     /// Edge count.
     pub num_edges: usize,
+    /// Hex-encoded `topology::TopologySpec::topology_hash()`.
+    pub topology_hash: String,
 }
 
 /// Sentinel for [`HardwareInfo::ram_gb`] when detection fails: real hardware

@@ -113,6 +113,65 @@ fn read_jsonl_skips_a_blank_trailing_line() {
     assert_eq!(read_back, vec![rec_a, rec_b]);
 }
 
+#[test]
+fn read_jsonl_on_empty_file_returns_empty_vec() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("records.jsonl");
+    std::fs::write(&path, "").expect("write empty file");
+
+    let records = read_jsonl(&path).expect("read_jsonl succeeds on an empty file");
+    assert!(records.is_empty());
+}
+
+/// Review finding 2: a malformed line used to void every record in the
+/// file, not just itself. A single corrupt line (of the kind a partial
+/// write could leave behind) must not cost the records before or after it.
+#[test]
+fn read_jsonl_skips_a_malformed_middle_line_and_keeps_the_surrounding_records() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("records.jsonl");
+
+    let rec_a = record_with_reject_reason();
+    let rec_b = record_without_reject_reason();
+    let content = format!(
+        "{}\nnot valid json\n{}\n",
+        serde_json::to_string(&rec_a).expect("serialize rec_a"),
+        serde_json::to_string(&rec_b).expect("serialize rec_b"),
+    );
+    std::fs::write(&path, content).expect("write file with a malformed middle line");
+
+    let records = read_jsonl(&path).expect("read_jsonl must not fail on one bad line");
+    assert_eq!(records, vec![rec_a, rec_b]);
+}
+
+/// Review finding 6: a process killed mid-`append_jsonl` can leave a
+/// newline-less partial line at the end of the file. The next
+/// `append_jsonl` call has no separator to write after, so its record lands
+/// on the same physical line as the leftover fragment, producing one
+/// unparseable merged line. That must cost only the record that collided
+/// with the fragment — every prior record must survive and the file must
+/// stay readable, not become permanently corrupt.
+#[test]
+fn read_jsonl_recovers_prior_records_after_a_crash_truncated_tail_line() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("records.jsonl");
+
+    let good = record_with_reject_reason();
+    let mut content = serde_json::to_string(&good).expect("serialize good record");
+    content.push('\n');
+    // Simulates a crash mid-write: a syntactically incomplete JSON value
+    // with no trailing newline, as `append_jsonl` would leave behind if the
+    // process died after writing only part of a record.
+    content.push_str(r#"{"job_id":"crash-truncated-fragmen"#);
+    std::fs::write(&path, &content).expect("write file with a crash-truncated tail");
+
+    append_jsonl(&path, &record_without_reject_reason())
+        .expect("append after a crash-truncated tail");
+
+    let records = read_jsonl(&path).expect("read_jsonl must not fail on the corrupt tail");
+    assert_eq!(records, vec![good]);
+}
+
 fn summary() -> Summary {
     Summary {
         mode: "throughput".to_string(),
@@ -121,6 +180,11 @@ fn summary() -> Summary {
             name: "smoke".to_string(),
             num_nodes: 8,
             num_edges: 5,
+            topology_hash: hex_encode(&[
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+                0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+                0x1c, 0x1d, 0x1e, 0x1f,
+            ]),
         },
         hardware: HardwareInfo {
             platform: "macos".to_string(),
@@ -164,6 +228,10 @@ fn summary_json_contains_topology_hardware_config_and_totals_keys() {
     assert_eq!(value["topology"]["name"], "smoke");
     assert_eq!(value["topology"]["num_nodes"], 8);
     assert_eq!(value["topology"]["num_edges"], 5);
+    assert_eq!(
+        value["topology"]["topology_hash"],
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    );
 
     assert_eq!(value["hardware"]["platform"], "macos");
     assert_eq!(value["hardware"]["cpu"], "Apple M4 Max");
