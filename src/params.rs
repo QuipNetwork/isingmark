@@ -34,13 +34,36 @@ pub struct JobParams {
 
 /// Linear min/max bounds for each backend-specific parameter, indexed by
 /// `hardness` in `[0.0, 1.0]`.
+///
+/// A bound of `0` is not "no reads" or "no sweeps" — it is the wire-level
+/// UNSET sentinel, so a curve endpoint that lands on `0` stops requesting a
+/// specific value there at all. For example, `min_reads: 0` means that at
+/// `hardness = 0.0` the harness emits `num_reads = 0`, which the miner reads
+/// as "unset" and replaces with its own `SetTarget`/adapt default instead of
+/// the requested minimum — silently, with no error from `resolve` — so the
+/// easiest point on the curve ends up measuring the miner's own adaptation
+/// logic rather than the parameter the operator configured. Set every bound
+/// that should be honored at its endpoint to a nonzero value.
+///
+/// `resolve` does not validate `min <= max` for any pair; keeping that
+/// invariant is the caller's responsibility. A curve with `min > max`
+/// interpolates the same way but runs backward (decreasing as `hardness`
+/// increases), which `resolve` treats as intentional rather than an error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParamCurve {
+    /// Reads at `hardness = 0.0`, for both backend kinds.
     pub min_reads: u32,
+    /// Reads at `hardness = 1.0`, for both backend kinds.
     pub max_reads: u32,
+    /// Sweeps at `hardness = 0.0`. Used only by [`BackendKind::Sweeping`].
     pub min_sweeps: u32,
+    /// Sweeps at `hardness = 1.0`. Used only by [`BackendKind::Sweeping`].
     pub max_sweeps: u32,
+    /// Anneal time, in microseconds, at `hardness = 0.0`. Used only by
+    /// [`BackendKind::Annealing`].
     pub min_anneal_us: u32,
+    /// Anneal time, in microseconds, at `hardness = 1.0`. Used only by
+    /// [`BackendKind::Annealing`].
     pub max_anneal_us: u32,
 }
 
