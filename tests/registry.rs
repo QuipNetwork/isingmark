@@ -5,8 +5,14 @@
 //! The real `quip-*` miner binaries are not installed on every machine that
 //! runs this suite, so the positive JSON-parse and exit-code-mapping paths
 //! are exercised hermetically against a fake miner fixture (a small shell
-//! script) in the `fake_miner` module below. Probing the real `quip-cpu-sa`
-//! is kept as an opportunistic extra that skips when the binary is absent.
+//! script) in the `fake_miner` module below.
+//!
+//! `quip_cpu_sa_probe_succeeds_when_the_real_binary_is_installed` also drives
+//! the real `quip-cpu-sa`, and fails by default if it is missing — this
+//! project's tests do not silently skip real-hardware coverage. Set
+//! `ISINGMARK_ALLOW_MISSING_MINERS=1` to opt out on a machine that does not
+//! have the miner binaries installed (true of most development and CI
+//! machines today).
 
 use isingmark::backend::{
     builtin_registry, probe_capabilities, probe_check, BackendSpec, ProbeError,
@@ -35,21 +41,28 @@ fn missing_binary_probe_returns_not_found_and_never_panics() {
 }
 
 /// The built-in registry produces exactly the five documented backends, in
-/// order, and fabricates no entry for a name it does not recognize.
+/// order — no more, no fewer, and none renamed.
 #[test]
-fn unknown_backend_name_is_not_present_in_the_builtin_registry() {
+fn builtin_registry_contains_exactly_the_five_documented_backends_in_order() {
     let registry = builtin_registry();
     let names: Vec<&str> = registry.iter().map(|spec| spec.name.as_str()).collect();
     assert_eq!(names, vec!["cpu-sa", "cpu-gibbs", "cuda", "metal", "dwave"]);
-    assert!(!names.contains(&"quantum-flux-capacitor"));
 }
 
-/// Opportunistic coverage of the real binary: if `quip-cpu-sa` is not
-/// installed on this machine (true on most development and CI machines,
-/// since none of the five miner binaries ship with this repo), skip rather
-/// than fail. The hermetic paths below in `fake_miner` give the JSON-parse
-/// and exit-code-mapping logic real coverage regardless of whether this
-/// skips.
+/// Environment variable that opts out of the real-binary requirement below.
+/// Documented here (rather than only in a comment on the test) so a reader
+/// who hits the failure this test produces on a machine without the miner
+/// binaries installed can find the escape hatch without reading the plan.
+const ALLOW_MISSING_MINERS_VAR: &str = "ISINGMARK_ALLOW_MISSING_MINERS";
+
+/// Coverage of the real binary: `quip-cpu-sa` must be installed and pass
+/// both probes by default. A missing binary FAILS this test rather than
+/// skipping it — a silent skip would report a green `... ok` for a test that
+/// asserted nothing, since libtest captures the output of passing tests.
+/// Set [`ALLOW_MISSING_MINERS_VAR`] to opt out on a machine that does not
+/// have the miner binaries installed (true of most development and CI
+/// machines today; the hermetic paths in `fake_miner` give the JSON-parse
+/// and exit-code-mapping logic real coverage regardless of this variable).
 #[test]
 fn quip_cpu_sa_probe_succeeds_when_the_real_binary_is_installed() {
     let registry = builtin_registry();
@@ -59,13 +72,14 @@ fn quip_cpu_sa_probe_succeeds_when_the_real_binary_is_installed() {
         .expect("builtin_registry always has a cpu-sa entry");
 
     if !spec.bin.is_file() {
-        #[expect(
-            clippy::print_stderr,
-            reason = "opportunistic test skip notice: quip-cpu-sa is not installed on this machine"
-        )]
-        {
-            eprintln!("skipping quip_cpu_sa_probe_succeeds_when_the_real_binary_is_installed: quip-cpu-sa not found on $PATH");
-        }
+        assert!(
+            std::env::var_os(ALLOW_MISSING_MINERS_VAR).is_some(),
+            "quip-cpu-sa was not found on $PATH (looked for {}). This test \
+             requires the real miner binary by default; set \
+             {ALLOW_MISSING_MINERS_VAR}=1 to opt out on a machine without \
+             the miner binaries installed.",
+            spec.bin.display()
+        );
         return;
     }
 

@@ -249,18 +249,6 @@ mod tests {
         );
     }
 
-    /// The registry only ever produces the five built-in names: an unknown
-    /// backend name is absent, not fabricated as a zero-valued or default
-    /// entry.
-    #[test]
-    fn unknown_backend_name_is_absent_from_the_registry() {
-        let registry = builtin_registry();
-        assert!(registry
-            .iter()
-            .all(|spec| spec.name != "not-a-real-backend"));
-        assert_eq!(registry.len(), 5);
-    }
-
     /// `builtin_registry_from` actually searches `path_var` for each
     /// entry's *binary name*, not some other field. Seeds `quip-cuda-sa`
     /// (and nothing else) into a synthetic `$PATH` and checks two things:
