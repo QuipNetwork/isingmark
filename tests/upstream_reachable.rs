@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 #[test]
 fn draw_ising_milli_is_reachable_and_deterministic() {
     let nonce = [7u8; 32];

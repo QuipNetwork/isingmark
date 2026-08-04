@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Copy this file to .cargo/config.toml (gitignored) to build against a local
+# quip-miner checkout instead of the pinned git rev. Adjust the paths to your
+# checkout location.
+[patch."https://gitlab.com/quip.network/quip-miner.git"]
+quip-proto = { path = "/path/to/quip-miner/crates/quip-proto" }
+quip-protocol = { path = "/path/to/quip-miner/crates/quip-protocol" }
+quip-miner-core = { path = "/path/to/quip-miner/crates/quip-miner-core" }

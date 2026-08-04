@@ -1,5 +1,0 @@
-# Local checkout override. Remove or comment out to build against the pinned rev.
-[patch."https://gitlab.com/quip.network/quip-miner.git"]
-quip-proto = { path = "/Users/carback1/Code/quip/quip-miner/crates/quip-proto" }
-quip-protocol = { path = "/Users/carback1/Code/quip/quip-miner/crates/quip-protocol" }
-quip-miner-core = { path = "/Users/carback1/Code/quip/quip-miner/crates/quip-miner-core" }
