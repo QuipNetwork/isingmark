@@ -461,6 +461,86 @@ async fn fake_miner_disconnect_mid_flight_fails_every_in_flight_job() {
 }
 
 #[tokio::test]
+async fn fake_miner_unresponsive_after_handshake_preserves_records_and_sets_the_flag() {
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let jobs = draw_jobs(&spec, 13, 4);
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    // Request all 4 credits up front, solve job #1 normally, then go
+    // completely silent (including ignoring the coordinator's own Ping)
+    // for jobs 2-4 — proving the session returns instead of hanging, with
+    // whatever records were already completed intact.
+    let backend = fake_miner_backend(vec![
+        "--credits".to_string(),
+        "4".to_string(),
+        "--go-silent-after".to_string(),
+        "2".to_string(),
+    ]);
+
+    let report = run_with(&backend, &spec, jobs.clone(), &sock_path).await;
+
+    assert!(
+        report.handshake_ok,
+        "the handshake itself completed before the miner went silent"
+    );
+    assert!(
+        report.miner_unresponsive,
+        "a miner that never answers a Ping must be flagged"
+    );
+    assert_eq!(
+        report.records.len(),
+        4,
+        "records from before the silence must be preserved"
+    );
+
+    let solved = record_by_job_id(&report.records, &jobs[0]);
+    assert!(
+        solved.passed,
+        "job solved before the silence must still be recorded as passed"
+    );
+
+    for job in &jobs[1..] {
+        let record = record_by_job_id(&report.records, job);
+        assert!(
+            record.rejected,
+            "job abandoned by unresponsiveness must be recorded as failing: {record:?}"
+        );
+        assert!(!record.passed);
+        assert_eq!(
+            record.reject_reason.as_deref(),
+            Some("miner unresponsive: no reply to repeated Ping messages")
+        );
+    }
+    assert!(!sock_path.exists());
+}
+
+#[tokio::test]
+async fn fake_miner_stderr_is_captured_when_the_miner_exits_before_connecting() {
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    let backend = fake_miner_backend(vec![
+        "--stderr-and-exit".to_string(),
+        "isingmark-fake-miner: distinctive diagnostic marker 8f3c1a".to_string(),
+    ]);
+
+    let report = run_with(&backend, &spec, Vec::new(), &sock_path).await;
+
+    assert!(
+        !report.handshake_ok,
+        "the miner exited before ever sending Hello"
+    );
+    assert!(report.records.is_empty());
+    assert_ne!(report.miner_exit_code, 0);
+    let tail = report.miner_stderr_tail.as_deref().unwrap_or("");
+    assert!(
+        tail.contains("distinctive diagnostic marker 8f3c1a"),
+        "stderr tail should carry the miner's diagnostic text, got {tail:?}"
+    );
+    assert!(!sock_path.exists());
+}
+
+#[tokio::test]
 async fn fake_miner_bad_protocol_version_fails_handshake_and_dispatches_nothing() {
     let spec = load_fixture("smoke").expect("smoke fixture parses");
     let jobs = draw_jobs(&spec, 5, 2);

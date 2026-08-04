@@ -22,7 +22,8 @@ use clap::Parser;
 use quip_proto::v1::miner_service_client::MinerServiceClient;
 use quip_proto::v1::{
     coord_msg, ising_problem, miner_msg, CoordMsg, Fatal, IsingProblem, Job, JobKind, JobRequest,
-    MinerMsg, Ready, Reject, RejectReason, Result as JobResult, SamplerMeta, Solution, Topology,
+    MinerMsg, Ready, Reject, RejectReason, Result as JobResult, SamplerMeta, Solution, Status,
+    Topology,
 };
 use quip_protocol::scoring::energy_milli;
 use quip_protocol::session::{build_hello, check_welcome, BackendCaps, ExitCode, SessionError};
@@ -85,6 +86,21 @@ struct Cli {
     /// dispatched but not yet answered, same as `--fatal-after`.
     #[arg(long)]
     disconnect_after: Option<u32>,
+    /// 1-based ordinal (among jobs this process receives) at which to stop
+    /// sending anything at all, ever again — including replies to the
+    /// coordinator's `Ping` — while keeping the connection open. Distinct
+    /// from `--disconnect-after` (which drops the connection): this
+    /// exercises the coordinator's ping-based liveness check, which can
+    /// only fire against a session that is still technically connected.
+    #[arg(long)]
+    go_silent_after: Option<u32>,
+    /// Print this message to stderr and exit non-zero immediately, before
+    /// ever attempting to connect. Mimics a real miner's `tracing::error!`
+    /// startup-failure output (missing `--quip-coordinator`, a rejected
+    /// session token, a device that failed to open, ...), to test that the
+    /// coordinator captures and surfaces it.
+    #[arg(long)]
+    stderr_and_exit: Option<String>,
 }
 
 /// Map a session/CLI failure to a documented exit code (64/69/70/77).
@@ -217,6 +233,18 @@ fn solve(
 async fn run() -> Result<(), ExitCode> {
     let cli = Cli::parse();
 
+    if let Some(message) = &cli.stderr_and_exit {
+        #[expect(
+            clippy::print_stderr,
+            reason = "test-only flag that deliberately mimics a real miner's tracing::error! \
+                      startup-failure output, for isingmark's stderr-capture test"
+        )]
+        {
+            eprintln!("{message}");
+        }
+        return Err(ExitCode::EnvIncompatible);
+    }
+
     let mut hello = build_hello(
         &cli.miner_id,
         "fake",
@@ -268,6 +296,7 @@ async fn run() -> Result<(), ExitCode> {
     let mut topo: Option<FakeTopo> = None;
     let mut jobs_seen: u32 = 0;
     let mut fatal_sent = false;
+    let mut silent = false;
 
     loop {
         let next = tokio::time::timeout(Duration::from_secs(30), inbound.message()).await;
@@ -276,6 +305,13 @@ async fn run() -> Result<(), ExitCode> {
             Ok(Ok(Some(cm))) => cm,
             Ok(Err(_)) => return Err(ExitCode::InternalFatal),
         };
+        // `--go-silent-after` stops all outbound traffic, forever, while
+        // leaving the connection open — including ignoring the
+        // coordinator's own `Ping`, which is exactly the scenario its
+        // ping-based liveness check exists to detect.
+        if silent {
+            continue;
+        }
         match cm.msg {
             Some(coord_msg::Msg::Welcome(w)) => {
                 if check_welcome(&w).is_err() {
@@ -295,8 +331,25 @@ async fn run() -> Result<(), ExitCode> {
             Some(coord_msg::Msg::Topology(t)) => {
                 topo = Some(FakeTopo::from_proto(&t));
             }
+            Some(coord_msg::Msg::Ping(_)) => {
+                tx.send(miner(miner_msg::Msg::Status(Status {
+                    miner_id: cli.miner_id.clone(),
+                    utilization: 0.0,
+                    jobs_done: u64::from(jobs_seen),
+                    abandoned_generation: 0,
+                    sampler_stats: std::collections::HashMap::default(),
+                })))
+                .await
+                .map_err(|_| ExitCode::InternalFatal)?;
+            }
             Some(coord_msg::Msg::Job(job)) => {
                 jobs_seen += 1;
+                if cli.go_silent_after == Some(jobs_seen) {
+                    // Stop answering anything at all, forever, but keep the
+                    // connection open (unlike --disconnect-after).
+                    silent = true;
+                    continue;
+                }
                 if cli.disconnect_after == Some(jobs_seen) {
                     // Simulate a crash/OOM-kill: close the connection with
                     // no message at all for this job (or any other already
@@ -333,10 +386,7 @@ async fn run() -> Result<(), ExitCode> {
                     .map_err(|_| ExitCode::InternalFatal)?;
             }
             Some(coord_msg::Msg::Shutdown(_)) => break,
-            Some(
-                coord_msg::Msg::Cancel(_) | coord_msg::Msg::Ping(_) | coord_msg::Msg::SetTarget(_),
-            )
-            | None => {}
+            Some(coord_msg::Msg::Cancel(_) | coord_msg::Msg::SetTarget(_)) | None => {}
         }
     }
 

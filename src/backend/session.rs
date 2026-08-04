@@ -10,6 +10,14 @@
 //! dispatch, `Result`/`Reject`/`Fatal` handling, and a final `Shutdown` once
 //! every job is terminal.
 //!
+//! There is no cap on a session's total length — a real annealing run can
+//! legitimately run for hours. Liveness is instead checked at the protocol
+//! level: after a period of inbound silence the coordinator sends `Ping`,
+//! and a miner that answers nothing at all (not `Status`, not a real
+//! `Result`, nothing) to several consecutive `Ping`s is declared
+//! unresponsive (`RunReport::miner_unresponsive`) rather than left to hang
+//! the caller forever.
+//!
 //! Energy is always re-scored locally with
 //! [`quip_protocol::scoring::energy_milli`] against the job's own h/J and
 //! this run's topology edges — never trusted from the miner's
@@ -23,19 +31,21 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Stdio;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use quip_proto::v1::miner_service_server::{MinerService, MinerServiceServer};
 use quip_proto::v1::{
-    coord_msg, miner_msg, Configure, CoordMsg, EdgeList, Job, MinerMsg, Reject, RejectReason,
+    coord_msg, miner_msg, Configure, CoordMsg, EdgeList, Job, MinerMsg, Ping, Reject, RejectReason,
     Result as JobResult, SetTarget, Shutdown, Topology, Welcome,
 };
 use quip_protocol::scoring::{energy_milli, set_diversity};
 use quip_protocol::session::{check_welcome, PROTOCOL_VERSION};
 use quip_protocol::wire::{decode_i32_le, decode_spins};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixListener;
-use tokio::process::Command;
+use tokio::process::{ChildStderr, Command};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::{ReceiverStream, UnixListenerStream};
 use tonic::{Request, Response, Status, Streaming};
@@ -64,11 +74,28 @@ const OUTBOUND_CHANNEL_DEPTH: usize = 16;
 /// the session loop ends.
 const SHUTDOWN_GRACE_MS: u32 = 2_000;
 
-/// Upper bound on waiting for the miner to complete the session protocol.
-/// Generous: a real annealing backend spends real wall-clock time per job.
-/// This only bites when the miner never dials in or the protocol stalls
-/// entirely, so a hung/unreachable backend does not hang the caller forever.
-const SESSION_TIMEOUT: Duration = Duration::from_mins(2);
+/// How long to wait for *any* inbound message before sending the miner a
+/// `Ping`. Deliberately short, not a proxy for expected per-job wall time:
+/// a real miner answers `Ping` with `Status` from its control-plane read
+/// loop, independent of whatever the sampler thread is doing
+/// (`quip-miner-core/src/session.rs` replies to `Ping` unconditionally,
+/// never waiting on in-flight sampling), so this interval only needs to
+/// tolerate ordinary scheduling jitter in a live process, not the length of
+/// a single annealing job.
+const PING_INTERVAL: Duration = Duration::from_secs(3);
+
+/// Consecutive silent `PING_INTERVAL` windows (no inbound message of any
+/// kind — not just a `Ping` reply) tolerated before the session declares
+/// the miner unresponsive and ends. Worst-case detection time is
+/// `PING_INTERVAL * (MAX_MISSED_PINGS + 1)`.
+const MAX_MISSED_PINGS: u32 = 2;
+
+/// Trailing stderr lines kept from the spawned miner. Bounded so a miner
+/// that logs in a tight loop cannot grow this without limit; generous
+/// enough to capture a realistic startup-failure diagnostic (a handful of
+/// `tracing::error!` lines), matching the reasoning
+/// [`crate::backend::registry`]'s probe stderr capture already applies.
+const MAX_STDERR_LINES: usize = 50;
 
 /// Inputs to [`run_session`].
 pub struct RunParams<'a> {
@@ -92,16 +119,40 @@ pub struct RunParams<'a> {
 /// Outcome of one [`run_session`] call.
 pub struct RunReport {
     /// Whether the miner's `Hello` arrived and matched
-    /// [`quip_protocol::session::PROTOCOL_VERSION`]. `false` means no job
-    /// was ever dispatched, so `records` is always empty in that case.
+    /// [`quip_protocol::session::PROTOCOL_VERSION`]. `false` means the
+    /// handshake itself never completed (no `Hello`, an unexpected first
+    /// message, or a version mismatch), so `records` is always empty in
+    /// that case. A miner that disconnects, errors, or goes unresponsive
+    /// (see `miner_unresponsive`) *after* a successful handshake still
+    /// reports `true` here, together with whatever records were completed
+    /// before the interruption — this field is never used to (and must
+    /// never be read as) discard those records.
     pub handshake_ok: bool,
     /// One record per job that reached a terminal state (`Result`,
-    /// `Reject`, or abandoned in-flight on `Fatal`).
+    /// `Reject`, or abandoned in-flight on `Fatal`, a mid-flight
+    /// disconnect, or a declared-unresponsive miner).
     pub records: Vec<JobRecord>,
     /// The miner subprocess's exit code, or `-1` if it was terminated by a
     /// signal or had to be killed after not exiting within the shutdown
     /// grace period.
     pub miner_exit_code: i32,
+    /// Whether the session ended because the miner stopped answering
+    /// entirely — no reply of any kind to several consecutive `Ping`s —
+    /// rather than because every job reached a terminal state or the miner
+    /// reported `Fatal`. This is not a cap on the run's total length: a
+    /// long-running backend that keeps answering `Ping` (or sending real
+    /// progress) can run indefinitely; this only fires once the miner goes
+    /// silent.
+    pub miner_unresponsive: bool,
+    /// The miner subprocess's captured stderr (up to the last
+    /// `MAX_STDERR_LINES` lines), or `None` if it wrote nothing, or its
+    /// stderr could not be captured. Populated regardless of exit code. A
+    /// miner that never sends `Hello` because `QUIP_SESSION_TOKEN` was
+    /// rejected, `--quip-coordinator` was missing, or it failed to open its
+    /// backend device reports exactly this kind of failure through
+    /// `tracing::error!` to stderr, with no other signal reaching the
+    /// coordinator at all.
+    pub miner_stderr_tail: Option<String>,
     /// Total wall time of the call, in milliseconds.
     pub run_wall_ms: u64,
 }
@@ -135,21 +186,24 @@ impl std::error::Error for SessionError {}
 ///
 /// Returns [`SessionError::Bind`] if `p.sock_path` cannot be bound, or
 /// [`SessionError::Spawn`] if `p.backend.bin` cannot be spawned. Protocol
-/// failures (bad handshake, miner `Fatal`, miner never connecting) are not
-/// errors here: they show up as `handshake_ok: false` and/or a non-zero
+/// failures (bad handshake, miner `Fatal`, an unresponsive miner, miner
+/// never connecting) are not errors here: they show up as
+/// `handshake_ok: false`, `miner_unresponsive: true`, and/or a non-zero
 /// `miner_exit_code` in [`RunReport`].
 pub async fn run_session(p: RunParams<'_>) -> Result<RunReport, SessionError> {
     let start = Instant::now();
     let listener = UnixListener::bind(p.sock_path).map_err(SessionError::Bind)?;
     let incoming = UnixListenerStream::new(listener);
 
-    let (outcome_tx, outcome_rx) = oneshot::channel();
+    let progress = Arc::new(SessionProgress::default());
+    let (finish_tx, mut finish_rx) = oneshot::channel();
     let svc = CoordinatorSvc::new(
         p.backend.name.clone(),
         p.spec.clone(),
         p.target,
         p.jobs,
-        outcome_tx,
+        finish_tx,
+        Arc::clone(&progress),
     );
     let server_task = tokio::spawn(
         tonic::transport::Server::builder()
@@ -166,7 +220,7 @@ pub async fn run_session(p: RunParams<'_>) -> Result<RunReport, SessionError> {
         .env("QUIP_SESSION_TOKEN", SESSION_TOKEN)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .kill_on_drop(true)
         .spawn();
 
@@ -179,10 +233,26 @@ pub async fn run_session(p: RunParams<'_>) -> Result<RunReport, SessionError> {
         }
     };
 
-    let outcome = match tokio::time::timeout(SESSION_TIMEOUT, outcome_rx).await {
-        Ok(Ok(outcome)) => outcome,
-        Ok(Err(_)) | Err(_) => SessionOutcome::default(),
-    };
+    // Read stderr concurrently, not after the child exits: the OS pipe
+    // buffer backing it is finite, so a miner that logs enough before
+    // anyone reads it could otherwise block on its own `write()` call.
+    let stderr_task = child
+        .stderr
+        .take()
+        .map(|stderr| tokio::spawn(capture_stderr_tail(stderr)));
+
+    // `finish_rx` resolves as soon as `drive_session` is done — normally,
+    // or via its `FinishSignal` guard firing on panic unwind — which always
+    // happens no later than the child's own OS-level exit in a real
+    // handshake, since the child only exits after observing this side close
+    // the stream. Racing against `child.wait()` therefore only matters for
+    // a miner that crashes, is rejected, or exits before ever dialing in
+    // (a bad binary, a missing `--quip-coordinator`, a rejected session
+    // token, ...), which would otherwise leave `finish_rx` waiting forever.
+    tokio::select! {
+        _ = &mut finish_rx => {}
+        _ = child.wait() => {}
+    }
 
     let shutdown_wait = Duration::from_millis(u64::from(SHUTDOWN_GRACE_MS) * 3);
     let miner_exit_code = match tokio::time::timeout(shutdown_wait, child.wait()).await {
@@ -194,35 +264,102 @@ pub async fn run_session(p: RunParams<'_>) -> Result<RunReport, SessionError> {
         }
     };
 
+    let miner_stderr_tail = match stderr_task {
+        Some(handle) => handle.await.ok().filter(|tail: &String| !tail.is_empty()),
+        None => None,
+    };
+
     server_task.abort();
     let _ = std::fs::remove_file(p.sock_path);
 
     Ok(RunReport {
-        handshake_ok: outcome.handshake_ok,
-        records: outcome.records,
+        handshake_ok: progress.handshake_ok.load(Ordering::Relaxed),
+        records: progress.snapshot_records(),
         miner_exit_code,
+        miner_unresponsive: progress.miner_unresponsive.load(Ordering::Relaxed),
+        miner_stderr_tail,
         run_wall_ms: duration_ms(start.elapsed()),
     })
 }
 
-/// Result of the session protocol loop, handed back to [`run_session`]
-/// through a oneshot channel once the spawned `session()` task finishes.
+/// Drain `stderr` to EOF, keeping only the last [`MAX_STDERR_LINES`] lines
+/// joined back into one string with `\n`.
+async fn capture_stderr_tail(stderr: ChildStderr) -> String {
+    let mut lines = BufReader::new(stderr).lines();
+    let mut tail: VecDeque<String> = VecDeque::with_capacity(MAX_STDERR_LINES);
+    while let Ok(Some(line)) = lines.next_line().await {
+        if tail.len() == MAX_STDERR_LINES {
+            let _ = tail.pop_front();
+        }
+        tail.push_back(line);
+    }
+    tail.into_iter().collect::<Vec<_>>().join("\n")
+}
+
+/// Shared, incrementally-updated view of a session's progress.
+/// `run_session` reads this after the spawned `drive_session` task signals
+/// completion (via [`FinishSignal`]), instead of relying on a value
+/// `drive_session` returns only once at the very end — so a panic partway
+/// through (which aborts that task without ever returning) still leaves
+/// whatever records, handshake status, and liveness state were committed
+/// *before* the panic visible here, rather than silently discarding them.
 #[derive(Default)]
-struct SessionOutcome {
-    handshake_ok: bool,
-    records: Vec<JobRecord>,
+struct SessionProgress {
+    handshake_ok: AtomicBool,
+    miner_unresponsive: AtomicBool,
+    records: Mutex<Vec<JobRecord>>,
+}
+
+impl SessionProgress {
+    fn push_record(&self, record: JobRecord) {
+        if let Ok(mut records) = self.records.lock() {
+            records.push(record);
+        }
+    }
+
+    fn set_handshake_ok(&self) {
+        self.handshake_ok.store(true, Ordering::Relaxed);
+    }
+
+    fn set_unresponsive(&self) {
+        self.miner_unresponsive.store(true, Ordering::Relaxed);
+    }
+
+    fn snapshot_records(&self) -> Vec<JobRecord> {
+        self.records
+            .lock()
+            .map_or_else(|_| Vec::new(), |r| r.clone())
+    }
+}
+
+/// Sends its held oneshot exactly once, when dropped — whether the guarded
+/// scope returned normally or panicked and unwound through it.
+/// `run_session` waits on the receiving half as its "the spawned task is
+/// done" signal instead of `drive_session`'s return value, so a panic
+/// partway through still lets `run_session` proceed (and read whatever
+/// [`SessionProgress`] already recorded) instead of hanging forever on a
+/// oneshot that would otherwise never fire.
+struct FinishSignal(Option<oneshot::Sender<()>>);
+
+impl Drop for FinishSignal {
+    fn drop(&mut self) {
+        if let Some(tx) = self.0.take() {
+            let _ = tx.send(());
+        }
+    }
 }
 
 /// `MinerService` implementation backing [`run_session`]. Built fresh per
 /// call and expected to serve exactly one connection (the backend spawned
-/// alongside it); a second connection would find `jobs`/`outcome_tx` empty
+/// alongside it); a second connection would find `jobs`/`finish_tx` empty
 /// (already taken) and terminate immediately with a shutdown.
 struct CoordinatorSvc {
     backend_name: String,
     spec: TopologySpec,
     target: Option<SetTarget>,
     jobs: Mutex<Option<VecDeque<Job>>>,
-    outcome_tx: Mutex<Option<oneshot::Sender<SessionOutcome>>>,
+    finish_tx: Mutex<Option<oneshot::Sender<()>>>,
+    progress: Arc<SessionProgress>,
 }
 
 impl CoordinatorSvc {
@@ -231,14 +368,16 @@ impl CoordinatorSvc {
         spec: TopologySpec,
         target: Option<SetTarget>,
         jobs: Vec<Job>,
-        outcome_tx: oneshot::Sender<SessionOutcome>,
+        finish_tx: oneshot::Sender<()>,
+        progress: Arc<SessionProgress>,
     ) -> Self {
         Self {
             backend_name,
             spec,
             target,
             jobs: Mutex::new(Some(jobs.into_iter().collect())),
-            outcome_tx: Mutex::new(Some(outcome_tx)),
+            finish_tx: Mutex::new(Some(finish_tx)),
+            progress,
         }
     }
 }
@@ -260,11 +399,11 @@ impl MinerService for CoordinatorSvc {
                 .map_err(|_| Status::internal("job queue lock poisoned"))?;
             guard.take().unwrap_or_default()
         };
-        let outcome_tx = {
+        let finish_tx = {
             let mut guard = self
-                .outcome_tx
+                .finish_tx
                 .lock()
-                .map_err(|_| Status::internal("outcome channel lock poisoned"))?;
+                .map_err(|_| Status::internal("finish channel lock poisoned"))?;
             guard.take()
         };
 
@@ -272,12 +411,19 @@ impl MinerService for CoordinatorSvc {
         let spec = self.spec.clone();
         let target = self.target;
         let backend_name = self.backend_name.clone();
+        let progress = Arc::clone(&self.progress);
         tokio::spawn(async move {
-            let outcome =
-                drive_session(inbound, tx, jobs, &spec, target.as_ref(), &backend_name).await;
-            if let Some(sender) = outcome_tx {
-                let _ = sender.send(outcome);
-            }
+            let _finish_guard = finish_tx.map(|tx| FinishSignal(Some(tx)));
+            drive_session(
+                inbound,
+                tx,
+                jobs,
+                &spec,
+                target.as_ref(),
+                &backend_name,
+                &progress,
+            )
+            .await;
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))
@@ -298,19 +444,15 @@ async fn drive_session(
     spec: &TopologySpec,
     target: Option<&SetTarget>,
     backend_name: &str,
-) -> SessionOutcome {
-    let mut records = Vec::new();
-
+    progress: &SessionProgress,
+) {
     // 1. Wait for Hello; anything else (wrong first message, closed stream,
     // transport error) is a failed handshake with no jobs ever dispatched.
     let Ok(Some(MinerMsg {
         msg: Some(miner_msg::Msg::Hello(hello)),
     })) = inbound.message().await
     else {
-        return SessionOutcome {
-            handshake_ok: false,
-            records,
-        };
+        return;
     };
 
     // 2. Check the version using check_welcome's own comparison: Hello and
@@ -322,11 +464,9 @@ async fn drive_session(
     })
     .is_err()
     {
-        return SessionOutcome {
-            handshake_ok: false,
-            records,
-        };
+        return;
     }
+    progress.set_handshake_ok();
 
     // 3. Reply Welcome, Configure, Topology, SetTarget. Configure is sent
     // all-zero: this crate does not yet drive queue depth / heartbeat /
@@ -342,10 +482,7 @@ async fn drive_session(
     .await
     .is_err()
     {
-        return SessionOutcome {
-            handshake_ok: true,
-            records,
-        };
+        return;
     }
     let _ = send(&tx, coord_msg::Msg::Configure(Configure::default())).await;
     let _ = send(&tx, coord_msg::Msg::Topology(build_topology(spec))).await;
@@ -360,123 +497,153 @@ async fn drive_session(
 
     if maybe_shutdown(&remaining, &in_flight, &tx).await {
         drain(&mut inbound).await;
-        return SessionOutcome {
-            handshake_ok: true,
-            records,
-        };
+        return;
     }
 
+    // Liveness: wait at most PING_INTERVAL for any inbound message. A
+    // timeout sends a Ping and counts as one missed reply; any real message
+    // (of any kind — Ping only asks "are you there", it does not gate what
+    // counts as an answer) resets the count. MAX_MISSED_PINGS consecutive
+    // silent windows declares the miner unresponsive.
+    let mut missed_pings: u32 = 0;
+    let mut unresponsive = false;
     loop {
-        let Ok(Some(msg)) = inbound.message().await else {
-            break;
-        };
-        match msg.msg {
-            // Each `send` below is awaited without reading inbound in
-            // between, so a `credits` grant large enough to fill
-            // `OUTBOUND_CHANNEL_DEPTH` while the miner itself stops
-            // reading could in principle wedge both sides. Not reachable
-            // today: a real miner requests `credits: queue_depth`, which
-            // defaults to 3 (`quip_protocol::session::SessionConfig`), far
-            // under the channel depth, and HTTP/2 flow-control windows
-            // dwarf these control-sized messages regardless.
-            Some(miner_msg::Msg::JobRequest(req)) => {
-                for _ in 0..req.credits {
-                    let Some(job) = remaining.pop_front() else {
-                        break;
-                    };
-                    let job_id = job.job_id.clone();
-                    if send(&tx, coord_msg::Msg::Job(job.clone())).await.is_err() {
-                        return SessionOutcome {
-                            handshake_ok: true,
-                            records,
-                        };
+        match tokio::time::timeout(PING_INTERVAL, inbound.message()).await {
+            Ok(Ok(Some(msg))) => {
+                missed_pings = 0;
+                match msg.msg {
+                    // Each `send` below is awaited without reading inbound
+                    // in between, so a `credits` grant large enough to
+                    // fill `OUTBOUND_CHANNEL_DEPTH` while the miner itself
+                    // stops reading could in principle wedge both sides.
+                    // Not reachable today: a real miner requests
+                    // `credits: queue_depth`, which defaults to 3
+                    // (`quip_protocol::session::SessionConfig`), far under
+                    // the channel depth, and HTTP/2 flow-control windows
+                    // dwarf these control-sized messages regardless.
+                    Some(miner_msg::Msg::JobRequest(req)) => {
+                        for _ in 0..req.credits {
+                            let Some(job) = remaining.pop_front() else {
+                                break;
+                            };
+                            let job_id = job.job_id.clone();
+                            let dispatched =
+                                send(&tx, coord_msg::Msg::Job(job.clone())).await.is_ok();
+                            in_flight.insert(job_id, (Instant::now(), job));
+                            if !dispatched {
+                                abandon_in_flight(
+                                    &mut in_flight,
+                                    progress,
+                                    backend_name,
+                                    target,
+                                    "session ended with job in flight",
+                                );
+                                return;
+                            }
+                        }
                     }
-                    in_flight.insert(job_id, (Instant::now(), job));
+                    Some(miner_msg::Msg::Result(result)) => {
+                        if let Some((start, job)) = in_flight.remove(&result.job_id) {
+                            progress.push_record(build_result_record(
+                                backend_name,
+                                &job,
+                                &result,
+                                &edges,
+                                target,
+                                start.elapsed(),
+                            ));
+                        }
+                        if maybe_shutdown(&remaining, &in_flight, &tx).await {
+                            break;
+                        }
+                    }
+                    Some(miner_msg::Msg::Reject(reject)) => {
+                        if let Some((start, _job)) = in_flight.remove(&reject.job_id) {
+                            progress.push_record(build_reject_record(
+                                backend_name,
+                                &reject,
+                                target,
+                                start.elapsed(),
+                            ));
+                        }
+                        if maybe_shutdown(&remaining, &in_flight, &tx).await {
+                            break;
+                        }
+                    }
+                    Some(miner_msg::Msg::Fatal(fatal)) => {
+                        abandon_in_flight(
+                            &mut in_flight,
+                            progress,
+                            backend_name,
+                            target,
+                            &format!("fatal: {}", fatal.reason),
+                        );
+                        return;
+                    }
+                    Some(
+                        miner_msg::Msg::Hello(_)
+                        | miner_msg::Msg::Ready(_)
+                        | miner_msg::Msg::Status(_),
+                    )
+                    | None => {}
                 }
             }
-            Some(miner_msg::Msg::Result(result)) => {
-                if let Some((start, job)) = in_flight.remove(&result.job_id) {
-                    records.push(build_result_record(
-                        backend_name,
-                        &job,
-                        &result,
-                        &edges,
-                        target,
-                        start.elapsed(),
-                    ));
-                }
-                if maybe_shutdown(&remaining, &in_flight, &tx).await {
+            Ok(Ok(None) | Err(_)) => break,
+            Err(_) => {
+                missed_pings += 1;
+                if missed_pings > MAX_MISSED_PINGS {
+                    unresponsive = true;
                     break;
                 }
+                let _ = send(&tx, coord_msg::Msg::Ping(Ping {})).await;
             }
-            Some(miner_msg::Msg::Reject(reject)) => {
-                if let Some((start, _job)) = in_flight.remove(&reject.job_id) {
-                    records.push(build_reject_record(
-                        backend_name,
-                        &reject,
-                        target,
-                        start.elapsed(),
-                    ));
-                }
-                if maybe_shutdown(&remaining, &in_flight, &tx).await {
-                    break;
-                }
-            }
-            Some(miner_msg::Msg::Fatal(fatal)) => {
-                abandon_in_flight(
-                    &mut in_flight,
-                    &mut records,
-                    backend_name,
-                    target,
-                    &format!("fatal: {}", fatal.reason),
-                );
-                return SessionOutcome {
-                    handshake_ok: true,
-                    records,
-                };
-            }
-            Some(
-                miner_msg::Msg::Hello(_) | miner_msg::Msg::Ready(_) | miner_msg::Msg::Status(_),
-            )
-            | None => {}
         }
     }
 
-    // The loop above ends two ways: `maybe_shutdown` already drained
-    // `in_flight` to empty before breaking (every job reached a terminal
-    // state), or the inbound stream closed/errored with jobs still
-    // dispatched-but-unanswered (miner crashed, was killed, or hit its own
-    // idle timeout and disconnected). The latter must not drop those jobs
-    // silently — that would make `records.len()` look like a 100% success
-    // rate for a run the miner never finished. Draining here is a no-op in
-    // the former case and the safety net in the latter.
-    abandon_in_flight(
-        &mut in_flight,
-        &mut records,
-        backend_name,
-        target,
-        "session ended with job in flight",
-    );
-    drain(&mut inbound).await;
-    SessionOutcome {
-        handshake_ok: true,
-        records,
+    if unresponsive {
+        progress.set_unresponsive();
+        abandon_in_flight(
+            &mut in_flight,
+            progress,
+            backend_name,
+            target,
+            "miner unresponsive: no reply to repeated Ping messages",
+        );
+    } else {
+        // The loop above otherwise ends two ways: `maybe_shutdown` already
+        // drained `in_flight` to empty before breaking (every job reached
+        // a terminal state), or the inbound stream closed/errored with
+        // jobs still dispatched-but-unanswered (miner crashed, was killed,
+        // or hit its own idle timeout and disconnected). The latter must
+        // not drop those jobs silently — that would make `records.len()`
+        // look like a 100% success rate for a run the miner never
+        // finished. Draining here is a no-op in the former case and the
+        // safety net in the latter.
+        abandon_in_flight(
+            &mut in_flight,
+            progress,
+            backend_name,
+            target,
+            "session ended with job in flight",
+        );
+        drain(&mut inbound).await;
     }
 }
 
 /// Record every job still in `in_flight` as failing with `reason`, and
-/// empty `in_flight`. Shared by the `Fatal` arm and the end-of-loop cleanup
-/// for a closed/errored inbound stream — both are "the miner will never
-/// answer this job" outcomes, just with a different cause.
+/// empty `in_flight`. Shared by the `Fatal` arm, an unresponsive miner, a
+/// dispatch-send failure, and the end-of-loop cleanup for a closed/errored
+/// inbound stream — all are "the miner will never answer this job"
+/// outcomes, just with a different cause.
 fn abandon_in_flight(
     in_flight: &mut HashMap<Vec<u8>, (Instant, Job)>,
-    records: &mut Vec<JobRecord>,
+    progress: &SessionProgress,
     backend_name: &str,
     target: Option<&SetTarget>,
     reason: &str,
 ) {
     for (_job_id, (start, job)) in in_flight.drain() {
-        records.push(build_abandoned_record(
+        progress.push_record(build_abandoned_record(
             backend_name,
             &job,
             reason,
