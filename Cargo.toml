@@ -1,0 +1,46 @@
+[package]
+name = "isingmark"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+rust-version = "1.97"
+
+[lints.rust]
+unsafe-code = "deny"
+
+[lints.clippy]
+panic = "deny"
+panic-in-result-fn = "deny"
+unimplemented = "deny"
+todo = "deny"
+allow-attributes = "deny"
+print-stdout = "deny"
+print-stderr = "deny"
+exit = "deny"
+mem-forget = "deny"
+await-holding-lock = "deny"
+unwrap-used = "deny"
+pedantic = { level = "warn", priority = -1 }
+
+[dependencies]
+quip-proto = { git = "https://gitlab.com/quip.network/quip-miner.git", rev = "623af0700d36359687b1e69d866ae782d932a0e9" }
+quip-protocol = { git = "https://gitlab.com/quip.network/quip-miner.git", rev = "623af0700d36359687b1e69d866ae782d932a0e9" }
+quip-miner-core = { git = "https://gitlab.com/quip.network/quip-miner.git", rev = "623af0700d36359687b1e69d866ae782d932a0e9" }
+tonic = "0.12"
+prost = "0.13"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "io-util", "sync", "process"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+tower = "0.5"
+hyper-util = { version = "0.1", features = ["tokio"] }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+blake3 = "1"
+plotters = { version = "0.3", optional = true }
+
+[features]
+plot = ["dep:plotters"]
+
+[dev-dependencies]
+tempfile = "3"

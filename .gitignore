@@ -1,11 +1,4 @@
-.venv/
-__pycache__/
-*.egg-info/
-.eggs/
-dist/
-build/
-*.pyc
-.pytest_cache/
+/target
 
 # Beads / Dolt files (added by bd init)
 .dolt/

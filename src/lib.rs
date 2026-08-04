@@ -1,0 +1,1 @@
+//! `IsingMark` benchmark harness.
