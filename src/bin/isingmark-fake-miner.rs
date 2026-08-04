@@ -101,6 +101,25 @@ struct Cli {
     /// coordinator captures and surfaces it.
     #[arg(long)]
     stderr_and_exit: Option<String>,
+    /// 1-based ordinal (among jobs this process receives) at which to call
+    /// `std::process::abort()` immediately, with no message and no orderly
+    /// shutdown — simulating a segfault, `SIGKILL`/OOM, or a `panic = "abort"`
+    /// build. Unlike `--disconnect-after` (which drops the connection but
+    /// leaves the process alive to drain its inbound stream first), this
+    /// closes the socket FD and terminates the process in the same kernel
+    /// event, which is the specific race `run_session`'s `child.wait()`
+    /// anti-hang backstop must not mistake for "the session finished".
+    #[arg(long)]
+    abort_after: Option<u32>,
+    /// Print this message to stderr, spawn a detached grandchild that
+    /// inherits this process's stderr fd and outlives it (`sleep 60`, never
+    /// waited on), then exit non-zero without ever connecting. Simulates a
+    /// wrapper script that backgrounds the real miner instead of exec-ing
+    /// it, or a miner that daemonizes a device-access helper: the pipe's
+    /// write end stays open long after this process is gone, so the
+    /// coordinator's stderr reader never sees EOF on its own.
+    #[arg(long)]
+    leak_stderr_to_grandchild: Option<String>,
 }
 
 /// Map a session/CLI failure to a documented exit code (64/69/70/77).
@@ -245,6 +264,23 @@ async fn run() -> Result<(), ExitCode> {
         return Err(ExitCode::EnvIncompatible);
     }
 
+    if let Some(message) = &cli.leak_stderr_to_grandchild {
+        #[expect(
+            clippy::print_stderr,
+            reason = "test-only flag mimicking a real miner's startup-failure diagnostic, \
+                      for isingmark's bounded-stderr-wait test"
+        )]
+        {
+            eprintln!("{message}");
+        }
+        // Inherits stdin/stdout/stderr by default (no `.stdout`/`.stderr`
+        // override here), so the grandchild's copy of fd 2 keeps the pipe's
+        // write end open long after this process exits. Never waited on:
+        // that is the point — a real orphaned helper would not be either.
+        let _ = std::process::Command::new("sleep").arg("60").spawn();
+        return Err(ExitCode::EnvIncompatible);
+    }
+
     let mut hello = build_hello(
         &cli.miner_id,
         "fake",
@@ -344,6 +380,13 @@ async fn run() -> Result<(), ExitCode> {
             }
             Some(coord_msg::Msg::Job(job)) => {
                 jobs_seen += 1;
+                if cli.abort_after == Some(jobs_seen) {
+                    // Deliberately not `std::process::exit`: abort closes
+                    // the socket FD and terminates the process in one
+                    // kernel event, with no chance for an orderly stream
+                    // half-close first. That is the point of this flag.
+                    std::process::abort();
+                }
                 if cli.go_silent_after == Some(jobs_seen) {
                     // Stop answering anything at all, forever, but keep the
                     // connection open (unlike --disconnect-after).

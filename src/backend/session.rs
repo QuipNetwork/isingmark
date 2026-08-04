@@ -32,7 +32,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use quip_proto::v1::miner_service_server::{MinerService, MinerServiceServer};
@@ -87,8 +87,28 @@ const PING_INTERVAL: Duration = Duration::from_secs(3);
 /// Consecutive silent `PING_INTERVAL` windows (no inbound message of any
 /// kind — not just a `Ping` reply) tolerated before the session declares
 /// the miner unresponsive and ends. Worst-case detection time is
-/// `PING_INTERVAL * (MAX_MISSED_PINGS + 1)`.
-const MAX_MISSED_PINGS: u32 = 2;
+/// `PING_INTERVAL * (MAX_MISSED_PINGS + 1)` = 30s at the current values.
+///
+/// This threshold is irrelevant to job duration: the detector only fires if
+/// the miner *also* fails to answer the `Ping` that provokes it, and any
+/// inbound message of any kind resets the count. It is purely about
+/// whether the miner's control plane can respond while it is busy sampling
+/// — not about how long the sample itself takes. For all four
+/// `quip-miner-core`-based backends (`cpu-sa`, `cpu-gibbs`, `cuda`,
+/// `metal`) it provably always can: sampling runs on a dedicated OS thread
+/// (`quip-miner-core/src/session.rs` spawns it via `std::thread::spawn`,
+/// fed by a channel) while the async control loop answers `Ping`
+/// unconditionally, so this constant should never fire against them at
+/// all. The margin exists for backends this crate cannot inspect —
+/// `quip-dwave-qa` is a separate Python implementation, and this tool
+/// exists specifically to benchmark solvers nobody has written yet, some
+/// of which may answer `Ping` from the same thread that samples. The
+/// asymmetry favors a generous value: a genuinely wedged miner dying a few
+/// extra seconds later costs nothing on a run measured in hours, while a
+/// working backend wrongly declared unresponsive writes false
+/// `rejected: true, passed: false` rows into the benchmark output — an
+/// expensive, hard-to-notice error the other direction does not have.
+const MAX_MISSED_PINGS: u32 = 9;
 
 /// Trailing stderr lines kept from the spawned miner. Bounded so a miner
 /// that logs in a tight loop cannot grow this without limit; generous
@@ -96,6 +116,37 @@ const MAX_MISSED_PINGS: u32 = 2;
 /// `tracing::error!` lines), matching the reasoning
 /// [`crate::backend::registry`]'s probe stderr capture already applies.
 const MAX_STDERR_LINES: usize = 50;
+
+/// Per-`JobRequest` cap on how many jobs are dispatched at once, regardless
+/// of the credits the miner asks for. `req.credits` is chosen by the miner
+/// — the untrusted, benchmarked component — and a `Job` message carries the
+/// full h/J problem payload, not just an id, so an uncapped credit grant
+/// could queue enough data to exceed the outbound channel (and any HTTP/2
+/// flow-control window backing it) well before `OUTBOUND_CHANNEL_DEPTH`
+/// itself is reached. One less than `OUTBOUND_CHANNEL_DEPTH` leaves room for
+/// at least one non-`Job` control message (e.g. `Ping`) to still be queued
+/// alongside a full batch of dispatches.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "OUTBOUND_CHANNEL_DEPTH is a small literal (16) that always fits u32"
+)]
+const MAX_DISPATCH_CREDITS_PER_REQUEST: u32 = OUTBOUND_CHANNEL_DEPTH as u32 - 1;
+
+/// Bound on a single dispatch `send`. Without this, a miner that requests
+/// credits but never polls its own inbound stream while solving (an
+/// ordinary naive shape, not malice) can wedge both sides once outbound
+/// backpressure fills: the coordinator blocks here, the miner's own
+/// `Result` send later blocks on its full outbound, and neither side is
+/// left reading. The liveness `Ping` loop does not cover this send, since
+/// it only wraps `inbound.message()`. Derived from the same constants as
+/// the ping-based liveness window (`PING_INTERVAL * (MAX_MISSED_PINGS + 1)`
+/// = 30s at the current values) for the same reason `MAX_MISSED_PINGS`
+/// documents: a miner that is merely slow to get back to reading its
+/// inbound (not deadlocked) must not be punished for it, and a genuinely
+/// wedged one costs nothing extra by dying a little later on a run
+/// measured in hours.
+const DISPATCH_SEND_TIMEOUT: Duration =
+    Duration::from_secs(PING_INTERVAL.as_secs() * (MAX_MISSED_PINGS as u64 + 1));
 
 /// Inputs to [`run_session`].
 pub struct RunParams<'a> {
@@ -191,11 +242,44 @@ impl std::error::Error for SessionError {}
 /// `handshake_ok: false`, `miner_unresponsive: true`, and/or a non-zero
 /// `miner_exit_code` in [`RunReport`].
 pub async fn run_session(p: RunParams<'_>) -> Result<RunReport, SessionError> {
+    run_session_inner(p, MAX_MISSED_PINGS).await
+}
+
+/// Identical to [`run_session`], except with the liveness threshold
+/// overridable, so `tests/session_conformance.rs` can exercise the
+/// unresponsive-detection path without waiting out the production
+/// `MAX_MISSED_PINGS` value (`PING_INTERVAL * (MAX_MISSED_PINGS + 1))` =
+/// 30s at the production value — deliberately generous per the reasoning on
+/// [`MAX_MISSED_PINGS`], but far too slow for a test to wait out on every
+/// run). This exists as a separate function, with `run_session`/[`RunParams`]
+/// left exactly as they were, rather than a `RunParams` field: the human
+/// ruling on this declined to widen that struct for test convenience.
+/// `#[doc(hidden)]` and not part of this crate's documented public
+/// contract; exported only because an external integration test (a
+/// separate compiled crate that cannot see this module's private items,
+/// however they might be gated) needs a `pub` item to call.
+///
+/// # Errors
+///
+/// Same as [`run_session`].
+#[doc(hidden)]
+pub async fn run_session_with_max_missed_pings_for_tests(
+    p: RunParams<'_>,
+    max_missed_pings: u32,
+) -> Result<RunReport, SessionError> {
+    run_session_inner(p, max_missed_pings).await
+}
+
+async fn run_session_inner(
+    p: RunParams<'_>,
+    max_missed_pings: u32,
+) -> Result<RunReport, SessionError> {
     let start = Instant::now();
     let listener = UnixListener::bind(p.sock_path).map_err(SessionError::Bind)?;
     let incoming = UnixListenerStream::new(listener);
 
     let progress = Arc::new(SessionProgress::default());
+    let stderr_tail = Arc::new(StderrTail::default());
     let (finish_tx, mut finish_rx) = oneshot::channel();
     let svc = CoordinatorSvc::new(
         p.backend.name.clone(),
@@ -204,6 +288,7 @@ pub async fn run_session(p: RunParams<'_>) -> Result<RunReport, SessionError> {
         p.jobs,
         finish_tx,
         Arc::clone(&progress),
+        max_missed_pings,
     );
     let server_task = tokio::spawn(
         tonic::transport::Server::builder()
@@ -236,22 +321,45 @@ pub async fn run_session(p: RunParams<'_>) -> Result<RunReport, SessionError> {
     // Read stderr concurrently, not after the child exits: the OS pipe
     // buffer backing it is finite, so a miner that logs enough before
     // anyone reads it could otherwise block on its own `write()` call.
+    // Lines are pushed into `stderr_tail` as they arrive rather than
+    // returned once at EOF, so an aborted reader task (see below) still
+    // leaves whatever was captured up to that point.
     let stderr_task = child
         .stderr
         .take()
-        .map(|stderr| tokio::spawn(capture_stderr_tail(stderr)));
+        .map(|stderr| tokio::spawn(capture_stderr_tail(stderr, Arc::clone(&stderr_tail))));
 
     // `finish_rx` resolves as soon as `drive_session` is done — normally,
-    // or via its `FinishSignal` guard firing on panic unwind — which always
-    // happens no later than the child's own OS-level exit in a real
-    // handshake, since the child only exits after observing this side close
-    // the stream. Racing against `child.wait()` therefore only matters for
-    // a miner that crashes, is rejected, or exits before ever dialing in
-    // (a bad binary, a missing `--quip-coordinator`, a rejected session
-    // token, ...), which would otherwise leave `finish_rx` waiting forever.
+    // or via its `FinishSignal` guard firing on panic unwind. Racing against
+    // `child.wait()` exists only so a miner that crashes, is rejected, or
+    // exits before ever dialing in (a bad binary, a missing
+    // `--quip-coordinator`, a rejected session token, ...) cannot leave
+    // `finish_rx` waiting forever — `session()` is never called on that
+    // path, so `FinishSignal` never fires.
+    //
+    // But the child's OS-level exit is *not* a reliable proxy for
+    // "drive_session has committed its records": if the miner dies mid-job
+    // (segfault, SIGKILL/OOM, panic-abort), the socket FD closing and the
+    // process exiting are the *same* kernel event, and the wait-side wake
+    // (one signal-driver hop) is structurally shorter than the path from
+    // socket EOF through the h2 connection task to drive_session's own
+    // poll. So the child branch can win before drive_session has read the
+    // close, decoded any trailing frames, or run `abandon_in_flight` — and
+    // snapshotting `progress` at that instant would silently drop every
+    // in-flight job's record. Give drive_session a bounded window to finish
+    // regardless of which branch fired: on the normal path drive_session's
+    // drain already returned, so this second wait resolves in microseconds;
+    // the full grace is only spent when the miner never called `session()`
+    // at all, which is already a failed run.
     tokio::select! {
         _ = &mut finish_rx => {}
-        _ = child.wait() => {}
+        _ = child.wait() => {
+            let _ = tokio::time::timeout(
+                Duration::from_millis(u64::from(SHUTDOWN_GRACE_MS)),
+                &mut finish_rx,
+            )
+            .await;
+        }
     }
 
     let shutdown_wait = Duration::from_millis(u64::from(SHUTDOWN_GRACE_MS) * 3);
@@ -264,36 +372,69 @@ pub async fn run_session(p: RunParams<'_>) -> Result<RunReport, SessionError> {
         }
     };
 
-    let miner_stderr_tail = match stderr_task {
-        Some(handle) => handle.await.ok().filter(|tail: &String| !tail.is_empty()),
-        None => None,
-    };
+    // Bounded: `capture_stderr_tail` only returns at EOF, which requires
+    // *every* write end of the pipe to close. `kill_on_drop`/`child.kill()`
+    // reach only the direct child — a wrapper script that backgrounds the
+    // real miner instead of exec-ing it, or a miner that daemonizes a
+    // helper process, can inherit fd 2 and keep the pipe open forever.
+    // Whatever was captured before the abort already lives in `stderr_tail`
+    // (pushed line-by-line as it arrived), so aborting loses nothing beyond
+    // whatever was still in flight.
+    if let Some(mut handle) = stderr_task {
+        let _ = tokio::time::timeout(shutdown_wait, &mut handle).await;
+        handle.abort();
+    }
+    let miner_stderr_tail = stderr_tail.snapshot();
 
     server_task.abort();
     let _ = std::fs::remove_file(p.sock_path);
 
     Ok(RunReport {
-        handshake_ok: progress.handshake_ok.load(Ordering::Relaxed),
+        handshake_ok: progress.handshake_ok.load(Ordering::Acquire),
         records: progress.snapshot_records(),
         miner_exit_code,
-        miner_unresponsive: progress.miner_unresponsive.load(Ordering::Relaxed),
+        miner_unresponsive: progress.miner_unresponsive.load(Ordering::Acquire),
         miner_stderr_tail,
         run_wall_ms: duration_ms(start.elapsed()),
     })
 }
 
-/// Drain `stderr` to EOF, keeping only the last [`MAX_STDERR_LINES`] lines
-/// joined back into one string with `\n`.
-async fn capture_stderr_tail(stderr: ChildStderr) -> String {
+/// Drain `stderr` to EOF, pushing each line into `tail` as it arrives.
+async fn capture_stderr_tail(stderr: ChildStderr, tail: Arc<StderrTail>) {
     let mut lines = BufReader::new(stderr).lines();
-    let mut tail: VecDeque<String> = VecDeque::with_capacity(MAX_STDERR_LINES);
     while let Ok(Some(line)) = lines.next_line().await {
-        if tail.len() == MAX_STDERR_LINES {
-            let _ = tail.pop_front();
-        }
-        tail.push_back(line);
+        tail.push_line(line);
     }
-    tail.into_iter().collect::<Vec<_>>().join("\n")
+}
+
+/// Shared, incrementally-updated tail of the miner's captured stderr,
+/// mirroring [`SessionProgress`]'s reasoning: the reader task can be
+/// aborted (see `run_session`) if the pipe never reaches EOF, and an abort
+/// drops that task's own local state. Writing into this shared buffer as
+/// each line arrives means whatever was captured before the abort survives
+/// it.
+#[derive(Default)]
+struct StderrTail(Mutex<VecDeque<String>>);
+
+impl StderrTail {
+    /// Push `line`, keeping only the last [`MAX_STDERR_LINES`].
+    fn push_line(&self, line: String) {
+        let mut lines = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if lines.len() == MAX_STDERR_LINES {
+            let _ = lines.pop_front();
+        }
+        lines.push_back(line);
+    }
+
+    /// Join the captured lines with `\n`, or `None` if nothing was captured.
+    fn snapshot(&self) -> Option<String> {
+        let lines = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if lines.is_empty() {
+            None
+        } else {
+            Some(lines.iter().cloned().collect::<Vec<_>>().join("\n"))
+        }
+    }
 }
 
 /// Shared, incrementally-updated view of a session's progress.
@@ -311,24 +452,37 @@ struct SessionProgress {
 }
 
 impl SessionProgress {
+    /// Recovers the inner `Vec` on a poisoned lock (`unwrap_or_else`, not
+    /// `unwrap` — stays clean under the denied `clippy::unwrap_used`) rather
+    /// than silently dropping the record: an unrelated panic elsewhere does
+    /// not logically corrupt a list of already-completed records, and
+    /// discarding them is exactly the outcome this whole design forbids.
     fn push_record(&self, record: JobRecord) {
-        if let Ok(mut records) = self.records.lock() {
-            records.push(record);
-        }
+        self.records
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(record);
     }
 
+    /// `Release`: pairs with the `Acquire` load in `run_session`, so every
+    /// `push_record` call that happens-before this store is visible to
+    /// whichever branch of `run_session`'s `select!` reads it afterward —
+    /// not just the `finish_rx` path, which already has a happens-before
+    /// edge via the oneshot itself.
     fn set_handshake_ok(&self) {
-        self.handshake_ok.store(true, Ordering::Relaxed);
+        self.handshake_ok.store(true, Ordering::Release);
     }
 
+    /// See [`Self::set_handshake_ok`]: same cross-task publication reasoning.
     fn set_unresponsive(&self) {
-        self.miner_unresponsive.store(true, Ordering::Relaxed);
+        self.miner_unresponsive.store(true, Ordering::Release);
     }
 
     fn snapshot_records(&self) -> Vec<JobRecord> {
         self.records
             .lock()
-            .map_or_else(|_| Vec::new(), |r| r.clone())
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 }
 
@@ -360,6 +514,7 @@ struct CoordinatorSvc {
     jobs: Mutex<Option<VecDeque<Job>>>,
     finish_tx: Mutex<Option<oneshot::Sender<()>>>,
     progress: Arc<SessionProgress>,
+    max_missed_pings: u32,
 }
 
 impl CoordinatorSvc {
@@ -370,6 +525,7 @@ impl CoordinatorSvc {
         jobs: Vec<Job>,
         finish_tx: oneshot::Sender<()>,
         progress: Arc<SessionProgress>,
+        max_missed_pings: u32,
     ) -> Self {
         Self {
             backend_name,
@@ -378,6 +534,7 @@ impl CoordinatorSvc {
             jobs: Mutex::new(Some(jobs.into_iter().collect())),
             finish_tx: Mutex::new(Some(finish_tx)),
             progress,
+            max_missed_pings,
         }
     }
 }
@@ -392,26 +549,32 @@ impl MinerService for CoordinatorSvc {
     ) -> Result<Response<Self::SessionStream>, Status> {
         let inbound = request.into_inner();
 
-        let jobs = {
-            let mut guard = self
-                .jobs
-                .lock()
-                .map_err(|_| Status::internal("job queue lock poisoned"))?;
-            guard.take().unwrap_or_default()
-        };
-        let finish_tx = {
-            let mut guard = self
-                .finish_tx
-                .lock()
-                .map_err(|_| Status::internal("finish channel lock poisoned"))?;
-            guard.take()
-        };
+        // Recovering the inner value on a poisoned lock (rather than
+        // returning `Status::internal`, as before) removes an error arm
+        // that, on the `finish_tx`-poisoned ordering specifically, silently
+        // discarded every already-`take()`n job via the `?` that stranded
+        // `finish_tx`'s own guard construction. These two mutexes only ever
+        // guard a single `Option::take()`, which cannot unwind, so this can
+        // only matter if a future change adds a fallible operation inside
+        // the guard — exactly the trap `PoisonError::into_inner` closes.
+        let jobs = self
+            .jobs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+            .unwrap_or_default();
+        let finish_tx = self
+            .finish_tx
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
 
         let (tx, rx) = mpsc::channel(OUTBOUND_CHANNEL_DEPTH);
         let spec = self.spec.clone();
         let target = self.target;
         let backend_name = self.backend_name.clone();
         let progress = Arc::clone(&self.progress);
+        let max_missed_pings = self.max_missed_pings;
         tokio::spawn(async move {
             let _finish_guard = finish_tx.map(|tx| FinishSignal(Some(tx)));
             drive_session(
@@ -422,6 +585,7 @@ impl MinerService for CoordinatorSvc {
                 target.as_ref(),
                 &backend_name,
                 &progress,
+                max_missed_pings,
             )
             .await;
         });
@@ -437,6 +601,11 @@ impl MinerService for CoordinatorSvc {
     clippy::too_many_lines,
     reason = "session loop kept as one linear match over MinerMsg for clarity, mirroring quip-mock-miner's own run_session"
 )]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one more than the threshold (max_missed_pings, the F8 test-only liveness override) \
+              plumbed through as a parameter rather than a RunParams field per an explicit human ruling"
+)]
 async fn drive_session(
     mut inbound: Streaming<MinerMsg>,
     tx: mpsc::Sender<Result<CoordMsg, Status>>,
@@ -445,6 +614,7 @@ async fn drive_session(
     target: Option<&SetTarget>,
     backend_name: &str,
     progress: &SessionProgress,
+    max_missed_pings: u32,
 ) {
     // 1. Wait for Hello; anything else (wrong first message, closed stream,
     // transport error) is a failed handshake with no jobs ever dispatched.
@@ -513,30 +683,58 @@ async fn drive_session(
                 missed_pings = 0;
                 match msg.msg {
                     // Each `send` below is awaited without reading inbound
-                    // in between, so a `credits` grant large enough to
-                    // fill `OUTBOUND_CHANNEL_DEPTH` while the miner itself
-                    // stops reading could in principle wedge both sides.
-                    // Not reachable today: a real miner requests
-                    // `credits: queue_depth`, which defaults to 3
-                    // (`quip_protocol::session::SessionConfig`), far under
-                    // the channel depth, and HTTP/2 flow-control windows
-                    // dwarf these control-sized messages regardless.
+                    // in between, so a miner that requests credits and then
+                    // solves synchronously without polling its own inbound
+                    // stream could wedge both sides once outbound
+                    // backpressure fills — an ordinary naive shape, not
+                    // malice, and `req.credits` is chosen by the miner
+                    // itself. `MAX_DISPATCH_CREDITS_PER_REQUEST` bounds how
+                    // much can queue at once; `DISPATCH_SEND_TIMEOUT` bounds
+                    // how long any one `send` may block, treating an
+                    // elapsed timeout the same as a failed send (dead
+                    // miner) rather than hanging with no timeout on any
+                    // path — the liveness `Ping` loop does not cover this
+                    // send, since it only wraps `inbound.message()`.
                     Some(miner_msg::Msg::JobRequest(req)) => {
-                        for _ in 0..req.credits {
+                        let credits = req.credits.min(MAX_DISPATCH_CREDITS_PER_REQUEST);
+                        for _ in 0..credits {
                             let Some(job) = remaining.pop_front() else {
                                 break;
                             };
                             let job_id = job.job_id.clone();
-                            let dispatched =
-                                send(&tx, coord_msg::Msg::Job(job.clone())).await.is_ok();
-                            in_flight.insert(job_id, (Instant::now(), job));
-                            if !dispatched {
+                            // Captured before the send, not after: time
+                            // spent blocked on outbound backpressure is
+                            // real wall time this job's dispatch cost, and
+                            // a job abandoned by the timeout below must not
+                            // report `wall_ms: 0`.
+                            let dispatch_start = Instant::now();
+                            let outbound = coord_msg::Msg::Job(job.clone());
+                            in_flight.insert(job_id, (dispatch_start, job));
+                            // Two distinct failure causes, not one: the
+                            // outbound channel closing (the miner's own
+                            // stream ended) and the send timing out (the
+                            // miner is still connected but never draining
+                            // its inbound) are different diagnoses and get
+                            // different reason text.
+                            let abandon_reason = match tokio::time::timeout(
+                                DISPATCH_SEND_TIMEOUT,
+                                send(&tx, outbound),
+                            )
+                            .await
+                            {
+                                Ok(Ok(())) => None,
+                                Ok(Err(_)) => Some("outbound channel closed while dispatching"),
+                                Err(_) => Some(
+                                    "dispatch send timed out: miner not reading its inbound stream",
+                                ),
+                            };
+                            if let Some(reason) = abandon_reason {
                                 abandon_in_flight(
                                     &mut in_flight,
                                     progress,
                                     backend_name,
                                     target,
-                                    "session ended with job in flight",
+                                    reason,
                                 );
                                 return;
                             }
@@ -591,7 +789,7 @@ async fn drive_session(
             Ok(Ok(None) | Err(_)) => break,
             Err(_) => {
                 missed_pings += 1;
-                if missed_pings > MAX_MISSED_PINGS {
+                if missed_pings > max_missed_pings {
                     unresponsive = true;
                     break;
                 }
@@ -624,17 +822,20 @@ async fn drive_session(
             progress,
             backend_name,
             target,
-            "session ended with job in flight",
+            "miner stream closed with jobs in flight",
         );
         drain(&mut inbound).await;
     }
 }
 
 /// Record every job still in `in_flight` as failing with `reason`, and
-/// empty `in_flight`. Shared by the `Fatal` arm, an unresponsive miner, a
-/// dispatch-send failure, and the end-of-loop cleanup for a closed/errored
-/// inbound stream — all are "the miner will never answer this job"
-/// outcomes, just with a different cause.
+/// empty `in_flight`. Shared by five call sites — `Fatal`, an unresponsive
+/// miner, an outbound channel closing mid-dispatch, a dispatch send timing
+/// out, and the end-of-loop cleanup for a closed/errored inbound stream —
+/// all "the miner will never answer this job" outcomes, but distinct
+/// causes: each passes its own `reason` text so a `JobRecord` in the
+/// benchmark output says which one happened, rather than one indistinct
+/// string covering causes a reader has no way to tell apart.
 fn abandon_in_flight(
     in_flight: &mut HashMap<Vec<u8>, (Instant, Job)>,
     progress: &SessionProgress,

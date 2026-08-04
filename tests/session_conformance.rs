@@ -14,7 +14,10 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use isingmark::backend::{builtin_registry, run_session, BackendSpec, RunParams, RunReport};
+use isingmark::backend::{
+    builtin_registry, run_session, run_session_with_max_missed_pings_for_tests, BackendSpec,
+    RunParams, RunReport,
+};
 use isingmark::params::BackendKind;
 use isingmark::problem::ProblemSource;
 use isingmark::record::JobRecord;
@@ -98,6 +101,33 @@ async fn run_with(
         sock_path,
         target: Some(small_target()),
     })
+    .await
+    .expect("run_session's own setup (bind/spawn) never fails for a valid fixture backend")
+}
+
+/// Like [`run_with`], but with the liveness threshold overridden via
+/// `run_session_with_max_missed_pings_for_tests` (`#[doc(hidden)]`, not
+/// `RunParams` — the human declined to widen that struct for this).
+/// Production's `MAX_MISSED_PINGS` gives a deliberately generous ~30s
+/// detection window; a test that actually needs the unresponsive path to
+/// trip cannot wait that out on every run.
+async fn run_with_max_missed_pings(
+    backend: &BackendSpec,
+    spec: &TopologySpec,
+    jobs: Vec<Job>,
+    sock_path: &Path,
+    max_missed_pings: u32,
+) -> RunReport {
+    run_session_with_max_missed_pings_for_tests(
+        RunParams {
+            backend,
+            spec,
+            jobs,
+            sock_path,
+            target: Some(small_target()),
+        },
+        max_missed_pings,
+    )
     .await
     .expect("run_session's own setup (bind/spawn) never fails for a valid fixture backend")
 }
@@ -422,9 +452,13 @@ async fn fake_miner_disconnect_mid_flight_fails_every_in_flight_job() {
     let jobs = draw_jobs(&spec, 12, 4);
     let dir = tempfile::tempdir().expect("create temp dir");
     let sock_path = dir.path().join("coordinator.sock");
-    // Same batching as the Fatal test, but the miner closes the connection
-    // with no message at all for job #2 (simulating a crash/OOM-kill)
-    // instead of sending an orderly Fatal report.
+    // Same batching as the Fatal test, but the miner half-closes its
+    // outbound stream for job #2 (and stays alive briefly to drain its own
+    // inbound) instead of sending an orderly Fatal report. This is a clean
+    // process exit, not a crash — see
+    // `fake_miner_abort_mid_job_preserves_every_in_flight_record` below for
+    // the case where the socket close and the process death are the same
+    // kernel event.
     let backend = fake_miner_backend(vec![
         "--credits".to_string(),
         "4".to_string(),
@@ -451,12 +485,67 @@ async fn fake_miner_disconnect_mid_flight_fails_every_in_flight_job() {
         assert!(!record.passed);
         assert_eq!(
             record.reject_reason.as_deref(),
-            Some("session ended with job in flight")
+            Some("miner stream closed with jobs in flight")
         );
     }
     // A silent disconnect is not a Fatal report, so the fake miner's own
     // `main` still returns success.
     assert_eq!(report.miner_exit_code, 0);
+    assert!(!sock_path.exists());
+}
+
+#[tokio::test]
+async fn fake_miner_abort_mid_job_preserves_every_in_flight_record() {
+    // `--abort-after` calls `std::process::abort()`, which closes the
+    // miner's socket FD and ends the process in the same kernel event —
+    // unlike `--disconnect-after`, where the miner stays alive and drains
+    // its own inbound first. This is the specific race `run_session`'s
+    // `child.wait()` anti-hang backstop must not mistake for "the session
+    // finished": without a bounded wait for `drive_session` to commit its
+    // records after the child branch fires, `report.records` comes back
+    // missing every job that was in flight when the miner died.
+    //
+    // Whether job 1's `Result` — sent immediately before the abort — was
+    // actually flushed out of the miner's own outbound buffer before the
+    // process died is itself a real race (an `mpsc::Sender::send` returning
+    // only means the message is queued locally, not that it reached the
+    // socket), exactly mirroring a real crash's uncertainty about the last
+    // in-flight write. This test does not assume an answer either way: the
+    // property under test is that every dispatched job is accounted for —
+    // as a genuine `Result` or as an abandoned-in-flight record — never
+    // silently missing, regardless of which side of that race it landed on.
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let jobs = draw_jobs(&spec, 14, 4);
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    let backend = fake_miner_backend(vec![
+        "--credits".to_string(),
+        "4".to_string(),
+        "--abort-after".to_string(),
+        "2".to_string(),
+    ]);
+
+    let report = run_with(&backend, &spec, jobs.clone(), &sock_path).await;
+
+    assert!(report.handshake_ok);
+    assert_eq!(
+        report.records.len(),
+        jobs.len(),
+        "every dispatched job must be accounted for, not silently dropped: {:?}",
+        report.records
+    );
+    for job in &jobs {
+        let record = record_by_job_id(&report.records, job);
+        assert!(
+            record.passed || record.rejected,
+            "record must be either a genuine pass or an explicit abandonment, \
+             not some third, unaccounted-for state: {record:?}"
+        );
+    }
+    // std::process::abort() raises SIGABRT: the process is terminated by a
+    // signal, not a normal exit, so `ExitStatus::code()` is `None` and
+    // `run_session` reports the documented signal sentinel.
+    assert_eq!(report.miner_exit_code, -1);
     assert!(!sock_path.exists());
 }
 
@@ -477,7 +566,12 @@ async fn fake_miner_unresponsive_after_handshake_preserves_records_and_sets_the_
         "2".to_string(),
     ]);
 
-    let report = run_with(&backend, &spec, jobs.clone(), &sock_path).await;
+    // The production MAX_MISSED_PINGS (~30s detection window) is
+    // deliberately generous — see its doc comment — and far too slow for a
+    // test to wait out on every run. Override to 1 (detection in
+    // PING_INTERVAL * 2 = 6s) via the test-only entry point rather than
+    // widening RunParams for this.
+    let report = run_with_max_missed_pings(&backend, &spec, jobs.clone(), &sock_path, 1).await;
 
     assert!(
         report.handshake_ok,
@@ -536,6 +630,43 @@ async fn fake_miner_stderr_is_captured_when_the_miner_exits_before_connecting() 
     assert!(
         tail.contains("distinctive diagnostic marker 8f3c1a"),
         "stderr tail should carry the miner's diagnostic text, got {tail:?}"
+    );
+    assert!(!sock_path.exists());
+}
+
+#[tokio::test]
+async fn fake_miner_bounded_stderr_wait_does_not_hang_on_a_leaked_pipe() {
+    // `capture_stderr_tail` only returns at EOF, which needs every write
+    // end of the pipe closed. `--leak-stderr-to-grandchild` spawns a
+    // detached `sleep 60` inheriting the fake miner's stderr fd, then exits
+    // — simulating a wrapper script that backgrounds the real miner instead
+    // of exec-ing it. Without a bound on that wait, `run_session` would
+    // block for the full 60 seconds (or forever, for a truly persistent
+    // helper) with every other part of the report already known. A 20s
+    // ceiling on the whole call proves the bound applies without requiring
+    // the test to wait out the full leak lifetime.
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    let backend = fake_miner_backend(vec![
+        "--leak-stderr-to-grandchild".to_string(),
+        "isingmark-fake-miner: leaked-stderr marker c4f1a2".to_string(),
+    ]);
+
+    let report = tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        run_with(&backend, &spec, Vec::new(), &sock_path),
+    )
+    .await
+    .expect("run_session must not hang on a stderr pipe a grandchild keeps open");
+
+    assert!(!report.handshake_ok);
+    assert!(report.records.is_empty());
+    assert_ne!(report.miner_exit_code, 0);
+    let tail = report.miner_stderr_tail.as_deref().unwrap_or("");
+    assert!(
+        tail.contains("leaked-stderr marker c4f1a2"),
+        "the line written before the leak must still be captured: {tail:?}"
     );
     assert!(!sock_path.exists());
 }
