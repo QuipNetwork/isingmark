@@ -340,17 +340,24 @@ async fn run_session_inner(
     // But the child's OS-level exit is *not* a reliable proxy for
     // "drive_session has committed its records": if the miner dies mid-job
     // (segfault, SIGKILL/OOM, panic-abort), the socket FD closing and the
-    // process exiting are the *same* kernel event, and the wait-side wake
-    // (one signal-driver hop) is structurally shorter than the path from
-    // socket EOF through the h2 connection task to drive_session's own
-    // poll. So the child branch can win before drive_session has read the
-    // close, decoded any trailing frames, or run `abandon_in_flight` — and
-    // snapshotting `progress` at that instant would silently drop every
-    // in-flight job's record. Give drive_session a bounded window to finish
-    // regardless of which branch fired: on the normal path drive_session's
-    // drain already returned, so this second wait resolves in microseconds;
-    // the full grace is only spent when the miner never called `session()`
-    // at all, which is already a failed run.
+    // process exiting are the *same* kernel event, delivered to this task
+    // through two independent paths — `child.wait()` through the signal
+    // driver (SIGCHLD -> self-pipe -> reactor -> `Reaper` wake), the socket
+    // close through kqueue/epoll -> the h2 connection task -> drive_session's
+    // own poll. Neither path is guaranteed to win: measurements on this
+    // platform found the socket-EOF path usually resolving first when the
+    // runtime is idle, with the ordering only inverting under enough
+    // scheduler contention that drive_session's wake sits behind other
+    // runnable work — so the child branch firing first is a real,
+    // load-dependent possibility, not a rare corner case. Whenever it does
+    // fire before drive_session has read the close, decoded any trailing
+    // frames, or run `abandon_in_flight`, snapshotting `progress` at that
+    // instant would silently drop every in-flight job's record. Give
+    // drive_session a bounded window to finish regardless of which branch
+    // fired: on the normal path drive_session's drain already returned, so
+    // this second wait resolves in microseconds; the full grace is only
+    // spent when the miner never called `session()` at all, which is
+    // already a failed run.
     tokio::select! {
         _ = &mut finish_rx => {}
         _ = child.wait() => {
@@ -1103,10 +1110,70 @@ fn milli_round(fraction: f64) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{duration_ms, edge_positions, hex_encode, milli_round, reject_reason_text};
+    use super::{
+        duration_ms, edge_positions, hex_encode, milli_round, reject_reason_text, SessionProgress,
+    };
+    use crate::record::JobRecord;
     use crate::topology::TopologySpec;
     use quip_proto::v1::RejectReason;
+    use std::sync::Arc;
     use std::time::Duration;
+
+    fn sample_record() -> JobRecord {
+        JobRecord {
+            job_id: "aa".to_string(),
+            backend: "fake".to_string(),
+            n_solutions: 1,
+            best_energy_milli: 0,
+            diversity_milli: 0,
+            passed: true,
+            rejected: false,
+            reject_reason: None,
+            device_access_time_us: 0,
+            wall_ms: 0,
+            reads: 0,
+            sweeps: 0,
+            anneal_time_us: 0,
+        }
+    }
+
+    /// `SessionProgress::records`'s guard is only ever held across
+    /// `Vec::push`/`Vec::clone`, neither of which unwinds in practice, so
+    /// poisoning it in production is effectively impossible today. That is
+    /// a severity argument, not a testability one: nothing stops a test
+    /// from poisoning the mutex directly and checking recovery, and this is
+    /// exactly the trap `PoisonError::into_inner` (F4) closes for whoever
+    /// next puts a fallible operation inside that guard.
+    #[test]
+    #[expect(
+        clippy::panic,
+        reason = "deliberately unwinding while holding the lock is the only way to poison it, \
+                  which is the whole point of this test"
+    )]
+    fn push_record_and_snapshot_records_recover_a_poisoned_lock_instead_of_discarding_data() {
+        let progress = Arc::new(SessionProgress::default());
+        let poisoner = Arc::clone(&progress);
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoner
+                .records
+                .lock()
+                .expect("uncontended lock is not already poisoned");
+            panic!("deliberately unwind while holding the guard, to poison it");
+        })
+        .join();
+
+        assert!(
+            progress.records.is_poisoned(),
+            "the spawned thread must have poisoned the lock for this test to mean anything"
+        );
+
+        progress.push_record(sample_record());
+        assert_eq!(
+            progress.snapshot_records().len(),
+            1,
+            "a poisoned lock must recover the record, not silently drop it"
+        );
+    }
 
     #[test]
     fn hex_encode_is_lowercase_no_separator() {

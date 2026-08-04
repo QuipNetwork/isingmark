@@ -514,6 +514,14 @@ async fn fake_miner_abort_mid_job_preserves_every_in_flight_record() {
     // property under test is that every dispatched job is accounted for —
     // as a genuine `Result` or as an abandoned-in-flight record — never
     // silently missing, regardless of which side of that race it landed on.
+    //
+    // This is a smoke test, not a regression guard: on an uncontended
+    // machine, the SIGCHLD-delivery latency this race depends on is
+    // dominated by other incidental delay in `run_session`'s own later
+    // steps, so a single serial run only catches the reverted bug about
+    // 1 time in 80. `fake_miner_abort_mid_job_under_contention_never_loses_records`
+    // below forces the race under CPU contention and is the one that
+    // actually detects a regression reliably.
     let spec = load_fixture("smoke").expect("smoke fixture parses");
     let jobs = draw_jobs(&spec, 14, 4);
     let dir = tempfile::tempdir().expect("create temp dir");
@@ -547,6 +555,81 @@ async fn fake_miner_abort_mid_job_preserves_every_in_flight_record() {
     // `run_session` reports the documented signal sentinel.
     assert_eq!(report.miner_exit_code, -1);
     assert!(!sock_path.exists());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn fake_miner_abort_mid_job_under_contention_never_loses_records() {
+    const ITERATIONS: u64 = 200;
+
+    // The race the test above exercises — `run_session`'s `child.wait()`
+    // branch of the top-level `select!` firing before `drive_session` has
+    // committed the in-flight records — depends on which of two kernel
+    // notifications (SIGCHLD, relayed through tokio's signal driver, vs.
+    // socket EOF, delivered through kqueue/epoll) wakes its waiting task
+    // first. On an unloaded machine the socket-EOF path is usually faster,
+    // so a single serial run of the smoke test above catches a reverted fix
+    // only about 1 time in 80. The window only opens when the runtime is
+    // busy enough that `drive_session`'s wake sits in a runnable queue
+    // behind other work, which is what the four background spin tasks below
+    // manufacture in-process instead of relying on the rest of the machine
+    // being loaded.
+    //
+    // Looping the same abort scenario 200 times under that contention, on a
+    // 2-worker-thread runtime so the spin tasks actually compete with
+    // `drive_session` for a thread, measured 37/40 (92.5%) detection against
+    // this exact reverted `select!` across two independent 20-run batches on
+    // the machine this was written on — matching the ~92% estimate the
+    // per-iteration rate (~1/80) predicts for N=200. A full 200-iteration
+    // pass (i.e. the fix holding) takes on the order of 3-6 seconds of wall
+    // time under this contention; a run that catches the reverted bug exits
+    // far earlier, on its first failing iteration.
+    for _ in 0..4 {
+        tokio::spawn(async {
+            loop {
+                std::hint::black_box((0u64..200_000).fold(0u64, u64::wrapping_add));
+                tokio::task::yield_now().await;
+            }
+        });
+    }
+
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    for i in 0..ITERATIONS {
+        let jobs = draw_jobs(&spec, 1_000 + i, 4);
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let sock_path = dir.path().join("coordinator.sock");
+        let backend = fake_miner_backend(vec![
+            "--credits".to_string(),
+            "4".to_string(),
+            "--abort-after".to_string(),
+            "2".to_string(),
+        ]);
+
+        let report = run_with(&backend, &spec, jobs.clone(), &sock_path).await;
+
+        // Guards against counting an iteration where the miner did not
+        // actually abort (and so never touched the race at all) as a pass.
+        assert_eq!(
+            report.miner_exit_code, -1,
+            "iteration {i}: the miner must have aborted (SIGABRT) for this \
+             iteration to exercise the race"
+        );
+        assert_eq!(
+            report.records.len(),
+            jobs.len(),
+            "iteration {i}: every dispatched job must be accounted for, not \
+             silently dropped: {:?}",
+            report.records
+        );
+        for job in &jobs {
+            let record = record_by_job_id(&report.records, job);
+            assert!(
+                record.passed || record.rejected,
+                "iteration {i}: record must be either a genuine pass or an \
+                 explicit abandonment, not some third, unaccounted-for state: \
+                 {record:?}"
+            );
+        }
+    }
 }
 
 #[tokio::test]
@@ -669,6 +752,39 @@ async fn fake_miner_bounded_stderr_wait_does_not_hang_on_a_leaked_pipe() {
         "the line written before the leak must still be captured: {tail:?}"
     );
     assert!(!sock_path.exists());
+}
+
+#[tokio::test]
+async fn fake_miner_credit_cap_limits_jobs_dispatched_per_request() {
+    // MAX_DISPATCH_CREDITS_PER_REQUEST (F2) caps how many jobs one
+    // JobRequest triggers dispatching, regardless of how many credits the
+    // miner asks for. `--report-jobs-received-after-ms` makes the fake
+    // miner request 100 credits up front, accept whatever arrives without
+    // ever answering or asking for more, then report the exact count once
+    // inbound goes quiet — so whatever it reports is exactly what the one
+    // grant dispatched, on an otherwise well-behaved (not crashed, not
+    // wedged) run, not just a broken one. 200ms of quiet is comfortably
+    // under the coordinator's own 3s Ping interval, so nothing else
+    // interferes before the miner reports and exits.
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let jobs = draw_jobs(&spec, 16, 30);
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    let backend = fake_miner_backend(vec![
+        "--credits".to_string(),
+        "100".to_string(),
+        "--report-jobs-received-after-ms".to_string(),
+        "200".to_string(),
+    ]);
+
+    let report = run_with(&backend, &spec, jobs, &sock_path).await;
+
+    let tail = report.miner_stderr_tail.as_deref().unwrap_or("");
+    assert!(
+        tail.contains("jobs_received=15"),
+        "a 100-credit grant against 30 staged jobs should dispatch exactly \
+         the 15-job cap, got tail {tail:?}"
+    );
 }
 
 #[tokio::test]

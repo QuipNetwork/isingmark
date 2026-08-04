@@ -120,6 +120,16 @@ struct Cli {
     /// coordinator's stderr reader never sees EOF on its own.
     #[arg(long)]
     leak_stderr_to_grandchild: Option<String>,
+    /// After the handshake, accept `Job` messages without ever answering
+    /// any of them (no `Result`, no `Reject`, no further `JobRequest`), and
+    /// once this many milliseconds pass with no further inbound message,
+    /// print `jobs_received=<count>` to stderr and exit non-zero. Used to
+    /// observe exactly how many jobs one `JobRequest` grant actually
+    /// dispatched — proving the coordinator's per-request dispatch cap on a
+    /// well-behaved (not crashed, not wedged) run, since a miner that never
+    /// asks for more only ever receives what that one grant produced.
+    #[arg(long)]
+    report_jobs_received_after_ms: Option<u64>,
 }
 
 /// Map a session/CLI failure to a documented exit code (64/69/70/77).
@@ -335,9 +345,29 @@ async fn run() -> Result<(), ExitCode> {
     let mut silent = false;
 
     loop {
-        let next = tokio::time::timeout(Duration::from_secs(30), inbound.message()).await;
+        // `--report-jobs-received-after-ms` shortens this wait so it can
+        // detect its own "N ms of quiet" condition rather than waiting out
+        // the ordinary 30s idle bound.
+        let idle_wait = cli
+            .report_jobs_received_after_ms
+            .map_or(Duration::from_secs(30), Duration::from_millis);
+        let next = tokio::time::timeout(idle_wait, inbound.message()).await;
         let cm: CoordMsg = match next {
-            Err(_) | Ok(Ok(None)) => break,
+            Err(_) => {
+                if cli.report_jobs_received_after_ms.is_some() {
+                    #[expect(
+                        clippy::print_stderr,
+                        reason = "test-only flag reporting how many Job messages arrived \
+                                  before a quiet period, for isingmark's dispatch-cap test"
+                    )]
+                    {
+                        eprintln!("jobs_received={jobs_seen}");
+                    }
+                    return Err(ExitCode::EnvIncompatible);
+                }
+                break;
+            }
+            Ok(Ok(None)) => break,
             Ok(Ok(Some(cm))) => cm,
             Ok(Err(_)) => return Err(ExitCode::InternalFatal),
         };
@@ -380,6 +410,13 @@ async fn run() -> Result<(), ExitCode> {
             }
             Some(coord_msg::Msg::Job(job)) => {
                 jobs_seen += 1;
+                if cli.report_jobs_received_after_ms.is_some() {
+                    // Accept silently: this mode measures what one
+                    // JobRequest grant dispatched, not any per-job
+                    // response, and requesting more credits would let the
+                    // coordinator dispatch beyond the cap this test targets.
+                    continue;
+                }
                 if cli.abort_after == Some(jobs_seen) {
                     // Deliberately not `std::process::exit`: abort closes
                     // the socket FD and terminates the process in one
