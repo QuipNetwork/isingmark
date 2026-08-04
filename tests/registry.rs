@@ -112,6 +112,17 @@ mod fake_miner {
         }
     }
 
+    /// Extract the message from a [`ProbeError::InvalidOutput`], or `None`
+    /// for any other variant. Lets tests assert on the message text without
+    /// a `match` arm that would need a denied `panic!`/`unreachable!` for
+    /// the impossible case.
+    fn invalid_output_message(err: &ProbeError) -> Option<&str> {
+        match err {
+            ProbeError::InvalidOutput(message) => Some(message.as_str()),
+            ProbeError::NotFound(_) | ProbeError::CheckFailed { .. } => None,
+        }
+    }
+
     /// The four JSON fields are distinct types/values (string, string,
     /// two differently-valued numbers) so a parser that returns an empty
     /// object, a default value, or mixes up fields fails a specific
@@ -163,5 +174,88 @@ mod fake_miner {
         let err = probe_capabilities(&spec_for(path)).expect_err("garbage stdout is not JSON");
 
         assert!(matches!(err, ProbeError::InvalidOutput(_)));
+    }
+
+    /// Invalid UTF-8 stdout is its own documented `InvalidOutput` case
+    /// (`registry.rs:46-47`, `:170-171`), distinct from a valid-UTF-8,
+    /// invalid-JSON payload. `\xFF\xFE` is not valid UTF-8 under any
+    /// interpretation (0xFF is not a valid UTF-8 leading or continuation
+    /// byte), so this cannot be satisfied by a lossy-replacement decode
+    /// that then happens to fail JSON parsing for an unrelated reason.
+    #[test]
+    fn invalid_utf8_stdout_is_reported_as_invalid_output_mentioning_utf8() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join("non-utf8-miner");
+        std::fs::write(&path, "#!/bin/sh\nprintf '\\377\\376'\nexit 0\n")
+            .expect("write non-utf8 fixture");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod non-utf8 fixture executable");
+
+        let err =
+            probe_capabilities(&spec_for(path)).expect_err("invalid UTF-8 stdout is an error");
+
+        let message = invalid_output_message(&err)
+            .expect("invalid UTF-8 stdout is reported as InvalidOutput");
+        assert!(
+            message.contains("UTF-8"),
+            "message does not mention UTF-8: {message}"
+        );
+    }
+
+    /// A non-zero `--capabilities` exit (a version-mismatched binary, a
+    /// wrapper script, or a backend whose runtime is missing) must not
+    /// discard the process's own diagnosis: the error message carries both
+    /// the exit code and the stderr text, not just a generic JSON-parse
+    /// failure from empty stdout.
+    #[test]
+    fn capabilities_nonzero_exit_reports_the_exit_code_and_stderr_reason() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join("crashing-miner");
+        std::fs::write(
+            &path,
+            "#!/bin/sh\n>&2 printf 'cuda runtime not found'\nexit 3\n",
+        )
+        .expect("write crashing fixture");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod crashing fixture executable");
+
+        let err = probe_capabilities(&spec_for(path)).expect_err("nonzero exit is an error");
+
+        let message =
+            invalid_output_message(&err).expect("nonzero --capabilities exit is InvalidOutput");
+        assert!(
+            message.contains('3'),
+            "message drops the exit code: {message}"
+        );
+        assert!(
+            message.contains("cuda runtime not found"),
+            "message drops the stderr reason: {message}"
+        );
+    }
+
+    /// `BackendSpec::args` must be forwarded on every invocation, and land
+    /// *before* the probe flag (documented at `registry.rs:27-28`). The
+    /// fixture only succeeds when `$1` is exactly `--extra`; if forwarding
+    /// is dropped, `$1` becomes the probe flag itself (`--capabilities` or
+    /// `--check`) instead, which does not match, so the fixture exits
+    /// non-zero and both probes fail.
+    #[test]
+    fn extra_args_are_forwarded_before_the_probe_flag() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join("args-checking-miner");
+        let script = "#!/bin/sh\nif [ \"$1\" = \"--extra\" ]; then\n  case \"$2\" in\n    --capabilities) printf '%s' '{\"ok\":true}'; exit 0 ;;\n    --check) exit 0 ;;\n  esac\nfi\nexit 9\n";
+        std::fs::write(&path, script).expect("write args-checking fixture");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod args-checking fixture executable");
+
+        let spec = BackendSpec {
+            name: "fake".to_string(),
+            bin: path,
+            args: vec!["--extra".to_string()],
+            kind: BackendKind::Sweeping,
+        };
+
+        probe_capabilities(&spec).expect("--extra forwarded before --capabilities");
+        probe_check(&spec).expect("--extra forwarded before --check");
     }
 }

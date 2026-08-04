@@ -110,22 +110,29 @@ const BUILTINS: &[BuiltinEntry] = &[
 /// [`BackendSpec`] directly rather than going through this function.
 #[must_use]
 pub fn builtin_registry() -> Vec<BackendSpec> {
+    let path_var = env::var_os("PATH").unwrap_or_default();
+    builtin_registry_from(&path_var)
+}
+
+/// [`builtin_registry`], parameterized on the `$PATH`-style directory list
+/// to search instead of reading the real environment.
+///
+/// This seam exists so tests can assert `builtin_registry` is actually wired
+/// to `$PATH` resolution (as opposed to, say, searching on the wrong field of
+/// [`BuiltinEntry`]) without mutating process-wide environment state:
+/// `std::env::set_var` is `unsafe` and `unsafe-code = "deny"` forbids it
+/// here.
+fn builtin_registry_from(path_var: &OsStr) -> Vec<BackendSpec> {
     BUILTINS
         .iter()
         .map(|entry| BackendSpec {
             name: entry.name.to_string(),
-            bin: resolve_on_path(entry.bin_name).unwrap_or_else(|| PathBuf::from(entry.bin_name)),
+            bin: resolve_in_paths(entry.bin_name, path_var)
+                .unwrap_or_else(|| PathBuf::from(entry.bin_name)),
             args: Vec::new(),
             kind: entry.kind,
         })
         .collect()
-}
-
-/// Search `$PATH` for an executable file named `bin_name`, returning the
-/// first match in `$PATH` order.
-fn resolve_on_path(bin_name: &str) -> Option<PathBuf> {
-    let path_var = env::var_os("PATH")?;
-    resolve_in_paths(bin_name, &path_var)
 }
 
 /// Search the `:`/`;`-separated directory list `path_var` (the same syntax
@@ -177,7 +184,9 @@ pub fn probe_capabilities(spec: &BackendSpec) -> Result<serde_json::Value, Probe
         )));
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = String::from_utf8(output.stdout).map_err(|e| {
+        ProbeError::InvalidOutput(format!("--capabilities stdout is not valid UTF-8: {e}"))
+    })?;
     serde_json::from_str(&stdout)
         .map_err(|e| ProbeError::InvalidOutput(format!("failed to parse --capabilities JSON: {e}")))
 }
@@ -206,7 +215,9 @@ pub fn probe_check(spec: &BackendSpec) -> Result<(), ProbeError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{builtin_registry, BackendKind};
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::{builtin_registry, builtin_registry_from, BackendKind};
 
     /// Every built-in name maps to the exact expected binary and kind. Each
     /// name/binary/kind triple is distinct across entries, so a mixed-up
@@ -248,6 +259,40 @@ mod tests {
             .iter()
             .all(|spec| spec.name != "not-a-real-backend"));
         assert_eq!(registry.len(), 5);
+    }
+
+    /// `builtin_registry_from` actually searches `path_var` for each
+    /// entry's *binary name*, not some other field. Seeds `quip-cuda-sa`
+    /// (and nothing else) into a synthetic `$PATH` and checks two things:
+    /// the `cuda` entry resolves to that exact seeded path (not merely "some
+    /// path" or the bare fallback), and every other entry — whose binary is
+    /// absent from this `$PATH` — still falls back to its own bare name. A
+    /// mix-up that searches on `entry.name` (e.g. `"cuda"`) instead of
+    /// `entry.bin_name` (`"quip-cuda-sa"`) would never find the seeded file
+    /// (nothing in this `$PATH` is literally named `cuda`), so `cuda` would
+    /// wrongly fall back to the bare name too, failing the first assertion.
+    #[test]
+    fn builtin_registry_from_wires_path_resolution_to_each_entrys_bin_name() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let seeded = dir.path().join("quip-cuda-sa");
+        std::fs::write(&seeded, "#!/bin/sh\nexit 0\n").expect("write fixture");
+        std::fs::set_permissions(&seeded, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod fixture");
+
+        let path_var = std::env::join_paths([dir.path()]).expect("join_paths");
+        let registry = builtin_registry_from(&path_var);
+
+        let cuda = registry
+            .iter()
+            .find(|spec| spec.name == "cuda")
+            .expect("cuda entry exists");
+        assert_eq!(cuda.bin, seeded);
+
+        for (spec, entry) in registry.iter().zip(super::BUILTINS.iter()) {
+            if spec.name != "cuda" {
+                assert_eq!(spec.bin, std::path::PathBuf::from(entry.bin_name));
+            }
+        }
     }
 
     /// Each entry's resolved `bin` is either a real file found on `$PATH`,
