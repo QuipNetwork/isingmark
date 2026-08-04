@@ -55,7 +55,7 @@ pub struct JobRecord {
 ///
 /// The line is written with a single `write_all` call (JSON payload and
 /// trailing newline in one buffer) rather than `writeln!`'s separate writes,
-/// so a process killed mid-append cannot leave a complete-but-newline-less
+/// so a process killed mid-append does not leave a complete-but-newline-less
 /// record followed by a second, unrelated write landing on the same
 /// physical line. This is not formal atomicity — a crash can still land
 /// inside the one `write`, and short writes are possible in principle — but
@@ -72,32 +72,50 @@ pub fn append_jsonl(path: &Path, rec: &JobRecord) -> io::Result<()> {
     file.write_all(format!("{line}\n").as_bytes())
 }
 
+/// Result of [`read_jsonl`]: the records that parsed successfully, plus how
+/// many lines did not.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JsonlRead {
+    /// Records that parsed successfully, in file order.
+    pub records: Vec<JobRecord>,
+    /// Non-blank lines that failed to parse as a [`JobRecord`] and were
+    /// skipped rather than aborting the read.
+    pub skipped_lines: usize,
+}
+
 /// Read all records from a JSONL file at `path`, in file order.
 ///
-/// Blank lines are skipped, and so is any line that fails to parse as a
-/// [`JobRecord`] — for example a partial line left behind by a process
-/// killed mid-`append_jsonl`, or that partial line merged with the next
-/// record's write (see [`append_jsonl`]). A single corrupt line is data
-/// loss for that one record, but it does not cost every record before or
-/// after it, and the file remains readable.
+/// Blank lines are skipped without counting. A non-blank line that fails to
+/// parse as a [`JobRecord`] — for example a partial line left behind by a
+/// process killed mid-[`append_jsonl`], or that partial line merged with the
+/// next record's write — is skipped and counted in
+/// [`JsonlRead::skipped_lines`] instead of aborting the read, so a single
+/// corrupt line costs only itself, and the loss is visible to the caller
+/// rather than silent.
 ///
 /// # Errors
 ///
 /// Returns an error if `path` cannot be opened, or if a line cannot be read
-/// (for example, invalid UTF-8).
-pub fn read_jsonl(path: &Path) -> io::Result<Vec<JobRecord>> {
+/// (for example, invalid UTF-8). Only per-line JSON parse failures are
+/// tolerated; other I/O failures still propagate.
+pub fn read_jsonl(path: &Path) -> io::Result<JsonlRead> {
     let file = File::open(path)?;
     let mut records = Vec::new();
+    let mut skipped_lines = 0;
     for line in BufReader::new(file).lines() {
         let line = line?;
         if line.trim().is_empty() {
             continue;
         }
-        if let Ok(rec) = serde_json::from_str(&line) {
-            records.push(rec);
+        match serde_json::from_str(&line) {
+            Ok(rec) => records.push(rec),
+            Err(_) => skipped_lines += 1,
         }
     }
-    Ok(records)
+    Ok(JsonlRead {
+        records,
+        skipped_lines,
+    })
 }
 
 /// Aggregate counts across a benchmark run's job records.
@@ -109,6 +127,11 @@ pub struct Totals {
     pub passed: usize,
     /// Number of jobs that were rejected outright.
     pub rejected: usize,
+    /// Lines the run's JSONL report could not parse (see
+    /// [`JsonlRead::skipped_lines`]), recorded here so a wrong `jobs` count
+    /// caused by lost records is not silently indistinguishable from a
+    /// clean run.
+    pub skipped_lines: usize,
 }
 
 /// Identifying shape of the topology a run benchmarked against.

@@ -4,7 +4,8 @@
 use std::fmt::Write as _;
 
 use isingmark::record::{
-    append_jsonl, read_jsonl, write_summary, HardwareInfo, JobRecord, Summary, TopologyInfo, Totals,
+    append_jsonl, read_jsonl, write_summary, HardwareInfo, JobRecord, JsonlRead, Summary,
+    TopologyInfo, Totals,
 };
 use serde_json::json;
 
@@ -74,7 +75,13 @@ fn round_trip_preserves_all_fields_for_both_reject_reason_cases() {
     append_jsonl(&path, &rec_b).expect("append second record");
 
     let read_back = read_jsonl(&path).expect("read records back");
-    assert_eq!(read_back, vec![rec_a, rec_b]);
+    assert_eq!(
+        read_back,
+        JsonlRead {
+            records: vec![rec_a, rec_b],
+            skipped_lines: 0,
+        }
+    );
 }
 
 #[test]
@@ -110,24 +117,32 @@ fn read_jsonl_skips_a_blank_trailing_line() {
     std::fs::write(&path, content).expect("write file with blank trailing line");
 
     let read_back = read_jsonl(&path).expect("read records back");
-    assert_eq!(read_back, vec![rec_a, rec_b]);
+    assert_eq!(
+        read_back,
+        JsonlRead {
+            records: vec![rec_a, rec_b],
+            skipped_lines: 0,
+        }
+    );
 }
 
 #[test]
-fn read_jsonl_on_empty_file_returns_empty_vec() {
+fn read_jsonl_on_empty_file_returns_empty_vec_and_zero_skipped() {
     let dir = tempfile::tempdir().expect("create temp dir");
     let path = dir.path().join("records.jsonl");
     std::fs::write(&path, "").expect("write empty file");
 
-    let records = read_jsonl(&path).expect("read_jsonl succeeds on an empty file");
-    assert!(records.is_empty());
+    let read_back = read_jsonl(&path).expect("read_jsonl succeeds on an empty file");
+    assert!(read_back.records.is_empty());
+    assert_eq!(read_back.skipped_lines, 0);
 }
 
 /// Review finding 2: a malformed line used to void every record in the
 /// file, not just itself. A single corrupt line (of the kind a partial
-/// write could leave behind) must not cost the records before or after it.
+/// write could leave behind) must not cost the records before or after it,
+/// and must be counted rather than silently dropped.
 #[test]
-fn read_jsonl_skips_a_malformed_middle_line_and_keeps_the_surrounding_records() {
+fn read_jsonl_skips_a_malformed_middle_line_and_counts_it() {
     let dir = tempfile::tempdir().expect("create temp dir");
     let path = dir.path().join("records.jsonl");
 
@@ -140,8 +155,29 @@ fn read_jsonl_skips_a_malformed_middle_line_and_keeps_the_surrounding_records() 
     );
     std::fs::write(&path, content).expect("write file with a malformed middle line");
 
-    let records = read_jsonl(&path).expect("read_jsonl must not fail on one bad line");
-    assert_eq!(records, vec![rec_a, rec_b]);
+    let read_back = read_jsonl(&path).expect("read_jsonl must not fail on one bad line");
+    assert_eq!(read_back.records, vec![rec_a, rec_b]);
+    assert_eq!(read_back.skipped_lines, 1);
+}
+
+/// Distinguishes a real counter from a hardcoded constant: two malformed
+/// lines here must count as `2`, not the `1` the single-bad-line test above
+/// would also accept.
+#[test]
+fn read_jsonl_counts_multiple_skipped_lines_distinctly() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("records.jsonl");
+
+    let rec_a = record_with_reject_reason();
+    let content = format!(
+        "not valid json either\n{}\nstill not valid json\n",
+        serde_json::to_string(&rec_a).expect("serialize rec_a"),
+    );
+    std::fs::write(&path, content).expect("write file with two malformed lines");
+
+    let read_back = read_jsonl(&path).expect("read_jsonl must not fail on bad lines");
+    assert_eq!(read_back.records, vec![rec_a]);
+    assert_eq!(read_back.skipped_lines, 2);
 }
 
 /// Review finding 6: a process killed mid-`append_jsonl` can leave a
@@ -168,8 +204,9 @@ fn read_jsonl_recovers_prior_records_after_a_crash_truncated_tail_line() {
     append_jsonl(&path, &record_without_reject_reason())
         .expect("append after a crash-truncated tail");
 
-    let records = read_jsonl(&path).expect("read_jsonl must not fail on the corrupt tail");
-    assert_eq!(records, vec![good]);
+    let read_back = read_jsonl(&path).expect("read_jsonl must not fail on the corrupt tail");
+    assert_eq!(read_back.records, vec![good]);
+    assert_eq!(read_back.skipped_lines, 1);
 }
 
 fn summary() -> Summary {
@@ -196,6 +233,7 @@ fn summary() -> Summary {
             jobs: 10,
             passed: 9,
             rejected: 1,
+            skipped_lines: 2,
         },
     }
 }
@@ -243,4 +281,5 @@ fn summary_json_contains_topology_hardware_config_and_totals_keys() {
     assert_eq!(value["totals"]["jobs"], 10);
     assert_eq!(value["totals"]["passed"], 9);
     assert_eq!(value["totals"]["rejected"], 1);
+    assert_eq!(value["totals"]["skipped_lines"], 2);
 }
