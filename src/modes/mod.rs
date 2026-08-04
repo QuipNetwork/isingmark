@@ -60,6 +60,12 @@ pub enum ModeError {
     Session(SessionError),
     /// Writing job records or the run summary failed.
     Io(std::io::Error),
+    /// The mode's records file already contains data. Modes refuse to
+    /// append into a pre-existing run's output rather than silently
+    /// growing a shared file across separate invocations of the same
+    /// `--output-dir` (the normal case, since it defaults to a fixed
+    /// path).
+    RecordsFileExists(PathBuf),
 }
 
 impl fmt::Display for ModeError {
@@ -72,6 +78,12 @@ impl fmt::Display for ModeError {
             ),
             Self::Session(e) => write!(f, "failed to run miner session: {e}"),
             Self::Io(e) => write!(f, "I/O error: {e}"),
+            Self::RecordsFileExists(path) => write!(
+                f,
+                "records file {} already contains data from a previous run; \
+                 choose a different --output-dir or remove the file first",
+                path.display()
+            ),
         }
     }
 }
@@ -80,7 +92,7 @@ impl std::error::Error for ModeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Topology(e) => Some(e),
-            Self::UnknownBackend(_) => None,
+            Self::UnknownBackend(_) | Self::RecordsFileExists(_) => None,
             Self::Session(e) => Some(e),
             Self::Io(e) => Some(e),
         }

@@ -16,19 +16,20 @@
 //! requested duration. This costs a spawn/handshake per batch rather than
 //! one per run, but keeps the reported duration and `jobs_per_min` honest.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use quip_proto::v1::SetTarget;
 
-use crate::backend::{builtin_registry, run_session, RunParams, RunReport};
+use crate::backend::{builtin_registry, run_session, BackendSpec, RunParams, RunReport};
 use crate::modes::{hex_encode, ModeError, ParseError, TopologyRef};
-use crate::params::ParamCurve;
+use crate::params::{JobParams, ParamCurve};
 use crate::problem::ProblemSource;
 use crate::record::{
     append_jsonl, write_summary, HardwareInfo, JobRecord, Summary, TopologyInfo, Totals,
 };
+use crate::topology::TopologySpec;
 
 /// Basename of a throughput run's JSONL record file within
 /// [`ThroughputConfig::output_dir`].
@@ -86,7 +87,9 @@ pub struct ThroughputConfig {
     /// Seed for deterministic problem generation.
     pub seed: u64,
     /// Directory to write [`RECORDS_FILENAME`]/[`SUMMARY_FILENAME`] to.
-    /// Created if it does not already exist.
+    /// Created if it does not already exist. Refuses to start (see
+    /// [`ModeError::RecordsFileExists`]) if [`RECORDS_FILENAME`] inside it
+    /// already contains data from an earlier run.
     pub output_dir: PathBuf,
     /// Explicit backend binary path, bypassing `$PATH` resolution.
     ///
@@ -95,30 +98,64 @@ pub struct ThroughputConfig {
     /// `None` — the CLI's default — uses whatever `backend::builtin_registry`
     /// resolved for `backend`.
     pub backend_bin_override: Option<PathBuf>,
+    /// Explicit backend CLI args, replacing `backend::BackendSpec::args`.
+    ///
+    /// Exists so tests can drive `isingmark-fake-miner`'s misbehavior flags
+    /// (`--reject-job`, `--stderr-and-exit`, ...) through this public
+    /// config surface instead of needing a `BackendSpec` escape hatch of
+    /// their own. `None` — the CLI's default — leaves the registry's own
+    /// (empty, for every built-in backend) args untouched.
+    pub backend_args_override: Option<Vec<String>>,
+}
+
+/// Run throughput mode and return only the [`RunReport`]. Thin wrapper over
+/// [`run_throughput_with_summary`] for callers that do not need the
+/// [`Summary`] this call also writes to disk.
+///
+/// # Errors
+///
+/// See [`run_throughput_with_summary`].
+pub async fn run_throughput(cfg: &ThroughputConfig) -> Result<RunReport, ModeError> {
+    let (report, _summary) = run_throughput_with_summary(cfg).await?;
+    Ok(report)
 }
 
 /// Run throughput mode: draw deterministic jobs from `cfg.topology`/`cfg.seed`
 /// and dispatch them against `cfg.backend` in repeated sessions until
 /// `cfg.duration_s` of measured wall time has elapsed, writing every
-/// completed record to `RECORDS_FILENAME` as it arrives and a closing
-/// `SUMMARY_FILENAME` (including a `jobs_per_min` figure derived from the
-/// real measured wall time, never from `cfg.duration_s` itself) once done.
+/// completed record to `RECORDS_FILENAME` per batch (as each session
+/// completes) and a closing `SUMMARY_FILENAME` once done. Returns both the
+/// [`RunReport`] and the [`Summary`] written to `SUMMARY_FILENAME`, so a
+/// caller that wants to render the summary (namely `main.rs`) does not have
+/// to read that file back off disk and re-parse it — a round trip that can
+/// only fail or silently degrade for a file this same call just wrote
+/// itself.
+///
+/// The summary's `config` includes `jobs_per_min` and `measured_wall_ms`
+/// (both derived from real measured wall time, never from `cfg.duration_s`)
+/// alongside `miner_exit_code`/`miner_unresponsive`/`miner_stderr_tail`, so
+/// a run a backend failed partway through is distinguishable from a
+/// complete one without needing the raw [`RunReport`].
 ///
 /// # Errors
 ///
 /// Returns [`ModeError::Topology`] if `cfg.topology` fails to load,
 /// [`ModeError::UnknownBackend`] if `cfg.backend` matches no entry in
-/// `backend::builtin_registry`, [`ModeError::Session`] if the coordinator
-/// fails to bind its socket or spawn the backend binary, and
-/// [`ModeError::Io`] if the output directory, records file, or summary file
-/// cannot be written.
-pub async fn run_throughput(cfg: &ThroughputConfig) -> Result<RunReport, ModeError> {
+/// `backend::builtin_registry`, [`ModeError::RecordsFileExists`] if
+/// `RECORDS_FILENAME` inside `cfg.output_dir` already contains data,
+/// [`ModeError::Session`] if the coordinator fails to bind its socket or
+/// spawn the backend binary, and [`ModeError::Io`] if the output
+/// directory, records file, or summary file cannot be written.
+pub async fn run_throughput_with_summary(
+    cfg: &ThroughputConfig,
+) -> Result<(RunReport, Summary), ModeError> {
     let spec = cfg.topology.load()?;
     let backend = resolve_backend(cfg)?;
 
     std::fs::create_dir_all(&cfg.output_dir).map_err(ModeError::Io)?;
     let records_path = cfg.output_dir.join(RECORDS_FILENAME);
     let summary_path = cfg.output_dir.join(SUMMARY_FILENAME);
+    prepare_records_file(&records_path)?;
 
     let params = DEFAULT_PARAM_CURVE.resolve(backend.kind, cfg.hardness);
     let target = SetTarget {
@@ -142,19 +179,21 @@ pub async fn run_throughput(cfg: &ThroughputConfig) -> Result<RunReport, ModeErr
     let summary = build_summary(cfg, &spec, params, &agg);
     write_summary(&summary_path, &summary).map_err(ModeError::Io)?;
 
-    Ok(RunReport {
+    let report = RunReport {
         handshake_ok: agg.any_handshake_ok,
         records: agg.records,
         miner_exit_code: agg.last_exit_code,
         miner_unresponsive: agg.any_unresponsive,
         miner_stderr_tail: agg.last_stderr_tail,
         run_wall_ms: agg.total_wall_ms,
-    })
+    };
+    Ok((report, summary))
 }
 
 /// Resolve `cfg.backend` against the built-in registry, applying
-/// [`ThroughputConfig::backend_bin_override`] if set.
-fn resolve_backend(cfg: &ThroughputConfig) -> Result<crate::backend::BackendSpec, ModeError> {
+/// [`ThroughputConfig::backend_bin_override`]/[`ThroughputConfig::backend_args_override`]
+/// if set.
+fn resolve_backend(cfg: &ThroughputConfig) -> Result<BackendSpec, ModeError> {
     let mut backend = builtin_registry()
         .into_iter()
         .find(|b| b.name == cfg.backend)
@@ -162,7 +201,27 @@ fn resolve_backend(cfg: &ThroughputConfig) -> Result<crate::backend::BackendSpec
     if let Some(bin) = &cfg.backend_bin_override {
         backend.bin.clone_from(bin);
     }
+    if let Some(args) = &cfg.backend_args_override {
+        backend.args.clone_from(args);
+    }
     Ok(backend)
+}
+
+/// Guard against silently appending into a previous run's records: refuse
+/// to start if `records_path` already contains data, and otherwise
+/// (re)create it empty so a run that completes zero jobs still leaves a
+/// real, empty records file behind rather than none at all.
+///
+/// # Errors
+///
+/// Returns [`ModeError::RecordsFileExists`] if `records_path` exists and is
+/// non-empty, or [`ModeError::Io`] if it cannot be (re)created.
+fn prepare_records_file(records_path: &Path) -> Result<(), ModeError> {
+    if std::fs::metadata(records_path).is_ok_and(|m| m.len() > 0) {
+        return Err(ModeError::RecordsFileExists(records_path.to_path_buf()));
+    }
+    std::fs::File::create(records_path).map_err(ModeError::Io)?;
+    Ok(())
 }
 
 /// Convert a duration in seconds to a [`Duration`], degrading a negative or
@@ -191,17 +250,18 @@ struct Aggregate {
 
 /// Repeatedly draw a [`BATCH_SIZE`]-job batch from `source` and run a
 /// session against `backend`, appending every completed record to
-/// `records_path` as it arrives, until the summed measured wall time of
-/// every session reaches `target_wall`. Stops early if a session never
-/// completes its handshake, since retrying a backend that cannot even
-/// start would otherwise busy-loop for the rest of the requested duration.
+/// `records_path` as its batch completes, until the summed measured wall
+/// time of every session reaches `target_wall`. Stops early if a session
+/// never completes its handshake, since retrying a backend that cannot
+/// even start would otherwise busy-loop for the rest of the requested
+/// duration.
 async fn dispatch_until_duration(
-    backend: &crate::backend::BackendSpec,
-    spec: &crate::topology::TopologySpec,
+    backend: &BackendSpec,
+    spec: &TopologySpec,
     source: &mut ProblemSource,
     target: SetTarget,
     target_wall: Duration,
-    records_path: &std::path::Path,
+    records_path: &Path,
 ) -> Result<Aggregate, ModeError> {
     let mut agg = Aggregate {
         records: Vec::new(),
@@ -264,19 +324,19 @@ async fn dispatch_until_duration(
 /// Build the closing [`Summary`] from a completed [`Aggregate`].
 fn build_summary(
     cfg: &ThroughputConfig,
-    spec: &crate::topology::TopologySpec,
-    params: crate::params::JobParams,
+    spec: &TopologySpec,
+    params: JobParams,
     agg: &Aggregate,
 ) -> Summary {
     let totals = Totals {
         jobs: agg.records.len(),
         passed: agg.records.iter().filter(|r| r.passed).count(),
         rejected: agg.records.iter().filter(|r| r.rejected).count(),
-        // This mode is the only writer of its own records file for the
-        // duration of a run, and every record written came from a value
-        // already held in `agg.records` — unlike `record::read_jsonl`
-        // reading a possibly externally-written or crash-truncated file,
-        // there is no scenario here in which a line could fail to parse.
+        // `prepare_records_file` refuses to start against a records file
+        // that already contains data, and this mode is the exclusive
+        // writer of it for the rest of this call — every record it wrote
+        // came from a value already held in `agg.records`, so there is no
+        // scenario here in which a line could fail to parse.
         skipped_lines: 0,
     };
 
@@ -285,11 +345,15 @@ fn build_summary(
         "topology": cfg.topology.label(),
         "hardness": cfg.hardness,
         "duration_s": cfg.duration_s,
+        "measured_wall_ms": agg.total_wall_ms,
         "seed": cfg.seed,
         "num_reads": params.num_reads,
         "num_sweeps": params.num_sweeps,
         "anneal_time_us": params.anneal_time_us,
         "jobs_per_min": jobs_per_min(agg.records.len(), agg.total_wall_ms),
+        "miner_exit_code": agg.last_exit_code,
+        "miner_unresponsive": agg.any_unresponsive,
+        "miner_stderr_tail": agg.last_stderr_tail.clone(),
     });
 
     Summary {
@@ -351,14 +415,20 @@ fn unique_sock_path() -> PathBuf {
 /// its numeric part does not parse as a finite, non-negative `f64`.
 pub fn parse_duration(s: &str) -> Result<f64, ParseError> {
     let trimmed = s.trim();
-    if trimmed.is_empty() {
+    // Split on the last *character*, not the last byte: `str::split_at`
+    // panics if the index it is given falls inside a multi-byte character
+    // rather than on a char boundary, which `trimmed.len() - 1` can do for
+    // any non-ASCII final character (e.g. `"5µ"`, where `µ` is 2 bytes).
+    // `char::len_utf8()` gives the exact byte width of the last character,
+    // so subtracting it from `trimmed.len()` always lands on a boundary.
+    let Some(unit) = trimmed.chars().next_back() else {
         return Err(ParseError("duration must not be empty".to_string()));
-    }
-    let (num_part, unit) = trimmed.split_at(trimmed.len() - 1);
+    };
+    let num_part = &trimmed[..trimmed.len() - unit.len_utf8()];
     let multiplier = match unit {
-        "s" => 1.0,
-        "m" => 60.0,
-        "h" => 3600.0,
+        's' => 1.0,
+        'm' => 60.0,
+        'h' => 3600.0,
         _ => {
             return Err(ParseError(format!(
                 "duration {trimmed:?} must end in 's', 'm', or 'h'"
@@ -380,7 +450,11 @@ pub fn parse_duration(s: &str) -> Result<f64, ParseError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{jobs_per_min, parse_duration, unique_sock_path};
+    use super::{
+        jobs_per_min, parse_duration, prepare_records_file, unique_sock_path, ModeError,
+        DEFAULT_PARAM_CURVE, RECORDS_FILENAME,
+    };
+    use crate::params::BackendKind;
 
     #[test]
     fn parse_duration_accepts_seconds_minutes_and_hours() {
@@ -416,6 +490,24 @@ mod tests {
         assert!(parse_duration("infs").is_err());
     }
 
+    /// Regression test for a panic: `"5µ"`'s last character (`µ`) is 2
+    /// bytes wide, so a byte-index split at `len() - 1` lands inside it
+    /// rather than on a char boundary, which `str::split_at` panics on.
+    /// This must return an error, not crash the process.
+    #[test]
+    fn parse_duration_rejects_a_multi_byte_suffix_instead_of_panicking() {
+        assert!(parse_duration("5µ").is_err());
+        assert!(parse_duration("µ").is_err());
+    }
+
+    /// A multi-byte character *inside* the numeric part (not just as the
+    /// final byte) must also fail to parse rather than panic, covering a
+    /// pasted non-breaking space or similar before an otherwise-valid unit.
+    #[test]
+    fn parse_duration_rejects_a_multi_byte_character_in_the_numeric_part() {
+        assert!(parse_duration("30\u{a0}s").is_err());
+    }
+
     #[test]
     fn jobs_per_min_is_zero_when_no_wall_time_elapsed() {
         assert!((jobs_per_min(5, 0) - 0.0).abs() < f64::EPSILON);
@@ -432,5 +524,47 @@ mod tests {
         let a = unique_sock_path();
         let b = unique_sock_path();
         assert_ne!(a, b);
+    }
+
+    /// Pins the exact resolved values at a known hardness, so a change to
+    /// `DEFAULT_PARAM_CURVE`'s bounds (or a bug that stops `--hardness`
+    /// from reaching `resolve` at all) is caught here independently of the
+    /// slower integration-level check in `tests/mode_throughput.rs`.
+    #[test]
+    fn default_param_curve_resolves_known_values_at_half_hardness() {
+        let params = DEFAULT_PARAM_CURVE.resolve(BackendKind::Sweeping, 0.5);
+        assert_eq!(params.num_reads, 36);
+        assert_eq!(params.num_sweeps, 550);
+    }
+
+    #[test]
+    fn prepare_records_file_errors_when_the_file_already_has_data() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join(RECORDS_FILENAME);
+        std::fs::write(&path, "{\"stale\":true}\n").expect("seed a stale records file");
+
+        let err = prepare_records_file(&path).expect_err("must refuse to reuse a non-empty file");
+        assert!(matches!(err, ModeError::RecordsFileExists(p) if p == path));
+    }
+
+    #[test]
+    fn prepare_records_file_creates_an_empty_file_when_absent() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join(RECORDS_FILENAME);
+
+        prepare_records_file(&path).expect("no prior file: must succeed");
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("file was created"),
+            ""
+        );
+    }
+
+    #[test]
+    fn prepare_records_file_accepts_an_existing_but_empty_file() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join(RECORDS_FILENAME);
+        std::fs::write(&path, "").expect("seed an empty file");
+
+        prepare_records_file(&path).expect("an empty prior file is not a conflict");
     }
 }

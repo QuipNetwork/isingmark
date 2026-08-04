@@ -38,6 +38,16 @@ pub fn format_summary_table(summary: &Summary) -> String {
         summary.totals.rejected,
         summary.totals.skipped_lines,
     );
+    // `jobs_per_min` lives in `config` (arbitrary per-mode JSON, not a
+    // typed `Summary` field) because only throughput-shaped modes produce
+    // it; render it when present rather than assuming every mode does.
+    if let Some(jobs_per_min) = summary
+        .config
+        .get("jobs_per_min")
+        .and_then(serde_json::Value::as_f64)
+    {
+        let _ = writeln!(out, "throughput: {jobs_per_min:.2} jobs/min");
+    }
     out
 }
 
@@ -74,7 +84,7 @@ mod tests {
                 cpu: "Apple M4 Max".to_string(),
                 ram_gb: 64.0,
             },
-            config: serde_json::json!({}),
+            config: serde_json::json!({"jobs_per_min": 123.456}),
             totals: Totals {
                 jobs: 17,
                 passed: 13,
@@ -100,6 +110,15 @@ mod tests {
         assert!(table.contains("13 passed"));
         assert!(table.contains("4 rejected"));
         assert!(table.contains("2 skipped lines"));
+        assert!(table.contains("123.46 jobs/min"));
+    }
+
+    #[test]
+    fn jobs_per_min_line_is_omitted_when_config_does_not_carry_it() {
+        let mut summary = summary();
+        summary.config = serde_json::json!({});
+        let table = format_summary_table(&summary);
+        assert!(!table.contains("jobs/min"));
     }
 
     #[test]

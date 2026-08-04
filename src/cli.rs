@@ -48,9 +48,12 @@ pub struct CommonArgs {
     /// it does not already exist.
     #[arg(long, default_value = "./out")]
     pub output_dir: PathBuf,
-    /// YAML config file. Flags override values from this file. Accepted
-    /// for forward compatibility with a later config-loading task; not yet
-    /// read by any mode.
+    /// YAML config file. Flags override values from this file. The flag
+    /// exists for forward compatibility with a later config-loading task,
+    /// but loading is not implemented yet: every mode's `into_config`
+    /// rejects this with an explicit error rather than silently ignoring
+    /// it, since a run at hardcoded defaults with no signal the file was
+    /// never read is worse than refusing to start.
     #[arg(long)]
     pub config: Option<PathBuf>,
     /// Increase output verbosity. Repeatable. Accepted for forward
@@ -116,8 +119,19 @@ impl ThroughputArgs {
     /// # Errors
     ///
     /// Returns a message if the mutually exclusive topology group was
-    /// somehow left unresolved (see [`TopologySource::to_ref`]).
+    /// somehow left unresolved (see [`TopologySource::to_ref`]), or if
+    /// `--config` was given (see [`CommonArgs::config`]'s doc comment:
+    /// config loading is not implemented yet, and silently ignoring the
+    /// flag would run at hardcoded defaults with no signal that the file
+    /// was never read).
     pub fn into_config(self) -> Result<ThroughputConfig, String> {
+        if self.common.config.is_some() {
+            return Err(
+                "--config is not implemented yet; YAML config loading lands in a later task \
+                 (drop the flag and pass every option on the command line for now)"
+                    .to_string(),
+            );
+        }
         let topology = self.common.topology_source.to_ref()?;
         Ok(ThroughputConfig {
             backend: self.common.backend,
@@ -127,6 +141,7 @@ impl ThroughputArgs {
             seed: self.common.seed,
             output_dir: self.common.output_dir,
             backend_bin_override: None,
+            backend_args_override: None,
         })
     }
 }
@@ -341,5 +356,32 @@ mod tests {
             std::path::PathBuf::from("/tmp/isingmark-out")
         );
         assert_eq!(cfg.backend_bin_override, None);
+        assert_eq!(cfg.backend_args_override, None);
+    }
+
+    /// `--config` is plan-mandated to exist as a flag, but loading is not
+    /// implemented yet; `into_config` must reject it explicitly rather than
+    /// silently running at hardcoded defaults with no signal the file was
+    /// never read.
+    #[test]
+    fn config_flag_is_rejected_until_config_loading_is_implemented() {
+        let cli = parse(&[
+            "throughput",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--duration",
+            "30s",
+            "--config",
+            "bench.yaml",
+        ])
+        .expect("clap itself accepts --config; rejection happens in into_config");
+        let Command::Throughput(args) = cli.command;
+        let err = args
+            .into_config()
+            .expect_err("--config must be rejected until it is implemented");
+        assert!(err.contains("--config"));
+        assert!(err.contains("not implemented"));
     }
 }
