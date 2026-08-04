@@ -7,8 +7,13 @@
 //! `quip-mock-miner/src/main.rs` (read-only reference; not modified here)
 //! but with its behavior driven entirely by CLI flags, so
 //! `tests/session_conformance.rs` can exercise the coordinator's handshake,
-//! dispatch, result, reject, and fatal-mid-flight paths without any of the
-//! five real miner binaries installed.
+//! dispatch, result, reject, fatal-mid-flight, and abrupt-disconnect paths
+//! without any of the five real miner binaries installed.
+//!
+//! Named `isingmark-fake-miner` (not the shorter `fake-miner`) because
+//! Cargo auto-discovers every `src/bin/*.rs` file as a real binary target in
+//! every profile, including `cargo install`; the namespaced name keeps this
+//! test-only tool from landing in a user's `$PATH` under a generic name.
 
 use std::process::ExitCode as ProcessExitCode;
 use std::time::Duration;
@@ -39,11 +44,25 @@ struct Cli {
     /// coordinator's handshake-rejection path.
     #[arg(long, default_value_t = quip_protocol::session::PROTOCOL_VERSION)]
     protocol_version: u32,
+    /// Send `Ready` as the very first message instead of `Hello`, to
+    /// exercise the coordinator's "unexpected first message" branch (as
+    /// opposed to a closed stream, which never sends anything at all).
+    #[arg(long, default_value_t = false)]
+    skip_hello: bool,
     /// Credits requested in the first `JobRequest`, sent right after
     /// `Ready`. A value greater than 1 lets several jobs be in flight at
-    /// once, which `--fatal-after` can then abandon mid-session.
+    /// once, which `--fatal-after`/`--disconnect-after` can then abandon
+    /// mid-session.
     #[arg(long, default_value_t = 1)]
     credits: u32,
+    /// Number of solutions to report per solved job, with distinct spin
+    /// patterns (solution `i` flips the first `i` node spins negative,
+    /// capped at the node count). `1` (default) matches the trivial
+    /// all-`+1` behavior every other test relies on; a higher value gives
+    /// the coordinator's best-of-N selection and diversity computation
+    /// something non-degenerate to compute over.
+    #[arg(long, default_value_t = 1)]
+    num_solutions: u32,
     /// Amount (milli-units) added to a solution's reported `energy_milli`
     /// on top of the true value, so the coordinator's local re-score catches
     /// the lie. `0` (default) always reports the true value.
@@ -59,6 +78,13 @@ struct Cli {
     /// answered.
     #[arg(long)]
     fatal_after: Option<u32>,
+    /// 1-based ordinal (among jobs this process receives) at which to close
+    /// the connection with no message at all, instead of solving, rejecting,
+    /// or sending `Fatal` — simulating a crash or an OOM-kill rather than an
+    /// orderly `Fatal` report. Abandons that job and any others already
+    /// dispatched but not yet answered, same as `--fatal-after`.
+    #[arg(long)]
+    disconnect_after: Option<u32>,
 }
 
 /// Map a session/CLI failure to a documented exit code (64/69/70/77).
@@ -140,23 +166,43 @@ fn resolve_edges(ising: &IsingProblem, topo: Option<&FakeTopo>) -> Vec<(usize, u
     }
 }
 
-/// Solve `job` trivially (all-`+1` spins, like `quip-mock-miner`), reporting
-/// `energy_lie_milli` added on top of the true recomputed energy.
-fn solve(job: &Job, topo: Option<&FakeTopo>, energy_lie_milli: i64) -> JobResult {
+/// Solve `job`, reporting `num_solutions` distinct-spin solutions (solution
+/// `i` flips the first `i` node spins negative, capped at the node count),
+/// each with `energy_lie_milli` added on top of its true recomputed energy.
+/// `num_solutions <= 1` reproduces the original trivial all-`+1` behavior.
+fn solve(
+    job: &Job,
+    topo: Option<&FakeTopo>,
+    energy_lie_milli: i64,
+    num_solutions: u32,
+) -> JobResult {
     let ising = job.ising.clone().unwrap_or_default();
     let h = decode_milli_f64(&ising.h_milli_le32).unwrap_or_default();
     let j = decode_milli_f64(&ising.j_milli_le32).unwrap_or_default();
     let edges = resolve_edges(&ising, topo);
-    let spins = vec![1i8; h.len()];
-    let true_energy = energy_milli(&spins, &h, &j, &edges);
+    let n = h.len();
+    let count = num_solutions.max(1);
+
+    let solutions = (0..count)
+        .map(|i| {
+            let flips = (i as usize).min(n);
+            let mut spins = vec![1i8; n];
+            for spin in spins.iter_mut().take(flips) {
+                *spin = -1;
+            }
+            let true_energy = energy_milli(&spins, &h, &j, &edges);
+            Solution {
+                spins_bytes: encode_spins(&spins),
+                energy_milli: true_energy + energy_lie_milli,
+            }
+        })
+        .collect();
+
     JobResult {
         job_id: job.job_id.clone(),
-        solutions: vec![Solution {
-            spins_bytes: encode_spins(&spins),
-            energy_milli: true_energy + energy_lie_milli,
-        }],
+        solutions,
         meta: Some(SamplerMeta {
-            reads: 1,
+            reads: count,
             sweeps: 0,
             device_access_time_us: 0,
             ..Default::default()
@@ -203,9 +249,15 @@ async fn run() -> Result<(), ExitCode> {
     let mut client = MinerServiceClient::new(channel);
 
     let (tx, rx) = mpsc::channel::<MinerMsg>(16);
-    tx.send(miner(miner_msg::Msg::Hello(hello)))
-        .await
-        .map_err(|_| ExitCode::InternalFatal)?;
+    // `--skip-hello` sends `Ready` first instead of `Hello`, so the
+    // coordinator's "unexpected first message" branch gets exercised
+    // distinctly from a closed stream (which never sends anything at all).
+    let first = if cli.skip_hello {
+        miner(miner_msg::Msg::Ready(Ready {}))
+    } else {
+        miner(miner_msg::Msg::Hello(hello))
+    };
+    tx.send(first).await.map_err(|_| ExitCode::InternalFatal)?;
 
     let mut inbound = client
         .session(ReceiverStream::new(rx))
@@ -245,6 +297,12 @@ async fn run() -> Result<(), ExitCode> {
             }
             Some(coord_msg::Msg::Job(job)) => {
                 jobs_seen += 1;
+                if cli.disconnect_after == Some(jobs_seen) {
+                    // Simulate a crash/OOM-kill: close the connection with
+                    // no message at all for this job (or any other already
+                    // in flight), rather than an orderly Fatal report.
+                    break;
+                }
                 if cli.fatal_after == Some(jobs_seen) {
                     tx.send(miner(miner_msg::Msg::Fatal(Fatal {
                         exit_code: ExitCode::InternalFatal.as_i32().try_into().unwrap_or(70),
@@ -264,7 +322,8 @@ async fn run() -> Result<(), ExitCode> {
                     .await
                     .map_err(|_| ExitCode::InternalFatal)?;
                 } else {
-                    let result = solve(&job, topo.as_ref(), cli.energy_lie_milli);
+                    let result =
+                        solve(&job, topo.as_ref(), cli.energy_lie_milli, cli.num_solutions);
                     tx.send(miner(miner_msg::Msg::Result(result)))
                         .await
                         .map_err(|_| ExitCode::InternalFatal)?;

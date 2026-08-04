@@ -28,8 +28,8 @@ use std::time::{Duration, Instant};
 
 use quip_proto::v1::miner_service_server::{MinerService, MinerServiceServer};
 use quip_proto::v1::{
-    coord_msg, miner_msg, Configure, CoordMsg, EdgeList, Fatal, Job, MinerMsg, Reject,
-    RejectReason, Result as JobResult, SetTarget, Shutdown, Topology, Welcome,
+    coord_msg, miner_msg, Configure, CoordMsg, EdgeList, Job, MinerMsg, Reject, RejectReason,
+    Result as JobResult, SetTarget, Shutdown, Topology, Welcome,
 };
 use quip_protocol::scoring::{energy_milli, set_diversity};
 use quip_protocol::session::{check_welcome, PROTOCOL_VERSION};
@@ -371,6 +371,14 @@ async fn drive_session(
             break;
         };
         match msg.msg {
+            // Each `send` below is awaited without reading inbound in
+            // between, so a `credits` grant large enough to fill
+            // `OUTBOUND_CHANNEL_DEPTH` while the miner itself stops
+            // reading could in principle wedge both sides. Not reachable
+            // today: a real miner requests `credits: queue_depth`, which
+            // defaults to 3 (`quip_protocol::session::SessionConfig`), far
+            // under the channel depth, and HTTP/2 flow-control windows
+            // dwarf these control-sized messages regardless.
             Some(miner_msg::Msg::JobRequest(req)) => {
                 for _ in 0..req.credits {
                     let Some(job) = remaining.pop_front() else {
@@ -415,15 +423,13 @@ async fn drive_session(
                 }
             }
             Some(miner_msg::Msg::Fatal(fatal)) => {
-                for (_job_id, (start, job)) in in_flight.drain() {
-                    records.push(build_fatal_record(
-                        backend_name,
-                        &job,
-                        &fatal,
-                        target,
-                        start.elapsed(),
-                    ));
-                }
+                abandon_in_flight(
+                    &mut in_flight,
+                    &mut records,
+                    backend_name,
+                    target,
+                    &format!("fatal: {}", fatal.reason),
+                );
                 return SessionOutcome {
                     handshake_ok: true,
                     records,
@@ -436,10 +442,47 @@ async fn drive_session(
         }
     }
 
+    // The loop above ends two ways: `maybe_shutdown` already drained
+    // `in_flight` to empty before breaking (every job reached a terminal
+    // state), or the inbound stream closed/errored with jobs still
+    // dispatched-but-unanswered (miner crashed, was killed, or hit its own
+    // idle timeout and disconnected). The latter must not drop those jobs
+    // silently — that would make `records.len()` look like a 100% success
+    // rate for a run the miner never finished. Draining here is a no-op in
+    // the former case and the safety net in the latter.
+    abandon_in_flight(
+        &mut in_flight,
+        &mut records,
+        backend_name,
+        target,
+        "session ended with job in flight",
+    );
     drain(&mut inbound).await;
     SessionOutcome {
         handshake_ok: true,
         records,
+    }
+}
+
+/// Record every job still in `in_flight` as failing with `reason`, and
+/// empty `in_flight`. Shared by the `Fatal` arm and the end-of-loop cleanup
+/// for a closed/errored inbound stream — both are "the miner will never
+/// answer this job" outcomes, just with a different cause.
+fn abandon_in_flight(
+    in_flight: &mut HashMap<Vec<u8>, (Instant, Job)>,
+    records: &mut Vec<JobRecord>,
+    backend_name: &str,
+    target: Option<&SetTarget>,
+    reason: &str,
+) {
+    for (_job_id, (start, job)) in in_flight.drain() {
+        records.push(build_abandoned_record(
+            backend_name,
+            &job,
+            reason,
+            target,
+            start.elapsed(),
+        ));
     }
 }
 
@@ -500,9 +543,18 @@ fn build_topology(spec: &TopologySpec) -> Topology {
 
 /// Resolve `spec.edges` (node-id pairs) to node-position pairs, matching
 /// the order `spec.nodes` assigns each id (position = index in that slice).
-/// Every endpoint is guaranteed present: `topology::load_topology` rejects
-/// any edge referencing an id outside `nodes` before a `TopologySpec` can
-/// exist.
+///
+/// `topology::load_topology` rejects any edge referencing an id outside
+/// `nodes` before a `TopologySpec` can exist, so every endpoint is present
+/// for any spec that loader produced. But `TopologySpec`'s fields are all
+/// `pub` (a caller can hand-construct one with a dangling edge), and
+/// `clippy::panic`/`unwrap_used` are denied while `expect_used` is not — an
+/// `.expect()` here would compile clean yet still be reachable. Drop any
+/// edge whose endpoint is not in `nodes` instead of panicking on it: local
+/// re-scoring loses that one edge's contribution, but the session loop
+/// keeps running rather than crashing the spawned task (which would
+/// otherwise silently degrade the whole run to an empty, "handshake
+/// failed" report).
 fn edge_positions(spec: &TopologySpec) -> Vec<(usize, usize)> {
     let pos: HashMap<u32, usize> = spec
         .nodes
@@ -512,15 +564,7 @@ fn edge_positions(spec: &TopologySpec) -> Vec<(usize, usize)> {
         .collect();
     spec.edges
         .iter()
-        .map(|&(u, v)| {
-            let pu = *pos
-                .get(&u)
-                .expect("edge endpoint validated at topology load");
-            let pv = *pos
-                .get(&v)
-                .expect("edge endpoint validated at topology load");
-            (pu, pv)
-        })
+        .filter_map(|&(u, v)| Some((*pos.get(&u)?, *pos.get(&v)?)))
         .collect()
 }
 
@@ -624,13 +668,14 @@ fn build_reject_record(
     }
 }
 
-/// Build the [`JobRecord`] for a job abandoned in flight when the miner
-/// sends `Fatal`. Same "no `SamplerMeta`" reasoning as [`build_reject_record`]
-/// applies: the job never completed, so requested values stand in.
-fn build_fatal_record(
+/// Build the [`JobRecord`] for a job abandoned in flight — the miner sent
+/// `Fatal`, or the session ended (stream closed/errored) before it answered.
+/// Same "no `SamplerMeta`" reasoning as [`build_reject_record`] applies: the
+/// job never completed, so requested values stand in.
+fn build_abandoned_record(
     backend: &str,
     job: &Job,
-    fatal: &Fatal,
+    reason: &str,
     target: Option<&SetTarget>,
     wall: Duration,
 ) -> JobRecord {
@@ -642,7 +687,7 @@ fn build_fatal_record(
         diversity_milli: 0,
         passed: false,
         rejected: true,
-        reject_reason: Some(format!("fatal: {}", fatal.reason)),
+        reject_reason: Some(reason.to_string()),
         device_access_time_us: 0,
         wall_ms: duration_ms(wall),
         reads: target.map_or(0, |t| t.num_reads),
@@ -690,7 +735,8 @@ fn milli_round(fraction: f64) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{duration_ms, hex_encode, milli_round, reject_reason_text};
+    use super::{duration_ms, edge_positions, hex_encode, milli_round, reject_reason_text};
+    use crate::topology::TopologySpec;
     use quip_proto::v1::RejectReason;
     use std::time::Duration;
 
@@ -729,5 +775,23 @@ mod tests {
     #[test]
     fn reject_reason_text_reports_unknown_values_without_panicking() {
         assert_eq!(reject_reason_text(999), "unknown_reject_reason(999)");
+    }
+
+    /// `TopologySpec`'s fields are all `pub`, so a caller can hand-construct
+    /// one with an edge referencing a node id absent from `nodes` — an
+    /// invariant only `topology::load_topology` enforces, not the type
+    /// itself. `edge_positions` must drop that one edge rather than panic
+    /// (`clippy::expect_used` is not in this crate's denied lint set, so an
+    /// `.expect()` here would compile clean while still being reachable).
+    #[test]
+    fn edge_positions_drops_an_edge_with_an_unknown_endpoint_instead_of_panicking() {
+        let spec = TopologySpec {
+            nodes: vec![0, 1, 2],
+            edges: vec![(0, 1), (1, 99)],
+            allowed_h_milli: vec![0],
+            allowed_j_milli: vec![0],
+            allowed_spin_milli: vec![-1000, 1000],
+        };
+        assert_eq!(edge_positions(&spec), vec![(0, 1)]);
     }
 }
