@@ -3,4 +3,5 @@
 
 pub mod params;
 pub mod problem;
+pub mod record;
 pub mod topology;

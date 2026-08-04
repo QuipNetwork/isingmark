@@ -1,0 +1,178 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Round-trip and shape tests for `isingmark::record`.
+
+use std::fmt::Write as _;
+
+use isingmark::record::{
+    append_jsonl, read_jsonl, write_summary, HardwareInfo, JobRecord, Summary, TopologyInfo, Totals,
+};
+use serde_json::json;
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().fold(String::new(), |mut out, b| {
+        let _ = write!(out, "{b:02x}");
+        out
+    })
+}
+
+/// A record with `rejected = true` and `reject_reason = Some(..)`. Every
+/// numeric/bool field is distinct and nonzero (and distinct from every
+/// field in [`record_without_reject_reason`]) so a mutation that swaps two
+/// same-typed fields during (de)serialization is detectable.
+fn record_with_reject_reason() -> JobRecord {
+    JobRecord {
+        job_id: hex_encode(&[
+            0x0a, 0x1b, 0x2c, 0x3d, 0x4e, 0x5f, 0x60, 0x71, 0x82, 0x93, 0xa4, 0xb5, 0xc6, 0xd7,
+            0xe8, 0xf9,
+        ]),
+        backend: "cpu-sa".to_string(),
+        n_solutions: 3,
+        best_energy_milli: -15250,
+        diversity_milli: 275,
+        passed: false,
+        rejected: true,
+        reject_reason: Some("energy_above_threshold".to_string()),
+        device_access_time_us: 812,
+        wall_ms: 40_150,
+        reads: 64,
+        sweeps: 500,
+        anneal_time_us: 90,
+    }
+}
+
+/// A record with `rejected = false` and `reject_reason = None`. See
+/// [`record_with_reject_reason`] for why every field value is distinct.
+fn record_without_reject_reason() -> JobRecord {
+    JobRecord {
+        job_id: hex_encode(&[
+            0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+            0x0b, 0x0c,
+        ]),
+        backend: "cuda".to_string(),
+        n_solutions: 8,
+        best_energy_milli: -9375,
+        diversity_milli: 611,
+        passed: true,
+        rejected: false,
+        reject_reason: None,
+        device_access_time_us: 333,
+        wall_ms: 5_222,
+        reads: 128,
+        sweeps: 733,
+        anneal_time_us: 17,
+    }
+}
+
+#[test]
+fn round_trip_preserves_all_fields_for_both_reject_reason_cases() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("records.jsonl");
+
+    let rec_a = record_with_reject_reason();
+    let rec_b = record_without_reject_reason();
+    append_jsonl(&path, &rec_a).expect("append first record");
+    append_jsonl(&path, &rec_b).expect("append second record");
+
+    let read_back = read_jsonl(&path).expect("read records back");
+    assert_eq!(read_back, vec![rec_a, rec_b]);
+}
+
+#[test]
+fn append_jsonl_writes_exactly_one_line_per_record() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("records.jsonl");
+
+    append_jsonl(&path, &record_with_reject_reason()).expect("append first record");
+    append_jsonl(&path, &record_without_reject_reason()).expect("append second record");
+    append_jsonl(&path, &record_with_reject_reason()).expect("append third record");
+
+    let raw = std::fs::read_to_string(&path).expect("read raw file");
+    let lines: Vec<&str> = raw.lines().collect();
+    assert_eq!(lines.len(), 3);
+    assert!(raw.ends_with('\n'));
+    for line in &lines {
+        serde_json::from_str::<serde_json::Value>(line).expect("each line is one JSON object");
+    }
+}
+
+#[test]
+fn read_jsonl_skips_a_blank_trailing_line() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("records.jsonl");
+
+    let rec_a = record_with_reject_reason();
+    let rec_b = record_without_reject_reason();
+    let content = format!(
+        "{}\n{}\n\n",
+        serde_json::to_string(&rec_a).expect("serialize rec_a"),
+        serde_json::to_string(&rec_b).expect("serialize rec_b"),
+    );
+    std::fs::write(&path, content).expect("write file with blank trailing line");
+
+    let read_back = read_jsonl(&path).expect("read records back");
+    assert_eq!(read_back, vec![rec_a, rec_b]);
+}
+
+fn summary() -> Summary {
+    Summary {
+        mode: "throughput".to_string(),
+        backend: "cpu-sa".to_string(),
+        topology: TopologyInfo {
+            name: "smoke".to_string(),
+            num_nodes: 8,
+            num_edges: 5,
+        },
+        hardware: HardwareInfo {
+            platform: "macos".to_string(),
+            cpu: "Apple M4 Max".to_string(),
+            ram_gb: 64.0,
+        },
+        config: json!({"num_reads": 64, "num_sweeps": 500}),
+        totals: Totals {
+            jobs: 10,
+            passed: 9,
+            rejected: 1,
+        },
+    }
+}
+
+#[test]
+fn write_summary_round_trips_through_typed_deserialize() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("summary.json");
+
+    let original = summary();
+    write_summary(&path, &original).expect("write summary");
+
+    let raw = std::fs::read_to_string(&path).expect("read summary file");
+    let read_back: Summary = serde_json::from_str(&raw).expect("summary parses as Summary");
+    assert_eq!(read_back, original);
+}
+
+#[test]
+fn summary_json_contains_topology_hardware_config_and_totals_keys() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("summary.json");
+
+    write_summary(&path, &summary()).expect("write summary");
+    let raw = std::fs::read_to_string(&path).expect("read summary file");
+    let value: serde_json::Value = serde_json::from_str(&raw).expect("summary is valid JSON");
+
+    assert_eq!(value["mode"], "throughput");
+    assert_eq!(value["backend"], "cpu-sa");
+
+    assert_eq!(value["topology"]["name"], "smoke");
+    assert_eq!(value["topology"]["num_nodes"], 8);
+    assert_eq!(value["topology"]["num_edges"], 5);
+
+    assert_eq!(value["hardware"]["platform"], "macos");
+    assert_eq!(value["hardware"]["cpu"], "Apple M4 Max");
+    assert_eq!(value["hardware"]["ram_gb"], 64.0);
+
+    assert_eq!(value["config"]["num_reads"], 64);
+    assert_eq!(value["config"]["num_sweeps"], 500);
+
+    assert_eq!(value["totals"]["jobs"], 10);
+    assert_eq!(value["totals"]["passed"], 9);
+    assert_eq!(value["totals"]["rejected"], 1);
+}
