@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "isingmark",
+  "project_id": "73ca79f0-268d-49b8-b275-f671a6cf7779"
+}
