@@ -47,18 +47,37 @@
 //! meaningful as a test of the search machinery, not of any real
 //! annealer's behavior.
 //!
-//! **What noise does to this**: each evaluation's mean is a finite-sample
-//! statistic over `ComparativeConfig::num_jobs` real, stochastic benchmark
-//! runs. Near the true crossing point, a single evaluation's own sampling
-//! noise can make the comparison point the wrong way for that one
-//! iteration, narrowing the bracket in the wrong direction. This module
-//! does not detect or correct that — every iteration trusts its own
-//! comparison outright. The bracket starts at width `1.0` and only the
-//! final iteration or two are ever close enough to the true crossing point
-//! for this to matter much, so a wrong late decision costs a bounded
-//! fraction of the final bracket width, not the whole search; the returned
-//! `ks_distance` (via `summary.json`) is the honest signal for how good the
-//! reported match actually is, rather than a claim of exactness.
+//! **What noise does to this — real backends only**: against a real,
+//! stochastic backend, each evaluation's mean is a finite-sample statistic
+//! over `ComparativeConfig::num_jobs` runs. Near the true crossing point, a
+//! single evaluation's own sampling noise can make the comparison point the
+//! wrong way for that one iteration, narrowing the bracket in the wrong
+//! direction. This module does not detect or correct that — every
+//! iteration trusts its own comparison outright. The bracket starts at
+//! width `1.0` and only the final iteration or two are ever close enough to
+//! the true crossing point for this to matter much, so a wrong late
+//! decision costs a bounded fraction of the final bracket width, not the
+//! whole search; the returned `ks_distance` (via `summary.json`) is the
+//! honest signal for how good the reported match actually is, rather than
+//! a claim of exactness.
+//!
+//! Against `isingmark-fake-miner` specifically, none of the above is
+//! sampling noise: that binary's `multi_start_search` is fully
+//! deterministic (no RNG, no clock, no job-derived state — see its own
+//! module doc), so a given `(seed, num_jobs, hardness)` always evaluates to
+//! the exact same mean. The recovery test's residual error on that fixture
+//! instead comes from a *different*, deterministic source: `ParamCurve::resolve`
+//! is a step function (`round(min + (max - min) * hardness)`), so several
+//! consecutive hardness values resolve to the same `num_reads` and can
+//! produce an *exactly tied* mean. The `>` (not `>=`) at the comparison
+//! below means a tied evaluation is treated as "at least as good as the
+//! reference," pushing `hi` down — so the search converges to the *left
+//! edge* of whichever plateau contains the reference's own mean, not
+//! necessarily to the reference's own hardness. Neither tie-break is
+//! "correct" in general (a true plateau has no unique matching hardness),
+//! but this is the concrete, reproducible mechanism behind this fixture's
+//! recovery error, and it is a property of the comparison's tie-break
+//! direction, not of any randomness.
 //!
 //! # Paired design, one `run_session` per iteration
 //!
@@ -321,6 +340,15 @@ pub async fn run_comparative(cfg: &ComparativeConfig) -> Result<(Vec<JobRecord>,
         final_records = report.records;
         final_ks = ks;
 
+        // Strict `>`, not `>=`: an exact tie (common on the bundled
+        // fixtures, where `ParamCurve::resolve`'s step function makes
+        // several consecutive hardness values resolve to the same
+        // `num_reads` and so produce identical means — see this module's
+        // doc) is treated as "at least as good as the reference," so the
+        // search converges to the left edge of the plateau containing the
+        // reference's mean rather than to any particular hardness within
+        // it. This is a real, deterministic bias on a fixture with wide
+        // plateaus, not sampling noise.
         if our_mean > target_mean {
             lo = mid;
         } else {

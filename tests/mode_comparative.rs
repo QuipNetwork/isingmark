@@ -103,6 +103,16 @@ fn iter_dir(output_dir: &Path, index: u32) -> PathBuf {
     output_dir.join(format!("iter_{index}"))
 }
 
+/// Read and parse `<output_dir>/summary.json` as generic JSON — used by
+/// every test below that needs to inspect `config.final_ks_distance` or
+/// `config.target_file_skipped_lines`, neither of which is part of
+/// `run_comparative`'s own `(Vec<JobRecord>, f64)` return value.
+fn read_summary(output_dir: &Path) -> serde_json::Value {
+    let text = std::fs::read_to_string(output_dir.join(SUMMARY_FILENAME))
+        .expect("summary.json is readable");
+    serde_json::from_str(&text).expect("summary.json parses as JSON")
+}
+
 /// Step 1 of the brief: generate records at hardness 0.3, then confirm
 /// `run_comparative` against that file recovers a hardness within 0.15 of
 /// 0.3. `0.15` is generous enough to absorb ordinary evaluation-to-evaluation
@@ -111,6 +121,16 @@ fn iter_dir(output_dir: &Path, index: u32) -> PathBuf {
 /// comparison statistic) without being so loose that a broken search (e.g.
 /// one that always returns a fixed `0.5`, `|0.5 - 0.3| = 0.2 > 0.15`) would
 /// pass.
+///
+/// Also asserts `final_ks_distance` is present — this reference is a real,
+/// matchable distribution, so the recovered hardness's own evaluation
+/// should overlap it substantially (a well-defined, if not necessarily
+/// exactly `0.0`, distance) — as a first line of evidence that the search
+/// is actually comparing against this file's own distribution and not some
+/// other value. The decisive test for that specific failure mode is
+/// [`hermetic_comparative_recovers_a_second_well_separated_hardness`]
+/// (a single passing case here does not distinguish "matched the reference"
+/// from "got lucky against a constant" — two well-separated targets do).
 #[tokio::test]
 async fn hermetic_comparative_recovers_hardness_within_tolerance_of_the_reference() {
     let target_dir = tempfile::tempdir().expect("create temp dir");
@@ -132,6 +152,91 @@ async fn hermetic_comparative_recovers_hardness_within_tolerance_of_the_referenc
         "expected hardness within 0.15 of 0.3, got {hardness}"
     );
     assert!(!records.is_empty(), "the final iteration must have records");
+
+    let summary = read_summary(dir.path());
+    assert!(
+        summary["config"]["final_ks_distance"].as_f64().is_some(),
+        "final_ks_distance must be a present number for a real, matchable reference"
+    );
+}
+
+/// A second recovery case at a target (`0.7`) well separated from the first
+/// (`0.3`), with a distinct reference file. `hermetic_comparative_recovers_
+/// hardness_within_tolerance_of_the_reference` alone cannot tell a search
+/// that genuinely matches the reference file's distribution apart from one
+/// that ignores the file and always searches for some fixed level that
+/// happens to land near `0.3` (e.g. a constant target mean) — both would
+/// recover ~0.3 for that one case. A search hardcoded (or otherwise
+/// insensitive) to a level near `0.3`'s own distribution cannot also recover
+/// `0.7` from a distinctly different reference: two well-separated, both-
+/// passing cases are what actually pins "the reference file's own contents
+/// drive the result."
+#[tokio::test]
+async fn hermetic_comparative_recovers_a_second_well_separated_hardness() {
+    let target_dir = tempfile::tempdir().expect("create temp dir");
+    let target_path = target_dir.path().join("reference.jsonl");
+    generate_reference_at_hardness(0.7, 40, 42, &target_path).await;
+
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = base_config(dir.path().to_path_buf(), target_path);
+
+    let (records, hardness) = run_comparative(&cfg).await.expect("search succeeds");
+
+    assert!(
+        (hardness - 0.7).abs() <= 0.15,
+        "expected hardness within 0.15 of 0.7, got {hardness}"
+    );
+    assert!(!records.is_empty(), "the final iteration must have records");
+}
+
+/// A reference file whose energies are far outside anything this fixture's
+/// resolvable hardness range can approach (the smoke fixture's own
+/// achievable `best_energy_milli` is a few thousand milli-units around
+/// zero; `-1_000_000` is many orders of magnitude further) must report a
+/// large `ks_distance` — the two distributions are completely disjoint at
+/// every resolvable hardness, so `stats::ks_distance` (see its own
+/// `..._of_disjoint_samples_is_exactly_one` test) is exactly `1.0`
+/// regardless of which bracket endpoint the search settles on. This is the
+/// only test in this file that would notice a mode reporting a constant,
+/// always-good `ks_distance` instead of the real computed one.
+#[tokio::test]
+async fn hermetic_comparative_reports_a_large_ks_distance_for_an_unmatchable_reference() {
+    let target_dir = tempfile::tempdir().expect("create temp dir");
+    let target_path = target_dir.path().join("reference.jsonl");
+    for i in 0..10u32 {
+        let record = JobRecord {
+            job_id: format!("{i:02x}"),
+            backend: "cpu-sa".to_string(),
+            n_solutions: 1,
+            best_energy_milli: -1_000_000,
+            diversity_milli: 0,
+            passed: true,
+            rejected: false,
+            reject_reason: None,
+            device_access_time_us: 0,
+            wall_ms: 0,
+            reads: 1,
+            sweeps: 0,
+            anneal_time_us: 0,
+        };
+        append_jsonl(&target_path, &record).expect("write unmatchable reference record");
+    }
+
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = base_config(dir.path().to_path_buf(), target_path);
+
+    run_comparative(&cfg)
+        .await
+        .expect("search succeeds even against an unmatchable reference");
+
+    let summary = read_summary(dir.path());
+    let ks = summary["config"]["final_ks_distance"]
+        .as_f64()
+        .expect("final_ks_distance must be a present number");
+    assert!(
+        ks > 0.9,
+        "an unmatchable reference must report a near-maximal ks_distance, got {ks}"
+    );
 }
 
 /// A records file left over from an earlier run must not be silently
@@ -331,10 +436,7 @@ async fn hermetic_comparative_surfaces_the_target_files_own_skipped_lines() {
 
     run_comparative(&cfg).await.expect("search succeeds");
 
-    let summary_text = std::fs::read_to_string(dir.path().join(SUMMARY_FILENAME))
-        .expect("summary.json is readable");
-    let summary: serde_json::Value =
-        serde_json::from_str(&summary_text).expect("summary.json parses as JSON");
+    let summary = read_summary(dir.path());
     assert_eq!(
         summary["config"]["target_file_skipped_lines"].as_u64(),
         Some(2),
