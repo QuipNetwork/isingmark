@@ -1,10 +1,13 @@
 # Agent Instructions
 
-IsingMark is a Rust CLI that benchmarks quip Ising miner binaries. It acts as a coordinator: it spawns a miner over a Unix socket, feeds consensus-identical problems, and records results as JSONL plus a summary JSON. It does not join a chain and does not submit work.
+IsingMark is a Rust CLI that benchmarks quip Ising miner binaries. It acts as a coordinator. It spawns a miner over a Unix socket and feeds it consensus-identical problems, then records the results as JSONL plus a summary JSON. It does not join a chain and does not submit work.
 
 ## Build
 
-Toolchain: Rust 1.97.1 (`rust-toolchain.toml`).
+Toolchain: Rust 1.97.1 (`rust-toolchain.toml`). Also requires `protoc`
+(`brew install protobuf`, or `apt-get install protobuf-compiler`):
+`quip-proto` generates its bindings at build time with prost-build, which
+shells out to `protoc`.
 
 ```bash
 cargo build
