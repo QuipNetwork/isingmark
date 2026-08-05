@@ -8,4 +8,5 @@ pub mod params;
 pub mod problem;
 pub mod record;
 pub mod report;
+pub mod stats;
 pub mod topology;
