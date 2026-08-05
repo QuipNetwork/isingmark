@@ -11,6 +11,7 @@ use crate::backend::SessionError;
 use crate::topology::{self, TopologyError, TopologySpec};
 
 pub mod comparative;
+pub mod compare;
 pub mod reproducibility;
 pub mod scaling;
 pub mod sweep;
@@ -146,6 +147,20 @@ pub enum ModeError {
         /// `"run_a and run_b"`.
         which: &'static str,
     },
+    /// `compare::run_compare`'s `--file-a` or `--file-b` could not be opened
+    /// or read. Mirrors [`Self::TargetFileUnreadable`]: an I/O failure on a
+    /// user-supplied input path is an error naming that path, not a silent
+    /// empty distribution.
+    CompareFileUnreadable(PathBuf, std::io::Error),
+    /// `compare::run_compare`'s input file parsed but yielded no usable
+    /// (`passed`) records to compare, or `stats::describe`/
+    /// `stats::ks_distance`/`stats::ks_two_sample_p` returned `None` for
+    /// that side. Reported as an error rather than fabricating a
+    /// `CompareReport` whose `Stats`/`ks`/`p_value` would look like a real
+    /// comparison of empty data — the same reason
+    /// [`Self::EmptyTargetFile`] and [`Self::EmptyReproBatch`] refuse to
+    /// invent a default `p_value`.
+    EmptyCompareFile(PathBuf),
 }
 
 impl fmt::Display for ModeError {
@@ -216,6 +231,18 @@ impl fmt::Display for ModeError {
                 f,
                 "{which} produced no usable (passed) records to compare distributions against"
             ),
+            Self::CompareFileUnreadable(path, e) => {
+                write!(
+                    f,
+                    "compare input file {} could not be read: {e}",
+                    path.display()
+                )
+            }
+            Self::EmptyCompareFile(path) => write!(
+                f,
+                "compare input file {} contains no usable (passed) records to compare",
+                path.display()
+            ),
         }
     }
 }
@@ -237,9 +264,12 @@ impl std::error::Error for ModeError {
             | Self::InvalidSize(_)
             | Self::DuplicateSize(_)
             | Self::GraphGenerationFailed(_)
-            | Self::EmptyReproBatch { .. } => None,
+            | Self::EmptyReproBatch { .. }
+            | Self::EmptyCompareFile(_) => None,
             Self::Session(e) => Some(e),
-            Self::Io(e) | Self::TargetFileUnreadable(_, e) => Some(e),
+            Self::Io(e) | Self::TargetFileUnreadable(_, e) | Self::CompareFileUnreadable(_, e) => {
+                Some(e)
+            }
         }
     }
 }
@@ -280,6 +310,21 @@ pub fn hex_encode(bytes: &[u8]) -> String {
         let _ = write!(out, "{b:02x}");
         out
     })
+}
+
+/// Milli-units to natural `f64` units (divide by 1000), for feeding
+/// `stats::describe`/`stats::ks_distance`/`stats::ks_two_sample_p`.
+///
+/// Shared entry point for new modes (currently `compare`). Existing mode
+/// modules keep their own private copies — consolidating those is a
+/// separate change and must not land mixed into a feature task.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "benchmark energies fit comfortably within f64's 52-bit exact-integer range"
+)]
+#[must_use]
+pub(crate) fn milli_to_f64(milli: i64) -> f64 {
+    milli as f64 / 1000.0
 }
 
 #[cfg(test)]

@@ -45,6 +45,22 @@ pub enum Command {
     /// report whether their best-energy distributions are statistically
     /// distinguishable.
     Reproducibility(ReproducibilityArgs),
+    /// Compare two completed benchmark runs' JSONL record files and report
+    /// whether their best-energy distributions differ. Pure post-hoc
+    /// analysis: no backend is spawned.
+    Compare(CompareArgs),
+}
+
+/// `isingmark compare` arguments. Unlike every other mode, compare takes
+/// only two input paths — no backend, topology, hardness, or output dir.
+#[derive(Debug, Args)]
+pub struct CompareArgs {
+    /// Path to the first run's JSONL records file.
+    #[arg(long)]
+    pub file_a: PathBuf,
+    /// Path to the second run's JSONL records file.
+    #[arg(long)]
+    pub file_b: PathBuf,
 }
 
 /// Options common to every mode: which backend and topology to use, how
@@ -632,8 +648,8 @@ mod tests {
     use clap::Parser as _;
 
     use super::{
-        Cli, Command, ComparativeArgs, ReproducibilityArgs, ScalingArgs, SweepArgs, ThroughputArgs,
-        TttArgs,
+        Cli, Command, ComparativeArgs, CompareArgs, ReproducibilityArgs, ScalingArgs, SweepArgs,
+        ThroughputArgs, TttArgs,
     };
 
     fn parse(extra_args: &[&str]) -> Result<Cli, clap::Error> {
@@ -654,7 +670,8 @@ mod tests {
             | Command::Ttt(_)
             | Command::Comparative(_)
             | Command::Scaling(_)
-            | Command::Reproducibility(_) => {
+            | Command::Reproducibility(_)
+            | Command::Compare(_) => {
                 unreachable!("test only ever parses a throughput invocation")
             }
         }
@@ -668,7 +685,8 @@ mod tests {
             | Command::Ttt(_)
             | Command::Comparative(_)
             | Command::Scaling(_)
-            | Command::Reproducibility(_) => {
+            | Command::Reproducibility(_)
+            | Command::Compare(_) => {
                 unreachable!("test only ever parses a sweep invocation")
             }
         }
@@ -682,7 +700,8 @@ mod tests {
             | Command::Sweep(_)
             | Command::Comparative(_)
             | Command::Scaling(_)
-            | Command::Reproducibility(_) => {
+            | Command::Reproducibility(_)
+            | Command::Compare(_) => {
                 unreachable!("test only ever parses a ttt invocation")
             }
         }
@@ -696,7 +715,8 @@ mod tests {
             | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Scaling(_)
-            | Command::Reproducibility(_) => {
+            | Command::Reproducibility(_)
+            | Command::Compare(_) => {
                 unreachable!("test only ever parses a comparative invocation")
             }
         }
@@ -710,7 +730,8 @@ mod tests {
             | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Comparative(_)
-            | Command::Reproducibility(_) => {
+            | Command::Reproducibility(_)
+            | Command::Compare(_) => {
                 unreachable!("test only ever parses a scaling invocation")
             }
         }
@@ -724,8 +745,24 @@ mod tests {
             | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Comparative(_)
-            | Command::Scaling(_) => {
+            | Command::Scaling(_)
+            | Command::Compare(_) => {
                 unreachable!("test only ever parses a reproducibility invocation")
+            }
+        }
+    }
+
+    /// Extract the `Compare` variant. See [`throughput_args`].
+    fn compare_args(cli: Cli) -> CompareArgs {
+        match cli.command {
+            Command::Compare(args) => args,
+            Command::Throughput(_)
+            | Command::Sweep(_)
+            | Command::Ttt(_)
+            | Command::Comparative(_)
+            | Command::Scaling(_)
+            | Command::Reproducibility(_) => {
+                unreachable!("test only ever parses a compare invocation")
             }
         }
     }
@@ -1599,5 +1636,38 @@ mod tests {
             .expect_err("--config must be rejected until it is implemented");
         assert!(err.contains("--config"));
         assert!(err.contains("not implemented"));
+    }
+
+    #[test]
+    fn a_full_valid_compare_invocation_parses() {
+        let cli = parse(&[
+            "compare",
+            "--file-a",
+            "/tmp/a.jsonl",
+            "--file-b",
+            "/tmp/b.jsonl",
+        ])
+        .expect("valid invocation parses");
+        let args = compare_args(cli);
+        assert_eq!(args.file_a, std::path::PathBuf::from("/tmp/a.jsonl"));
+        assert_eq!(args.file_b, std::path::PathBuf::from("/tmp/b.jsonl"));
+    }
+
+    #[test]
+    fn compare_requires_both_file_flags() {
+        let err =
+            parse(&["compare", "--file-a", "/tmp/a.jsonl"]).expect_err("--file-b is required");
+        let message = err.to_string();
+        assert!(
+            message.contains("file-b") || message.contains("required"),
+            "missing --file-b must be rejected: {message}"
+        );
+        let err =
+            parse(&["compare", "--file-b", "/tmp/b.jsonl"]).expect_err("--file-a is required");
+        let message = err.to_string();
+        assert!(
+            message.contains("file-a") || message.contains("required"),
+            "missing --file-a must be rejected: {message}"
+        );
     }
 }

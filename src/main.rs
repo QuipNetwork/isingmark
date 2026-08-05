@@ -8,6 +8,7 @@ use clap::Parser as _;
 use isingmark::backend::RunReport;
 use isingmark::cli::{Cli, Command};
 use isingmark::modes::comparative::{self, ComparativeConfig};
+use isingmark::modes::compare::{self, format_comparison_table};
 use isingmark::modes::reproducibility::{self, ReproConfig, ReproReport};
 use isingmark::modes::scaling::{self, ScalingConfig};
 use isingmark::modes::sweep::{self, SweepConfig};
@@ -43,6 +44,7 @@ async fn main() -> ExitCode {
             Ok(cfg) => run_reproducibility(&cfg).await,
             Err(message) => fail(&message),
         },
+        Command::Compare(args) => run_compare_files(&args.file_a, &args.file_b),
     }
 }
 
@@ -179,6 +181,18 @@ async fn run_reproducibility(cfg: &ReproConfig) -> ExitCode {
             let summary_path = cfg.output_dir.join(reproducibility::SUMMARY_FILENAME);
             succeed(&format_reproducibility_message(cfg, &report, &summary_path))
         }
+        Err(e) => fail(&e.to_string()),
+    }
+}
+
+/// Run compare mode and report the outcome. Pure post-hoc analysis: reads
+/// two JSONL files and prints a table. A `ModeError` (unreadable or empty
+/// input — see `compare`'s own module doc) is a non-zero exit; a real
+/// comparison that finds a large KS distance still exits `SUCCESS` (that
+/// is a benchmark result, not a tool failure).
+fn run_compare_files(file_a: &std::path::Path, file_b: &std::path::Path) -> ExitCode {
+    match compare::run_compare(file_a, file_b) {
+        Ok(report) => succeed(&format_comparison_table(&report)),
         Err(e) => fail(&e.to_string()),
     }
 }
