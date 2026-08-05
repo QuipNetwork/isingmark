@@ -76,6 +76,37 @@
 //! exist to prevent) or fabricating `0.0`/some other placeholder,
 //! [`run_reproducibility`] returns [`ModeError::EmptyReproBatch`], naming
 //! which run(s) had no `passed` records to compare.
+//!
+//! # Statistical caveat: the KS test assumes independent samples, but this
+//! module's design is paired
+//!
+//! The two-sample Kolmogorov-Smirnov test (`stats::ks_distance`/
+//! `stats::ks_two_sample_p`) assumes `energies_a`/`energies_b` are drawn
+//! independently. They are not: the paired design above (see that section)
+//! deliberately runs both batches against the *identical* problem sequence,
+//! so `energies_a[i]` and `energies_b[i]` come from the same underlying
+//! problem and are correlated with each other, not independent draws. This
+//! is a deliberate trade rather than an oversight — a genuinely independent
+//! design (each run drawing its own, unrelated problems) would confound
+//! "the two hardness values differ" with "the two runs happened to draw
+//! differently-hard problems," which the paired design exists specifically
+//! to rule out (see this module's own "Paired design" section above).
+//!
+//! Running the (independence-assuming) KS test on paired data does not
+//! manufacture false positives: correlated samples reduce the *effective*
+//! variability between the two empirical distributions relative to what an
+//! independent-samples test assumes, so the reported `p_value` is, if
+//! anything, **conservative** (biased toward `differs == false`, not toward
+//! a spurious `differs == true`). It does cost *power*: a real, small
+//! difference between two paired batches can require a larger sample
+//! (`ReproConfig::num_problems`) to reach significance than a properly
+//! paired test (e.g. a paired-sample test on `energies_a[i] - energies_b[i]`)
+//! would need for the same effect size. A paired-aware test is not used here
+//! because [`ReproReport`]'s three-field shape (`ks_statistic`, `p_value`,
+//! `differs`) is fixed by this task's own interface contract, and
+//! `stats::ks_distance`/`stats::ks_two_sample_p` (already-reviewed, Task 9)
+//! are the only two-sample comparison this crate provides — introducing a
+//! new paired-test statistic is out of scope for this task.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -108,8 +139,11 @@ pub const RUN_B_DIR: &str = "run_b";
 /// to this crate's domain (job counts, energy scales, or backend
 /// behavior) — a different threshold would be an equally defensible
 /// choice; `0.05` is used because it is the customary default for a
-/// two-sample distribution comparison.
-const DIFFERS_P_THRESHOLD: f64 = 0.05;
+/// two-sample distribution comparison. `pub` (unlike this crate's other
+/// per-mode constants) so `main.rs`'s human-facing output can print the
+/// exact threshold `ReproReport::differs` was computed against, rather than
+/// leaving an operator to infer it or hardcode a second copy of `0.05`.
+pub const DIFFERS_P_THRESHOLD: f64 = 0.05;
 
 /// Miner account both runs derive jobs against. Only affects the derived
 /// nonce (via `problem::ProblemSource`), not either run's results — the

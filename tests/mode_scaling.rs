@@ -283,3 +283,56 @@ async fn hermetic_scaling_is_deterministic_across_separate_runs() {
         "the same seed and sizes must reproduce the identical topology hashes"
     );
 }
+
+/// Fix-round Minor 4: the top-level `summary.json` `topology` block (which
+/// has no single applicable topology — scaling generates one per size) must
+/// report a meaningful aggregate, not `nodes: 0, edges: 0, hash: ""`, which
+/// reads as a broken run to an operator skimming only that block. Checks
+/// the aggregate is both nonzero/non-empty *and* the actual sum over every
+/// size's own real node/edge counts (`config.sizes`), not a coincidental
+/// nonzero placeholder.
+#[tokio::test]
+async fn hermetic_scaling_top_level_topology_block_is_a_real_aggregate_not_zeros() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = base_config(dir.path().to_path_buf());
+
+    run_scaling(&cfg).await.expect("scaling run succeeds");
+    let summary = read_summary(dir.path());
+
+    let top_nodes = summary["topology"]["num_nodes"].as_u64().expect("present");
+    let top_edges = summary["topology"]["num_edges"].as_u64().expect("present");
+    let top_hash = summary["topology"]["topology_hash"]
+        .as_str()
+        .expect("present");
+
+    assert_ne!(
+        top_nodes, 0,
+        "top-level num_nodes must not be a zero placeholder"
+    );
+    assert_ne!(
+        top_edges, 0,
+        "top-level num_edges must not be a zero placeholder"
+    );
+    assert!(
+        !top_hash.is_empty(),
+        "top-level topology_hash must not be an empty placeholder"
+    );
+
+    let sizes_json = summary["config"]["sizes"].as_array().expect("sizes array");
+    let expected_nodes: u64 = sizes_json
+        .iter()
+        .map(|s| s["nodes"].as_u64().expect("nodes present"))
+        .sum();
+    let expected_edges: u64 = sizes_json
+        .iter()
+        .map(|s| s["edges"].as_u64().expect("edges present"))
+        .sum();
+    assert_eq!(
+        top_nodes, expected_nodes,
+        "top-level num_nodes must be the real sum over every size's own generated node count"
+    );
+    assert_eq!(
+        top_edges, expected_edges,
+        "top-level num_edges must be the real sum over every size's own generated edge count"
+    );
+}

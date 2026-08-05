@@ -8,7 +8,7 @@ use clap::Parser as _;
 use isingmark::backend::RunReport;
 use isingmark::cli::{Cli, Command};
 use isingmark::modes::comparative::{self, ComparativeConfig};
-use isingmark::modes::reproducibility::{self, ReproConfig};
+use isingmark::modes::reproducibility::{self, ReproConfig, ReproReport};
 use isingmark::modes::scaling::{self, ScalingConfig};
 use isingmark::modes::sweep::{self, SweepConfig};
 use isingmark::modes::throughput::{self, ThroughputConfig};
@@ -177,14 +177,47 @@ async fn run_reproducibility(cfg: &ReproConfig) -> ExitCode {
     match reproducibility::run_reproducibility(cfg).await {
         Ok(report) => {
             let summary_path = cfg.output_dir.join(reproducibility::SUMMARY_FILENAME);
-            let mut message = format!("ks_statistic: {:.4}\n", report.ks_statistic);
-            let _ = writeln!(message, "p_value: {:.4}", report.p_value);
-            let _ = writeln!(message, "differs: {}", report.differs);
-            let _ = writeln!(message, "summary: {}", summary_path.display());
-            succeed(&message)
+            succeed(&format_reproducibility_message(cfg, &report, &summary_path))
         }
         Err(e) => fail(&e.to_string()),
     }
+}
+
+/// Build [`run_reproducibility`]'s human-facing report. `cfg.hardness_a`/
+/// `cfg.hardness_b` are printed **unconditionally**, not only when they
+/// differ: an operator who ran the two arms at deliberately different
+/// sampling effort (see `reproducibility`'s own module doc on why
+/// `hardness_b` exists) and later reads only `differs: true` out of context
+/// — a ticket, a log excerpt — would otherwise have no way to tell that
+/// result apart from a real reproducibility failure of an identical-effort
+/// run. Printing both values always means the ordinary case (`hardness_a ==
+/// hardness_b`) *affirmatively confirms* the arms were identical, rather
+/// than leaving the reader to assume it.
+///
+/// `p_value` is rendered in scientific notation (`{:.4e}`), not fixed-point:
+/// a fixed 4- or even 6-decimal rendering of a genuinely small p-value (e.g.
+/// the `~3e-8` a strongly-differing pair produces) prints as a
+/// misleading `0.0000`, indistinguishable from an actually-zero value.
+/// `differs` is printed alongside the exact threshold it was computed
+/// against (`reproducibility::DIFFERS_P_THRESHOLD`) rather than bare, so a
+/// borderline value (e.g. `p = 0.04999`) next to `differs: true` reads as
+/// "just under this printed threshold," not as an apparent contradiction of
+/// an unstated `0.05` convention.
+fn format_reproducibility_message(
+    cfg: &ReproConfig,
+    report: &ReproReport,
+    summary_path: &std::path::Path,
+) -> String {
+    let mut message = format!("ks_statistic: {:.4}\n", report.ks_statistic); // MUTATION: dropped hardness lines
+    let _ = writeln!(message, "p_value: {:.4e}", report.p_value);
+    let _ = writeln!(
+        message,
+        "differs: {} (p < {})",
+        report.differs,
+        reproducibility::DIFFERS_P_THRESHOLD
+    );
+    let _ = writeln!(message, "summary: {}", summary_path.display());
+    message
 }
 
 /// Read `config.final_ks_distance` back out of a comparative-mode
@@ -267,8 +300,13 @@ fn print_line(message: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_ks_distance, read_final_ks_distance, truncated_run_warning};
+    use super::{
+        format_ks_distance, format_reproducibility_message, read_final_ks_distance,
+        truncated_run_warning,
+    };
     use isingmark::backend::RunReport;
+    use isingmark::modes::reproducibility::{ReproConfig, ReproReport};
+    use isingmark::modes::TopologyRef;
 
     /// A `RunReport` with every field at its "everything went fine" value,
     /// so a test can override only the one field it cares about.
@@ -381,5 +419,112 @@ mod tests {
         let path = dir.path().join("summary.json");
         std::fs::write(&path, "{not valid json").expect("write summary.json");
         assert_eq!(read_final_ks_distance(&path), None);
+    }
+
+    /// A `ReproConfig` with distinctive, easily-grepped hardness values,
+    /// for tests that check the CLI's human-facing message rather than
+    /// `run_reproducibility`'s own behavior.
+    fn repro_config(hardness_a: f64, hardness_b: f64) -> ReproConfig {
+        ReproConfig {
+            backend: "cpu-sa".to_string(),
+            topology: TopologyRef::Preset("smoke".to_string()),
+            num_problems: 20,
+            hardness_a,
+            hardness_b,
+            seed: 0,
+            output_dir: std::path::PathBuf::from("./out"),
+            backend_bin_override: None,
+            backend_args_override: None,
+        }
+    }
+
+    /// Pins Important 1 from the task-13 fix round: both hardness values
+    /// must always appear in the printed message, even when they are equal
+    /// (the ordinary case) — not only when they differ. A future refactor
+    /// that drops one, or only prints them conditionally, must fail this.
+    #[test]
+    fn reproducibility_message_always_prints_both_hardness_values() {
+        let report = ReproReport {
+            ks_statistic: 0.0,
+            p_value: 1.0,
+            differs: false,
+        };
+        let message = format_reproducibility_message(
+            &repro_config(0.5, 0.5),
+            &report,
+            std::path::Path::new("/tmp/out/summary.json"),
+        );
+        assert!(
+            message.contains("hardness_a: 0.5"),
+            "message must print hardness_a even when it equals hardness_b: {message}"
+        );
+        assert!(
+            message.contains("hardness_b: 0.5"),
+            "message must print hardness_b even when it equals hardness_a: {message}"
+        );
+    }
+
+    /// The same assertion for the deliberately-different-hardness case,
+    /// with distinct values, so a mutation that always prints
+    /// `cfg.hardness_a` for both fields cannot pass both this test and the
+    /// equal-hardness one above.
+    #[test]
+    fn reproducibility_message_prints_distinct_hardness_values_when_they_differ() {
+        let report = ReproReport {
+            ks_statistic: 0.65,
+            p_value: 3.014_130_229_283_717e-8,
+            differs: true,
+        };
+        let message = format_reproducibility_message(
+            &repro_config(0.0, 1.0),
+            &report,
+            std::path::Path::new("/tmp/out/summary.json"),
+        );
+        assert!(message.contains("hardness_a: 0.0"), "got: {message}");
+        assert!(message.contains("hardness_b: 1.0"), "got: {message}");
+    }
+
+    /// A genuinely small p-value must not print as a misleading `0.0000`
+    /// (indistinguishable from an exact zero) — the exact defect a
+    /// fixed-point `{:.4}` rendering has. Scientific notation keeps the
+    /// nonzero magnitude visible regardless of how small the value is.
+    #[test]
+    fn reproducibility_message_renders_a_tiny_p_value_without_flattening_to_zero() {
+        let report = ReproReport {
+            ks_statistic: 0.65,
+            p_value: 3.014_130_229_283_717e-8,
+            differs: true,
+        };
+        let message = format_reproducibility_message(
+            &repro_config(0.0, 1.0),
+            &report,
+            std::path::Path::new("/tmp/out/summary.json"),
+        );
+        assert!(
+            !message.contains("p_value: 0.0000"),
+            "a tiny nonzero p_value must not render as flat 0.0000: {message}"
+        );
+        assert!(message.to_lowercase().contains("e-8"), "got: {message}");
+    }
+
+    /// `differs` must always be printed alongside the exact threshold it
+    /// was computed against, so a borderline value does not read as
+    /// contradicting an unstated convention.
+    #[test]
+    fn reproducibility_message_prints_differs_with_its_threshold() {
+        let report = ReproReport {
+            ks_statistic: 0.1,
+            p_value: 0.049_99,
+            differs: true,
+        };
+        let message = format_reproducibility_message(
+            &repro_config(0.0, 1.0),
+            &report,
+            std::path::Path::new("/tmp/out/summary.json"),
+        );
+        assert!(
+            message.contains("differs: true (p < 0.05)"),
+            "got: {message}"
+        );
     }
 }

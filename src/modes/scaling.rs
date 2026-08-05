@@ -32,11 +32,35 @@
 //!
 //! The graph itself is built by the standard configuration-model
 //! construction: list every node 3 times ("stubs"), shuffle, and pair up
-//! consecutive stubs into edges, retrying the whole shuffle-and-pair attempt
-//! (see [`generate_3_regular_edges`]) whenever a pairing produces a
-//! self-loop or a duplicate edge — both of which a 3-regular *simple* graph
-//! (no self-loops, no parallel edges) must not have. [`MAX_GENERATION_ATTEMPTS`]
-//! bounds the retry loop so this stays total.
+//! consecutive stubs into edges (see [`attempt_pairing`]), retrying the
+//! whole shuffle-and-pair attempt (see [`generate_3_regular_edges`])
+//! whenever a pairing produces a self-loop or a duplicate edge — both of
+//! which a 3-regular *simple* graph (no self-loops, no parallel edges) must
+//! not have. [`MAX_GENERATION_ATTEMPTS`] bounds the retry loop so this stays
+//! total.
+//!
+//! # Disconnected graphs are rejected and retried, not accepted
+//!
+//! A structurally valid (simple, 3-regular) configuration-model pairing can
+//! still be **disconnected** — the classic example at `n = 8` is two
+//! disjoint copies of `K4` (the complete graph on 4 nodes, itself
+//! 3-regular). This module treats that as invalid and retries
+//! ([`is_connected`], checked by [`generate_3_regular_edges`] on every
+//! pairing [`attempt_pairing`] accepts as simple), rather than returning it:
+//! this mode's entire purpose is comparing solve difficulty across
+//! requested node counts, and a disconnected instance is not a harder
+//! version of a smaller connected one — it is a *disjoint union* of smaller
+//! ones (two independent 4-node problems standing in for a requested
+//! 8-node size, for example), which a backend can solve as two small,
+//! unrelated pieces regardless of how large the requested size was. Left
+//! unchecked, an operator's `--sizes` sweep could silently mix
+//! "genuinely n-node-hard" topologies with "several small components
+//! wearing an n-node label," undermining the size-to-size comparison this
+//! mode exists to produce. Rejecting disconnection is deliberately the
+//! stricter choice between the two defensible options here (accepting it
+//! would also be defensible, and cheaper) — see [`is_connected`]'s doc for
+//! the mechanism, and [`MAX_GENERATION_ATTEMPTS`]'s doc for the retry-budget
+//! cost this adds on top of the plain self-loop/duplicate-edge check.
 //!
 //! # `job_id` collisions across sizes: one directory, one session, per size
 //!
@@ -103,11 +127,16 @@ const GENERATED_ALLOWED_J_MILLI: [i32; 2] = [-1000, 1000];
 const GENERATED_ALLOWED_SPIN_MILLI: [i32; 2] = [-1000, 1000];
 
 /// Upper bound on [`generate_3_regular_edges`]'s shuffle-and-pair retry
-/// loop. The configuration model's probability of producing a self-loop or
-/// duplicate edge on one attempt is small and roughly constant for the node
-/// counts this crate's own tests and any realistic `--sizes` value use
-/// (a handful to a few hundred nodes), so this attempt budget is reached
-/// only in the presence of a bug, not as ordinary bad luck.
+/// loop, covering both rejection reasons an attempt can fail for: a
+/// self-loop/duplicate edge ([`attempt_pairing`]) or a disconnected graph
+/// ([`is_connected`] — see this module's own doc on why disconnection is
+/// rejected). Both failure probabilities are small and roughly constant for
+/// the node counts this crate's own tests and any realistic `--sizes` value
+/// use (a handful to a few hundred nodes) — disconnection in particular
+/// becomes *less* likely as `nodes` grows (more stubs make an accidental
+/// clean split into separate components rarer, not more common) — so this
+/// attempt budget is reached only in the presence of a bug, not as ordinary
+/// bad luck.
 const MAX_GENERATION_ATTEMPTS: u32 = 2_000;
 
 /// Default hardness-to-parameter curve, held fixed across every requested
@@ -166,7 +195,13 @@ pub struct ScalingConfig {
 /// (same reasoning `sweep::CellOutcome` documents), and this task does not
 /// modify already-reviewed code to add that derive.
 pub struct SizeOutcome {
-    /// Node count this outcome was generated and dispatched for.
+    /// Node count of this size's actually generated topology, read from
+    /// `TopologySpec::nodes.len()` — not the requested `--sizes` entry that
+    /// drove generation. Mirrors [`SizeOutcome::num_edges`]'s own reasoning:
+    /// a caller reading this field should see what was actually generated
+    /// and dispatched against, not the configuration that requested it,
+    /// even though the two agree by construction for every topology
+    /// [`generate_topology`] can produce.
     pub nodes: usize,
     /// Edge count of this size's actually generated topology, read from
     /// `TopologySpec::edges.len()` — not recomputed from `3 * nodes / 2`.
@@ -263,7 +298,7 @@ pub async fn run_scaling(cfg: &ScalingConfig) -> Result<ScalingReport, ModeError
         }
 
         outcomes.push(SizeOutcome {
-            nodes: *nodes,
+            nodes: spec.nodes.len(),
             num_edges: spec.edges.len(),
             dir_name: dir_name.clone(),
             topology_hash: hex_encode(&spec.topology_hash()),
@@ -446,37 +481,85 @@ fn topology_seed_key(seed: u64, nodes: usize) -> [u8; 32] {
 /// [`MAX_GENERATION_ATTEMPTS`]'s own doc for why this is not expected to
 /// occur for any size this crate's callers use.
 fn generate_3_regular_edges(nodes: usize, rng: &mut DeterministicRng) -> Option<Vec<(u32, u32)>> {
+    for _ in 0..MAX_GENERATION_ATTEMPTS {
+        let Some(edges) = attempt_pairing(nodes, rng) else {
+            continue;
+        };
+        // A structurally valid (simple, 3-regular) pairing can still be
+        // *disconnected* — see this module's doc on why that is rejected
+        // and retried here rather than accepted. `is_connected` is checked
+        // only once a pairing has already passed the cheaper self-loop/
+        // duplicate-edge check above, so a bad pairing never pays for a
+        // BFS it cannot use.
+        if is_connected(nodes, &edges) {
+            return Some(edges);
+        }
+    }
+    None
+}
+
+/// One shuffle-and-pair attempt of the configuration model: list every node
+/// 3 times ("stubs"), shuffle via `rng`, and pair up consecutive stubs into
+/// edges. Returns `None` if the pairing produced a self-loop or a duplicate
+/// edge (an invalid *simple* graph) — connectivity is checked separately by
+/// [`generate_3_regular_edges`], not here, so this function stays a single,
+/// narrowly-testable "is this pairing simple" check.
+fn attempt_pairing(nodes: usize, rng: &mut DeterministicRng) -> Option<Vec<(u32, u32)>> {
     #[expect(
         clippy::cast_possible_truncation,
         reason = "node counts in this crate's benchmark domain fit comfortably in u32"
     )]
     let node_ids: Vec<u32> = (0..nodes as u32).collect();
 
-    for _ in 0..MAX_GENERATION_ATTEMPTS {
-        let mut stubs: Vec<u32> = node_ids.iter().flat_map(|&n| [n, n, n]).collect();
-        shuffle(&mut stubs, rng);
+    let mut stubs: Vec<u32> = node_ids.iter().flat_map(|&n| [n, n, n]).collect();
+    shuffle(&mut stubs, rng);
 
-        let mut edges = Vec::with_capacity(stubs.len() / 2);
-        let mut seen_edges: HashSet<(u32, u32)> = HashSet::with_capacity(stubs.len() / 2);
-        let mut valid = true;
-        for pair in stubs.chunks_exact(2) {
-            let (a, b) = (pair[0], pair[1]);
-            if a == b {
-                valid = false;
-                break;
-            }
-            let key = if a < b { (a, b) } else { (b, a) };
-            if !seen_edges.insert(key) {
-                valid = false;
-                break;
-            }
-            edges.push(key);
+    let mut edges = Vec::with_capacity(stubs.len() / 2);
+    let mut seen_edges: HashSet<(u32, u32)> = HashSet::with_capacity(stubs.len() / 2);
+    for pair in stubs.chunks_exact(2) {
+        let (a, b) = (pair[0], pair[1]);
+        if a == b {
+            return None;
         }
-        if valid {
-            return Some(edges);
+        let key = if a < b { (a, b) } else { (b, a) };
+        if !seen_edges.insert(key) {
+            return None;
+        }
+        edges.push(key);
+    }
+    Some(edges)
+}
+
+/// Whether the graph on nodes `0..nodes` with `edges` is connected, via a
+/// breadth-first traversal from node `0`. `nodes` is always nonzero here
+/// (callers only reach this after [`validate_sizes`]'s own
+/// [`MIN_REGULAR_SIZE`] check), so node `0` always exists to start from.
+fn is_connected(nodes: usize, edges: &[(u32, u32)]) -> bool {
+    if nodes == 0 {
+        return true;
+    }
+    let mut adjacency: Vec<Vec<u32>> = vec![Vec::new(); nodes];
+    for &(a, b) in edges {
+        adjacency[a as usize].push(b);
+        adjacency[b as usize].push(a);
+    }
+
+    let mut visited = vec![false; nodes];
+    let mut queue = std::collections::VecDeque::new();
+    visited[0] = true;
+    queue.push_back(0u32);
+    let mut visited_count = 1usize;
+
+    while let Some(node) = queue.pop_front() {
+        for &neighbor in &adjacency[node as usize] {
+            if !visited[neighbor as usize] {
+                visited[neighbor as usize] = true;
+                visited_count += 1;
+                queue.push_back(neighbor);
+            }
         }
     }
-    None
+    visited_count == nodes
 }
 
 /// Generate a deterministic, random 3-regular [`TopologySpec`] on `nodes`
@@ -617,15 +700,62 @@ fn build_summary(
         mode: "scaling".to_string(),
         backend: cfg.backend.clone(),
         topology: crate::record::TopologyInfo {
-            name: "random-3-regular (generated per size; see config.sizes)".to_string(),
-            num_nodes: 0,
-            num_edges: 0,
-            topology_hash: String::new(),
+            name: "random-3-regular (generated per size; see config.sizes for each size's own \
+                   node/edge count and topology_hash)"
+                .to_string(),
+            // Aggregated across every generated topology (sum over sizes),
+            // not one topology's own count — see this field's own doc on
+            // why `0`/`0`/empty here would be worse than an honest
+            // aggregate: a reader skimming only the top-level `Summary`
+            // (not `config.sizes`) would otherwise see zeros and a blank
+            // hash indistinguishable from a broken or empty run.
+            num_nodes: outcomes.iter().map(|o| o.nodes).sum(),
+            num_edges: outcomes.iter().map(|o| o.num_edges).sum(),
+            topology_hash: aggregate_topology_hash(outcomes),
         },
         hardware: HardwareInfo::detect(),
         config,
         totals,
     }
+}
+
+/// A single fingerprint over every size's own `topology_hash`, for
+/// [`Summary::topology`]'s top-level `topology_hash` field (which has no
+/// single applicable topology to hash directly — see that field's own
+/// doc). Delegates to [`combine_hex_hashes`]; kept as its own thin wrapper
+/// so the pure hashing logic is testable without constructing a
+/// [`SizeOutcome`] (which embeds a `backend::RunReport`).
+fn aggregate_topology_hash(outcomes: &[SizeOutcome]) -> String {
+    combine_hex_hashes(
+        &outcomes
+            .iter()
+            .map(|o| o.topology_hash.as_str())
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// `blake3` of `entries`, concatenated in the given order, each preceded by
+/// its own byte length (little-endian) so two different partitions of the
+/// same concatenated bytes cannot collide: concatenating `"ab"` then `"cd"`
+/// must not hash the same as concatenating `"a"` then `"bcd"`, which a naive
+/// "just concatenate the strings with no length prefix" implementation
+/// would do. Order-sensitive by design: `outcomes` order (this function's
+/// only caller) is `ScalingConfig::sizes` order, which [`validate_sizes`]
+/// already guarantees contains no duplicate, so two scaling runs over the
+/// same `--sizes`/`--seed` reproduce the identical fingerprint, and a run
+/// over a different `--sizes` list (or one whose generator changed) does
+/// not.
+fn combine_hex_hashes(entries: &[&str]) -> String {
+    let mut digest = blake3::Hasher::new();
+    for entry in entries {
+        let bytes = entry.as_bytes();
+        // `usize::to_le_bytes`, not a cast to `u64`: no narrowing occurs on
+        // any platform, so this needs no truncation lint expectation at
+        // all — mirrors `topology_seed_key`'s identical reasoning.
+        let _ = digest.update(&bytes.len().to_le_bytes());
+        let _ = digest.update(bytes);
+    }
+    hex_encode(digest.finalize().as_bytes())
 }
 
 /// Render a `stats::describe` result as JSON, `null` for an empty or
@@ -684,11 +814,77 @@ fn unique_sock_path() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::{
-        generate_3_regular_edges, generate_topology, parse_one_scaling_size, size_dir_name,
-        topology_seed_key, validate_sizes, DeterministicRng,
+        attempt_pairing, generate_3_regular_edges, generate_topology, is_connected,
+        parse_one_scaling_size, size_dir_name, topology_seed_key, validate_sizes, DeterministicRng,
     };
     use crate::modes::ModeError;
     use std::collections::{HashMap, HashSet};
+
+    /// `(seed=2820, nodes=12)`'s first raw [`attempt_pairing`] draw (before
+    /// any connectivity retry) splits into two disjoint components — an
+    /// 8-node piece and a `K4` (the classic disconnected-3-regular example
+    /// this module's own doc describes) — found by an exhaustive scratch
+    /// search over `seed in 0..5000` for `nodes in [8, 12, 16]` at this
+    /// commit's `attempt_pairing`/`shuffle` implementation. Pinned here as a
+    /// concrete before/after case (see the two tests immediately below)
+    /// rather than only asserted to be theoretically possible: a search
+    /// that only ever exercises a generator too small or lucky to hit this
+    /// case would leave [`is_connected`]'s retry path entirely untested.
+    const DISCONNECTED_FIRST_ATTEMPT_SEED: u64 = 2820;
+    const DISCONNECTED_FIRST_ATTEMPT_NODES: usize = 12;
+
+    /// Confirms the premise: this module's own [`attempt_pairing`] (no
+    /// connectivity check) really can produce a disconnected-but-simple
+    /// 3-regular graph for a real `(seed, nodes)` pair, not merely in
+    /// theory. Without this, the next test (checking that
+    /// [`generate_3_regular_edges`] does NOT return this same disconnected
+    /// graph) would prove nothing — it could just as well be vacuously true
+    /// because no attempt at this seed was ever disconnected to begin with.
+    #[test]
+    fn attempt_pairing_can_produce_a_disconnected_graph() {
+        let key = topology_seed_key(
+            DISCONNECTED_FIRST_ATTEMPT_SEED,
+            DISCONNECTED_FIRST_ATTEMPT_NODES,
+        );
+        let mut rng = DeterministicRng::new(key);
+        let edges = attempt_pairing(DISCONNECTED_FIRST_ATTEMPT_NODES, &mut rng)
+            .expect("a simple pairing exists on the very first draw for this seed");
+        assert!(
+            !is_connected(DISCONNECTED_FIRST_ATTEMPT_NODES, &edges),
+            "this seed's first raw pairing is expected to be disconnected (an 8-node piece \
+             plus a K4); if this fails, the fixed regression case above needs a new seed"
+        );
+    }
+
+    /// The decisive test for this module's disconnection policy: given the
+    /// exact `(seed, nodes)` the previous test just proved yields a
+    /// disconnected *first* raw pairing, the real, connectivity-checking
+    /// [`generate_3_regular_edges`] must retry past it and return a
+    /// *connected* graph instead — proving [`is_connected`]'s retry loop is
+    /// not dead code, and that this module's "reject and retry" policy (see
+    /// this module's own doc) is what actually runs, not merely documented
+    /// intent. Also re-checks the resulting graph is still simple and
+    /// 3-regular, so the retry itself introduced no other defect.
+    #[test]
+    fn generate_3_regular_edges_retries_past_a_disconnected_first_attempt() {
+        let key = topology_seed_key(
+            DISCONNECTED_FIRST_ATTEMPT_SEED,
+            DISCONNECTED_FIRST_ATTEMPT_NODES,
+        );
+        let mut rng = DeterministicRng::new(key);
+        let edges = generate_3_regular_edges(DISCONNECTED_FIRST_ATTEMPT_NODES, &mut rng)
+            .expect("generation succeeds despite the disconnected first attempt");
+
+        assert!(
+            is_connected(DISCONNECTED_FIRST_ATTEMPT_NODES, &edges),
+            "generate_3_regular_edges must never return a disconnected graph, got {edges:?}"
+        );
+        assert_eq!(
+            edges.len(),
+            3 * DISCONNECTED_FIRST_ATTEMPT_NODES / 2,
+            "the retried graph must still be 3-regular (3n/2 edges)"
+        );
+    }
 
     #[test]
     fn validate_sizes_rejects_an_empty_list() {
@@ -812,6 +1008,11 @@ mod tests {
                     "node {node} must have degree exactly 3 for n={nodes}, got {d}"
                 );
             }
+
+            assert!(
+                is_connected(nodes, &edges),
+                "generate_3_regular_edges must never return a disconnected graph for n={nodes}"
+            );
         }
     }
 
@@ -896,5 +1097,53 @@ mod tests {
         let mut a = DeterministicRng::new([3u8; 32]);
         let mut b = DeterministicRng::new([4u8; 32]);
         assert_ne!(a.next_u64(), b.next_u64());
+    }
+
+    #[test]
+    fn is_connected_accepts_a_connected_graph() {
+        // A 4-cycle: 0-1-2-3-0.
+        let edges = [(0, 1), (1, 2), (2, 3), (3, 0)];
+        assert!(is_connected(4, &edges));
+    }
+
+    /// Two disjoint triangles (0-1-2 and 3-4-5) — the same kind of
+    /// disconnection [`attempt_pairing_can_produce_a_disconnected_graph`]
+    /// pins for a real generated case, but hand-built here for a minimal,
+    /// self-contained unit test of `is_connected` alone.
+    #[test]
+    fn is_connected_rejects_two_disjoint_components() {
+        let edges = [(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3)];
+        assert!(!is_connected(6, &edges));
+    }
+
+    #[test]
+    fn combine_hex_hashes_is_deterministic_and_order_sensitive() {
+        let ab = super::combine_hex_hashes(&["aa", "bb"]);
+        let ab_again = super::combine_hex_hashes(&["aa", "bb"]);
+        let ba = super::combine_hex_hashes(&["bb", "aa"]);
+        assert_eq!(
+            ab, ab_again,
+            "the same inputs in the same order must hash identically"
+        );
+        assert_ne!(ab, ba, "swapping order must change the combined hash");
+    }
+
+    /// Pins the concatenation-collision guard this function's own doc
+    /// describes: `"ab"` + `"cd"` (as two separate hashes) must not collide
+    /// with `"a"` + `"bcd"` (a different partition of the same bytes) —
+    /// which a naive "just concatenate the strings" implementation (with no
+    /// length prefix) would produce identically.
+    #[test]
+    fn combine_hex_hashes_does_not_collide_across_different_partitions_of_the_same_bytes() {
+        let a = super::combine_hex_hashes(&["ab", "cd"]);
+        let b = super::combine_hex_hashes(&["a", "bcd"]);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn combine_hex_hashes_of_no_hashes_is_a_stable_nonempty_value() {
+        let empty = super::combine_hex_hashes(&[]);
+        assert!(!empty.is_empty());
+        assert_eq!(empty, super::combine_hex_hashes(&[]));
     }
 }
