@@ -225,10 +225,9 @@ pub struct RunReport {
     /// coordinator at all.
     pub miner_stderr_tail: Option<String>,
     /// Count of `Result` / `Reject` messages whose `job_id` was not in the
-    /// in-flight map (stray id, or a second terminal message after the
-    /// first already removed the entry). Observability only: the message
-    /// is still dropped; this counter does not change dispatch or repair
-    /// the known duplicate-`job_id` defect.
+    /// in-flight map (stray id, or a second terminal message after every
+    /// queued entry for that id was already consumed). Observability only:
+    /// the message is still dropped; this counter does not change dispatch.
     pub orphan_results: u64,
     /// Total wall time of the call, in milliseconds.
     pub run_wall_ms: u64,
@@ -703,7 +702,12 @@ async fn drive_session(
     .await;
 
     let edges = edge_positions(spec);
-    let mut in_flight: HashMap<Vec<u8>, (Instant, Job)> = HashMap::new();
+    // Per job_id, a FIFO queue of dispatches. Two jobs may share a job_id
+    // (the paired-design case: job_id is the problem nonce). A flat map
+    // would silently evict the earlier entry on the second insert; a queue
+    // keeps every in-flight entry and matches Result/Reject front-first so
+    // wall_ms attributes to the oldest outstanding dispatch for that id.
+    let mut in_flight: HashMap<Vec<u8>, VecDeque<(Instant, Job)>> = HashMap::new();
 
     if maybe_shutdown(&remaining, &in_flight, &tx).await {
         drain(&mut inbound).await;
@@ -749,7 +753,7 @@ async fn drive_session(
                             // report `wall_ms: 0`.
                             let dispatch_start = Instant::now();
                             let outbound = coord_msg::Msg::Job(job.clone());
-                            in_flight.insert(job_id, (dispatch_start, job));
+                            push_in_flight(&mut in_flight, job_id, dispatch_start, job);
                             // Two distinct failure causes, not one: the
                             // outbound channel closing (the miner's own
                             // stream ended) and the send timing out (the
@@ -781,7 +785,9 @@ async fn drive_session(
                         }
                     }
                     Some(miner_msg::Msg::Result(result)) => {
-                        if let Some((start, job)) = in_flight.remove(&result.job_id) {
+                        if let Some((start, job)) =
+                            take_front_in_flight(&mut in_flight, &result.job_id)
+                        {
                             progress.push_record(build_result_record(
                                 backend_name,
                                 &job,
@@ -801,7 +807,9 @@ async fn drive_session(
                         }
                     }
                     Some(miner_msg::Msg::Reject(reject)) => {
-                        if let Some((start, _job)) = in_flight.remove(&reject.job_id) {
+                        if let Some((start, _job)) =
+                            take_front_in_flight(&mut in_flight, &reject.job_id)
+                        {
                             progress.push_record(build_reject_record(
                                 backend_name,
                                 &reject,
@@ -876,29 +884,63 @@ async fn drive_session(
 }
 
 /// Record every job still in `in_flight` as failing with `reason`, and
-/// empty `in_flight`. Shared by five call sites — `Fatal`, an unresponsive
-/// miner, an outbound channel closing mid-dispatch, a dispatch send timing
-/// out, and the end-of-loop cleanup for a closed/errored inbound stream —
-/// all "the miner will never answer this job" outcomes, but distinct
-/// causes: each passes its own `reason` text so a `JobRecord` in the
-/// benchmark output says which one happened, rather than one indistinct
-/// string covering causes a reader has no way to tell apart.
+/// empty `in_flight`. One record per queue entry (not one per distinct
+/// `job_id`), so duplicate-id dispatches that never reached a terminal
+/// Result/Reject are all accounted for. Shared by five call sites —
+/// `Fatal`, an unresponsive miner, an outbound channel closing mid-dispatch,
+/// a dispatch send timing out, and the end-of-loop cleanup for a
+/// closed/errored inbound stream — all "the miner will never answer this
+/// job" outcomes, but distinct causes: each passes its own `reason` text so
+/// a `JobRecord` in the benchmark output says which one happened, rather
+/// than one indistinct string covering causes a reader has no way to tell
+/// apart.
 fn abandon_in_flight(
-    in_flight: &mut HashMap<Vec<u8>, (Instant, Job)>,
+    in_flight: &mut HashMap<Vec<u8>, VecDeque<(Instant, Job)>>,
     progress: &SessionProgress,
     backend_name: &str,
     target: Option<&SetTarget>,
     reason: &str,
 ) {
-    for (_job_id, (start, job)) in in_flight.drain() {
-        progress.push_record(build_abandoned_record(
-            backend_name,
-            &job,
-            reason,
-            target,
-            start.elapsed(),
-        ));
+    for (_job_id, queue) in in_flight.drain() {
+        for (start, job) in queue {
+            progress.push_record(build_abandoned_record(
+                backend_name,
+                &job,
+                reason,
+                target,
+                start.elapsed(),
+            ));
+        }
     }
+}
+
+/// Push one dispatch onto the back of `job_id`'s in-flight queue.
+fn push_in_flight(
+    in_flight: &mut HashMap<Vec<u8>, VecDeque<(Instant, Job)>>,
+    job_id: Vec<u8>,
+    dispatch_start: Instant,
+    job: Job,
+) {
+    in_flight
+        .entry(job_id)
+        .or_default()
+        .push_back((dispatch_start, job));
+}
+
+/// Pop the oldest in-flight entry for `job_id` (FIFO). Removes the map key
+/// once its queue is empty so [`maybe_shutdown`]'s `in_flight.is_empty()`
+/// stays correct: an empty queue left behind would look like work still
+/// outstanding and block shutdown forever.
+fn take_front_in_flight(
+    in_flight: &mut HashMap<Vec<u8>, VecDeque<(Instant, Job)>>,
+    job_id: &[u8],
+) -> Option<(Instant, Job)> {
+    let queue = in_flight.get_mut(job_id)?;
+    let entry = queue.pop_front()?;
+    if queue.is_empty() {
+        in_flight.remove(job_id);
+    }
+    Some(entry)
 }
 
 /// Send `msg` on the outbound channel. The `Err` case is silently expected
@@ -914,9 +956,14 @@ async fn send(
 
 /// If every job is terminal (none staged, none in flight), send `Shutdown`
 /// and report `true` so the caller ends the loop.
+///
+/// Emptiness of `in_flight` is map emptiness: callers must remove a key
+/// when its queue drains (see [`take_front_in_flight`]), so a remaining
+/// duplicate-id entry keeps this false until that entry is answered or
+/// abandoned.
 async fn maybe_shutdown(
     remaining: &VecDeque<Job>,
-    in_flight: &HashMap<Vec<u8>, (Instant, Job)>,
+    in_flight: &HashMap<Vec<u8>, VecDeque<(Instant, Job)>>,
     tx: &mpsc::Sender<Result<CoordMsg, Status>>,
 ) -> bool {
     if remaining.is_empty() && in_flight.is_empty() {
@@ -1151,13 +1198,25 @@ fn milli_round(fraction: f64) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        duration_ms, edge_positions, hex_encode, milli_round, reject_reason_text, SessionProgress,
+        abandon_in_flight, duration_ms, edge_positions, hex_encode, maybe_shutdown, milli_round,
+        push_in_flight, reject_reason_text, take_front_in_flight, SessionProgress,
+        OUTBOUND_CHANNEL_DEPTH,
     };
     use crate::record::JobRecord;
     use crate::topology::TopologySpec;
-    use quip_proto::v1::RejectReason;
+    use quip_proto::v1::{CoordMsg, Job, RejectReason};
+    use std::collections::{HashMap, VecDeque};
     use std::sync::Arc;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
+    use tokio::sync::mpsc;
+    use tonic::Status;
+
+    fn dummy_job(job_id: &[u8]) -> Job {
+        Job {
+            job_id: job_id.to_vec(),
+            ..Default::default()
+        }
+    }
 
     fn sample_record() -> JobRecord {
         JobRecord {
@@ -1268,5 +1327,115 @@ mod tests {
             allowed_spin_milli: vec![-1000, 1000],
         };
         assert_eq!(edge_positions(&spec), vec![(0, 1)]);
+    }
+
+    /// FIFO: the first `Result` for a shared `job_id` pairs with the earlier
+    /// dispatch's Instant, so wall attribution follows dispatch order.
+    #[test]
+    fn take_front_pairs_first_result_with_earlier_dispatch_instant() {
+        let id = b"same-id".to_vec();
+        let mut in_flight: HashMap<Vec<u8>, VecDeque<(Instant, Job)>> = HashMap::new();
+        let earlier = Instant::now();
+        std::thread::sleep(Duration::from_millis(20));
+        let later = Instant::now();
+        push_in_flight(&mut in_flight, id.clone(), earlier, dummy_job(&id));
+        push_in_flight(&mut in_flight, id.clone(), later, dummy_job(&id));
+
+        let (start, _) =
+            take_front_in_flight(&mut in_flight, &id).expect("queue must hold the earlier entry");
+        // Instant is opaque; equality on the captured value is the FIFO check.
+        assert_eq!(
+            start, earlier,
+            "first Result must consume the earlier dispatch, not the later one"
+        );
+        let (start2, _) = take_front_in_flight(&mut in_flight, &id)
+            .expect("queue must still hold the later entry");
+        assert_eq!(start2, later);
+        assert!(
+            in_flight.is_empty(),
+            "empty queues must be removed so is_empty stays correct for maybe_shutdown"
+        );
+    }
+
+    /// `abandon_in_flight` emits one abandoned record per queue entry, not
+    /// one per distinct `job_id`.
+    #[test]
+    fn abandon_in_flight_emits_one_record_per_duplicate_id_entry() {
+        let id = b"dup".to_vec();
+        let mut in_flight: HashMap<Vec<u8>, VecDeque<(Instant, Job)>> = HashMap::new();
+        push_in_flight(&mut in_flight, id.clone(), Instant::now(), dummy_job(&id));
+        push_in_flight(&mut in_flight, id, Instant::now(), dummy_job(b"dup"));
+        // A second distinct id must also be drained.
+        push_in_flight(
+            &mut in_flight,
+            b"other".to_vec(),
+            Instant::now(),
+            dummy_job(b"other"),
+        );
+
+        let progress = SessionProgress::default();
+        abandon_in_flight(&mut in_flight, &progress, "fake", None, "test abandon");
+
+        assert!(in_flight.is_empty());
+        assert_eq!(
+            progress.snapshot_records().len(),
+            3,
+            "two same-id entries plus one other must each produce a record"
+        );
+    }
+
+    /// After one of two same-id entries is taken, the map still has work, so
+    /// `maybe_shutdown` must not fire. Empty-queue keys must not linger.
+    #[tokio::test]
+    async fn maybe_shutdown_stays_false_while_duplicate_id_entry_outstanding() {
+        let id = b"same".to_vec();
+        let mut in_flight: HashMap<Vec<u8>, VecDeque<(Instant, Job)>> = HashMap::new();
+        push_in_flight(&mut in_flight, id.clone(), Instant::now(), dummy_job(&id));
+        push_in_flight(&mut in_flight, id.clone(), Instant::now(), dummy_job(&id));
+
+        let (tx, mut rx) = mpsc::channel::<Result<CoordMsg, Status>>(OUTBOUND_CHANNEL_DEPTH);
+        let remaining = VecDeque::new();
+
+        assert!(
+            !maybe_shutdown(&remaining, &in_flight, &tx).await,
+            "two outstanding same-id entries must block shutdown"
+        );
+        assert!(
+            rx.try_recv().is_err(),
+            "no Shutdown message while work is in flight"
+        );
+
+        let _ = take_front_in_flight(&mut in_flight, &id).expect("one entry");
+        assert_eq!(
+            in_flight.len(),
+            1,
+            "key must remain while the second entry is still queued"
+        );
+        assert!(
+            !maybe_shutdown(&remaining, &in_flight, &tx).await,
+            "one remaining same-id entry must still block shutdown"
+        );
+
+        let _ = take_front_in_flight(&mut in_flight, &id).expect("second entry");
+        assert!(
+            in_flight.is_empty(),
+            "last pop must remove the key; empty queues must not linger"
+        );
+        assert!(
+            maybe_shutdown(&remaining, &in_flight, &tx).await,
+            "empty remaining + empty in_flight must shut down"
+        );
+        let msg = rx
+            .try_recv()
+            .expect("Shutdown must be sent when nothing remains");
+        assert!(
+            matches!(
+                msg,
+                Ok(CoordMsg {
+                    msg: Some(quip_proto::v1::coord_msg::Msg::Shutdown(_))
+                })
+            ),
+            "outbound message must be Shutdown, got {msg:?}"
+        );
     }
 }
