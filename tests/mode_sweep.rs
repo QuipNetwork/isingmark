@@ -60,6 +60,31 @@ fn read_summary(output_dir: &std::path::Path) -> Summary {
     serde_json::from_str(&text).expect("summary.json parses as Summary")
 }
 
+/// Independent milli-to-natural conversion, matching
+/// `modes::sweep::milli_to_f64` (private to that module, so this test
+/// re-derives it rather than importing it) — used to compute this test's
+/// own expectation for `best_energy_milli_stats`, rather than trusting the
+/// summary's own arithmetic.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "benchmark energies in this test fixture are small integers, far below f64's \
+              52-bit exact-integer range"
+)]
+fn milli_to_f64(milli: i64) -> f64 {
+    milli as f64 / 1000.0
+}
+
+/// `u64` millisecond count to `f64`, for comparing against a `Stats`
+/// field read back from JSON.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "wall-clock milliseconds in this test fixture are small integers, far below f64's \
+              52-bit exact-integer range"
+)]
+fn u64_to_f64(v: u64) -> f64 {
+    v as f64
+}
+
 /// The core hermetic assertion: a 2x2 grid produces 4 cells, each with its
 /// own `records.jsonl` holding `num_jobs` records whose `reads`/`sweeps`
 /// match *that cell's own* requested values — the assertion that proves
@@ -168,6 +193,92 @@ async fn hermetic_sweep_summary_aggregates_totals_and_lists_every_cell() {
             Some(u64::from(cell_report.num_sweeps))
         );
         assert_eq!(cell["jobs"].as_u64(), Some(cfg.num_jobs.into()));
+
+        // `best_energy_milli_stats`/`wall_ms_stats` are the fields that make
+        // a sweep comparable across cells at all; nothing above touches
+        // them, so a mutation that nulls, drops, or mis-scales either would
+        // otherwise ship green. Recompute the expected min/max independently
+        // from that cell's own records.jsonl (not from the summary's own
+        // arithmetic) so this actually pins the scaling, not just presence.
+        let jsonl = read_jsonl(
+            &dir.path()
+                .join(&cell_report.dir_name)
+                .join(RECORDS_FILENAME),
+        )
+        .expect("records.jsonl is readable");
+        let energies: Vec<f64> = jsonl
+            .records
+            .iter()
+            .filter(|r| r.passed)
+            .map(|r| milli_to_f64(r.best_energy_milli))
+            .collect();
+        assert!(
+            !energies.is_empty(),
+            "cell {} has no passed records to compare against",
+            cell_report.dir_name
+        );
+        let expected_min = energies.iter().copied().fold(f64::INFINITY, f64::min);
+        let expected_max = energies.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+
+        let energy_stats_msg = format!(
+            "cell {}: best_energy_milli_stats must be a non-null object",
+            cell_report.dir_name
+        );
+        let energy_stats = cell["best_energy_milli_stats"]
+            .as_object()
+            .expect(&energy_stats_msg);
+        let e_min = energy_stats["min"].as_f64().expect("min is a number");
+        let e_max = energy_stats["max"].as_f64().expect("max is a number");
+        let e_p50 = energy_stats["p50"].as_f64().expect("p50 is a number");
+        assert!(
+            (e_min - expected_min).abs() < 1e-9,
+            "cell {}: best_energy_milli_stats.min must match records.jsonl's own min, \
+             got {e_min} expected {expected_min}",
+            cell_report.dir_name
+        );
+        assert!(
+            (e_max - expected_max).abs() < 1e-9,
+            "cell {}: best_energy_milli_stats.max must match records.jsonl's own max, \
+             got {e_max} expected {expected_max}",
+            cell_report.dir_name
+        );
+        assert!(
+            e_min <= e_p50 && e_p50 <= e_max,
+            "cell {}: best_energy_milli_stats must satisfy min <= p50 <= max, got {e_min} <= {e_p50} <= {e_max}",
+            cell_report.dir_name
+        );
+
+        let wall_stats_msg = format!(
+            "cell {}: wall_ms_stats must be a non-null object",
+            cell_report.dir_name
+        );
+        let wall_stats = cell["wall_ms_stats"].as_object().expect(&wall_stats_msg);
+        let w_min = wall_stats["min"].as_f64().expect("min is a number");
+        let w_max = wall_stats["max"].as_f64().expect("max is a number");
+        let w_p50 = wall_stats["p50"].as_f64().expect("p50 is a number");
+        assert!(
+            w_min >= 0.0,
+            "cell {}: wall_ms_stats.min must be non-negative",
+            cell_report.dir_name
+        );
+        assert!(
+            w_min <= w_p50 && w_p50 <= w_max,
+            "cell {}: wall_ms_stats must satisfy min <= p50 <= max, got {w_min} <= {w_p50} <= {w_max}",
+            cell_report.dir_name
+        );
+
+        // `session_wall_ms` (whole-session overhead) must not be confused
+        // with `wall_ms_stats` (per-job): the former is at least as large as
+        // any single per-job wall time it contains, since it also covers
+        // spawn/handshake/teardown around every one of those jobs.
+        let session_wall_ms = cell["session_wall_ms"]
+            .as_u64()
+            .expect("session_wall_ms is present");
+        assert!(
+            u64_to_f64(session_wall_ms) >= w_max,
+            "cell {}: session_wall_ms ({session_wall_ms}) must be >= the largest per-job wall_ms ({w_max})",
+            cell_report.dir_name
+        );
     }
 }
 
@@ -255,6 +366,49 @@ async fn hermetic_sweep_refuses_to_reuse_an_output_dir_with_existing_cell_record
             .expect("first run's records survive");
         assert_eq!(jsonl.records.len(), cfg.num_jobs as usize);
     }
+}
+
+/// The output-dir conflict check must be eager — run for *every* cell
+/// before *any* cell is dispatched — not lazy (checked one cell at a time
+/// as the loop reaches it). Seeds a stale, non-empty `records.jsonl` in
+/// only the *last* cell's directory (`cell_3_r16_s100`, for the 2x2 grid's
+/// Cartesian order `(8,50), (8,100), (16,50), (16,100)`) and nothing in any
+/// earlier cell's directory (which does not even exist yet). A lazy
+/// implementation would run cells 0-2 (writing real, fresh data) before
+/// discovering the conflict on cell 3, leaving three good cells sitting
+/// next to one refused one with no `summary.json` and nothing on disk
+/// distinguishing "this sweep completed" from "this sweep was refused
+/// before it started" — the exact failure mode
+/// `SweepConfig::output_dir`'s own doc comment claims is impossible. The
+/// decisive assertion is that `cell_0_r8_s50` — the *first* cell, which has
+/// no conflict of its own — was never created at all.
+#[tokio::test]
+async fn hermetic_sweep_output_dir_conflict_check_is_eager_before_any_cell_runs() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = base_config(dir.path().to_path_buf());
+
+    let conflicting_cell_dir = dir.path().join("cell_3_r16_s100");
+    std::fs::create_dir_all(&conflicting_cell_dir).expect("create the conflicting cell's dir");
+    std::fs::write(
+        conflicting_cell_dir.join(RECORDS_FILENAME),
+        "{\"stale\":true}\n",
+    )
+    .expect("seed a stale records file in the last cell only");
+
+    let result = run_sweep(&cfg).await;
+    assert!(
+        result.is_err(),
+        "a conflict on any cell, including the last one, must refuse the whole sweep"
+    );
+    if let Err(e) = result {
+        assert!(matches!(e, ModeError::RecordsFileExists(_)), "got: {e}");
+    }
+
+    let first_cell_dir = dir.path().join("cell_0_r8_s50");
+    assert!(
+        !first_cell_dir.exists(),
+        "the first cell must never be created when a later cell's conflict is detected eagerly"
+    );
 }
 
 /// An `Annealing`-kind backend sweeps `num_reads`/`anneal_time_us`, and

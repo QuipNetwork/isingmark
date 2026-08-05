@@ -167,7 +167,7 @@ pub struct SweepArgs {
     pub param_grid: ParamGrid,
     /// Jobs drawn per cell. Every cell draws the identical sequence (same
     /// seed, same count) — see `modes::sweep`'s module docs for why.
-    #[arg(long, default_value_t = 20)]
+    #[arg(long, value_parser = parse_num_jobs, default_value_t = 20)]
     pub num_jobs: u32,
 }
 
@@ -204,6 +204,25 @@ impl SweepArgs {
 /// `--param-grid` value parser, delegating to `sweep::parse_param_grid`.
 fn parse_param_grid_arg(s: &str) -> Result<ParamGrid, String> {
     sweep::parse_param_grid(s).map_err(|e| e.to_string())
+}
+
+/// `--num-jobs` value parser. `0` would silently produce a "successful" run
+/// that dispatched nothing (`run_session` shuts down immediately after the
+/// handshake) — every cell's `summary.json` entry would report `jobs: 0`
+/// with no error and `ExitCode::SUCCESS`, the same "your input does not
+/// mean what you think" failure mode `--param-grid`'s own `0` values are
+/// rejected for (see `sweep::parse_param_grid`) and `--hardness` is
+/// rejected for when non-finite. Reject it here for the same reason.
+fn parse_num_jobs(s: &str) -> Result<u32, String> {
+    let value: u32 = s.parse().map_err(|_| format!("{s:?} is not a valid u32"))?;
+    if value == 0 {
+        return Err(
+            "--num-jobs must not be 0 (a zero-job sweep would exit successfully having tested \
+             nothing, with no signal that it did not)"
+                .to_string(),
+        );
+    }
+    Ok(value)
 }
 
 /// `--backend` value parser, checked against the live built-in registry so
@@ -505,6 +524,26 @@ mod tests {
         ])
         .expect_err("a 0 grid value must be rejected at parse time");
         assert!(err.to_string().contains('0'));
+    }
+
+    /// `--num-jobs 0` would silently produce a sweep that dispatches
+    /// nothing and still exits successfully; must be rejected at parse
+    /// time, matching the `--param-grid` zero-value convention above.
+    #[test]
+    fn sweep_num_jobs_zero_is_rejected_at_parse_time() {
+        let err = parse(&[
+            "sweep",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--param-grid",
+            r#"{"num_reads":[64]}"#,
+            "--num-jobs",
+            "0",
+        ])
+        .expect_err("--num-jobs 0 must be rejected at parse time");
+        assert!(err.to_string().contains("--num-jobs"));
     }
 
     #[test]

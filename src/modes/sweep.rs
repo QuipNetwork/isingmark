@@ -445,9 +445,24 @@ fn cell_dir_name(cell: &Cell, kind: BackendKind) -> String {
 /// [`CellOutcome`]. `totals` aggregates across every cell; `config` carries
 /// the requested grid alongside each cell's own directory, parameters, and
 /// per-cell stats (via `stats::describe` over that cell's passed jobs'
-/// `best_energy_milli`), plus that cell's own miner failure state — so a
+/// `best_energy_milli`, and separately over every one of that cell's
+/// records' `wall_ms`), plus that cell's own miner failure state — so a
 /// cell a backend failed partway through is distinguishable from a
 /// complete one without needing the raw `RunReport`.
+///
+/// `session_wall_ms` (one number per cell) and `wall_ms_stats` (a
+/// distribution, one entry per record) answer different questions and must
+/// not be confused: `session_wall_ms` is `RunReport::run_wall_ms`, measured
+/// across the *entire* `run_session` call for that cell — subprocess spawn,
+/// handshake, every job's dispatch, and up to `SHUTDOWN_GRACE_MS * 3` of
+/// teardown (`backend::session::run_session_inner`) — fixed overhead that
+/// has nothing to do with the swept parameters. `wall_ms_stats` is built
+/// from each record's own `JobRecord::wall_ms` (dispatch-to-result for that
+/// one job), which is what actually varies with `num_reads`/`num_sweeps`/
+/// `anneal_time_us`. On a fast backend with a small `num_jobs`, fixed
+/// per-session overhead can dwarf the per-job effect a sweep exists to
+/// measure, so a cell-to-cell comparison must use `wall_ms_stats`, not
+/// `session_wall_ms`.
 fn build_summary(cfg: &SweepConfig, spec: &TopologySpec, outcomes: &[CellOutcome]) -> Summary {
     let totals = Totals {
         jobs: outcomes.iter().map(|o| o.report.records.len()).sum(),
@@ -476,6 +491,16 @@ fn build_summary(cfg: &SweepConfig, spec: &TopologySpec, outcomes: &[CellOutcome
                 .filter(|r| r.passed)
                 .map(|r| milli_to_f64(r.best_energy_milli))
                 .collect();
+            // Every record's own dispatch-to-result wall time, regardless of
+            // pass/fail/reject: unlike `best_energy_milli` (meaningless for
+            // a job that never produced a solution), `JobRecord::wall_ms` is
+            // well-defined for every terminal record.
+            let wall_mss: Vec<f64> = o
+                .report
+                .records
+                .iter()
+                .map(|r| wall_ms_to_f64(r.wall_ms))
+                .collect();
             serde_json::json!({
                 "dir": o.dir_name,
                 "num_reads": o.num_reads,
@@ -484,11 +509,12 @@ fn build_summary(cfg: &SweepConfig, spec: &TopologySpec, outcomes: &[CellOutcome
                 "jobs": o.report.records.len(),
                 "passed": o.report.records.iter().filter(|r| r.passed).count(),
                 "rejected": o.report.records.iter().filter(|r| r.rejected).count(),
-                "wall_ms": o.report.run_wall_ms,
+                "session_wall_ms": o.report.run_wall_ms,
                 "miner_exit_code": o.report.miner_exit_code,
                 "miner_unresponsive": o.report.miner_unresponsive,
                 "miner_stderr_tail": o.report.miner_stderr_tail,
                 "best_energy_milli_stats": stats_json(describe(&energies)),
+                "wall_ms_stats": stats_json(describe(&wall_mss)),
             })
         })
         .collect();
@@ -548,6 +574,17 @@ fn stats_json(stats: Option<Stats>) -> serde_json::Value {
 )]
 fn milli_to_f64(milli: i64) -> f64 {
     milli as f64 / 1000.0
+}
+
+/// `JobRecord::wall_ms` (a `u64` count of milliseconds) to `f64`, for
+/// feeding `stats::describe`.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "a single job's wall time in milliseconds fits comfortably within f64's 52-bit \
+              exact-integer range"
+)]
+fn wall_ms_to_f64(wall_ms: u64) -> f64 {
+    wall_ms as f64
 }
 
 /// A process-wide counter backing [`unique_sock_path`], mirroring
