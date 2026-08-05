@@ -143,6 +143,11 @@ async fn hermetic_sweep_produces_one_file_per_cell_with_matching_reads_and_sweep
                 cell.dir_name
             );
             assert_eq!(
+                record.requested_anneal_time_us, None,
+                "cell {} has no SetTarget, so requested_anneal_time_us is None",
+                cell.dir_name
+            );
+            assert_eq!(
                 record.measured_reads,
                 Some(expected_reads),
                 "cell {} measured_reads must echo the job's wire num_reads via SamplerMeta",

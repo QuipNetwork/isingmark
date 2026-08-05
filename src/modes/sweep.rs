@@ -36,45 +36,45 @@
 //!
 //! Sending every cell's jobs through a single, shared
 //! `backend::run_session` call would seem to save a subprocess spawn per
-//! cell, but it is not safe given the paired design above:
-//! `backend::session`'s dispatch loop tracks in-flight jobs in a
-//! `HashMap<Vec<u8>, (Instant, Job)>` keyed by `job_id`, scoped to the
-//! lifetime of one `run_session` call, and `RunParams::jobs` is a fixed
-//! `Vec<Job>` handed to it up front — dispatch order past that point is
-//! driven by the miner's own requested `credits`, with no guarantee that
-//! cell N's jobs all reach a terminal state before cell N+1's become
-//! dispatch-eligible. Two jobs sharing a `job_id` (guaranteed across cells
-//! by the paired design) could then be simultaneously in flight in the same
-//! session, and a second `HashMap::insert` for that key would silently
-//! overwrite the first — the same class of data loss Task 8 fixed for
-//! duplicate IDs, just relocated from "one file" to "one session's dispatch
-//! map". `backend::session` is already-reviewed code this task must not
-//! modify or reimplement, so the only safe way to use its existing
-//! contract is to never let two cells' jobs coexist inside one
-//! `run_session` call: this mode runs one such call per cell, in sequence,
-//! awaiting each to completion before starting the next.
+//! cell, but it would break per-cell attribution. The paired design makes
+//! `job_id` byte-identical across cells (same seed and index; parameters
+//! never enter the id). With one shared session, every cell's terminal
+//! records land in a single `RunReport.records` list, and
+//! [`crate::record::JobRecord`] carries no cell identifier — only
+//! `job_id`, which is the same for the corresponding problem in every
+//! cell. The session would keep every record (`backend::session` tracks
+//! in-flight work as a per-id FIFO queue, so duplicate ids do not
+//! overwrite each other), but nothing in the record would say which grid
+//! cell produced it. Per-cell sessions remain the boundary that keeps
+//! per-cell attribution possible: each cell's records are written under
+//! that cell's own subdirectory (see [`cell_dir_name`]) after that cell's
+//! `run_session` completes.
 //!
-//! One consequence: the backend subprocess *is* still spawned fresh per
-//! cell, the same cost `throughput` pays per batch — but no longer to
-//! change a session-level `SetTarget` (parameters ride the per-job wire
-//! fields instead), only as the job-id-collision safety boundary described
-//! above.
+//! One consequence: the backend subprocess is still spawned fresh per
+//! cell, the same cost `throughput` pays per batch — not to change a
+//! session-level `SetTarget` (parameters ride the per-job wire fields
+//! instead), but as the attribution boundary described above.
 //!
 //! # A known gap: `anneal_time_us` cannot be verified from a `JobRecord`
 //!
-//! `backend::session::build_result_record` sets
-//! `JobRecord::requested_anneal_time_us` from the session-level `SetTarget`
-//! it was given, not from any wire echo of the job's own requested value
-//! (`SamplerMeta` carries no such field). This mode passes `target: None`
-//! to every session, so every record's `requested_*` fields are `None`
-//! regardless of what an `Annealing` cell put on the job itself. Measured
-//! `reads`/`sweeps` do not have this problem: they come from the miner's
-//! own `SamplerMeta.reads`/`sweeps`, which (for a well-behaved backend)
-//! echoes what it was actually driven at. So a test or an operator can
-//! verify a `Sweeping`-backend sweep's measured `reads`/`sweeps` per cell
-//! from its output directly; verifying an `Annealing`-backend sweep's
-//! `anneal_time_us` per cell cannot be done the same way (there is no
-//! measured anneal-time field).
+//! [`crate::record::JobRecord`] carries three `requested_*` fields
+//! (`requested_reads`, `requested_sweeps`, `requested_anneal_time_us`)
+//! filled from the session-level `SetTarget` when one was sent, and
+//! `measured_reads`/`measured_sweeps` filled from the miner's
+//! `SamplerMeta` when present. This mode passes `target: None` to every
+//! session and puts cell parameters on each job's own `IsingProblem`
+//! fields instead, so a reader of a sweep's JSONL can and cannot verify
+//! the following:
+//!
+//! - `measured_reads` / `measured_sweeps` carry the cell's actual values
+//!   for a backend that reports `SamplerMeta`, so a `Sweeping` sweep's
+//!   parameters are verifiable per cell from its output.
+//! - All three `requested_*` fields are `None` for every sweep record,
+//!   because no `SetTarget` was sent. `None` means "no target was sent",
+//!   not "zero was requested".
+//! - There is no `measured_anneal_time_us` — `SamplerMeta` does not carry
+//!   one — so an `Annealing` sweep's per-cell `anneal_time_us` cannot be
+//!   verified from a `JobRecord` at all. This is the residual gap.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
