@@ -1,5 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
+# WARNING: while this file is active as .cargo/config.toml, every cargo
+# command rewrites Cargo.lock to path sources for the three patched crates.
+# Before you commit, run:
+#
+#   rg -c 'source = "git\+https://gitlab.com/quip.network/quip-miner' Cargo.lock
+#
+# and expect 3. Prefer deleting .cargo/config.toml when you are not
+# co-developing upstream so the committed lock keeps the pinned git rev.
+#
 # Copy this file to .cargo/config.toml (gitignored) to build against a local
 # quip-miner checkout instead of the pinned git rev. Adjust the paths to your
 # checkout location.

@@ -1,0 +1,56 @@
+# IsingMark CI
+#
+# Toolchain matches rust-toolchain.toml (1.97.1). Jobs run in order on a
+# single pipeline stage list; each job is independent for GitLab defaults.
+#
+# Miner binaries: option (a) — fetch the five quip miner binaries onto $PATH
+# and run tests WITHOUT ISINGMARK_ALLOW_MISSING_MINERS=1 so the real probe
+# and session paths execute. Do not set that skip variable in CI.
+
+variables:
+  CARGO_TERM_COLOR: always
+  # Pinned toolchain (must match rust-toolchain.toml channel).
+  RUST_VERSION: "1.97.1"
+  QUIP_MINER_REV: "623af0700d36359687b1e69d866ae782d932a0e9"
+  QUIP_MINER_REPO: "https://gitlab.com/quip.network/quip-miner.git"
+
+default:
+  image: rust:${RUST_VERSION}-bookworm
+  before_script:
+    - rustc --version
+    - cargo --version
+    - rustup component add rustfmt clippy
+    # Fetch miner binaries onto $PATH (upstream script from quip-miner).
+    - apt-get update -qq && apt-get install -y -qq git ca-certificates curl
+    - git clone --filter=blob:none --no-checkout "${QUIP_MINER_REPO}" /tmp/quip-miner
+    - git -C /tmp/quip-miner fetch --depth 1 origin "${QUIP_MINER_REV}"
+    - git -C /tmp/quip-miner checkout "${QUIP_MINER_REV}"
+    - bash /tmp/quip-miner/crates/quip-coordinator/tools/fetch-miners.sh
+    - export PATH="${PATH}:$(pwd)/bin:${HOME}/.local/bin:/tmp/quip-miner/bin"
+    - command -v quip-cpu-sa || ls -la /tmp/quip-miner || true
+
+stages:
+  - check
+  - test
+  - build
+
+fmt:
+  stage: check
+  script:
+    - cargo fmt --check
+
+clippy:
+  stage: check
+  script:
+    - cargo clippy --all-targets -- -D warnings
+
+test:
+  stage: test
+  script:
+    # Intentionally NO ISINGMARK_ALLOW_MISSING_MINERS: real miner path only.
+    - cargo test --all-targets
+
+build_plot:
+  stage: build
+  script:
+    - cargo build --features plot
