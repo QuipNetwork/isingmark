@@ -3,6 +3,7 @@
 
 pub mod backend;
 pub mod cli;
+pub mod config;
 pub mod modes;
 pub mod params;
 pub mod problem;

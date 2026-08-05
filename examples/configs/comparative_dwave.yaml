@@ -1,0 +1,17 @@
+# Complete comparative config: runnable as
+#   isingmark comparative --config examples/configs/comparative_dwave.yaml
+# with no other flags. target_file must point at a prior run's records.jsonl.
+backend: dwave
+topology_preset: smoke
+seed: 0
+output_dir: ./out
+target_file: reference.jsonl
+num_jobs: 20
+max_iterations: 10
+param_curve:
+  min_reads: 8
+  max_reads: 64
+  min_sweeps: 100
+  max_sweeps: 1000
+  min_anneal_us: 5
+  max_anneal_us: 200

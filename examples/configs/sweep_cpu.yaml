@@ -1,0 +1,11 @@
+# Complete sweep config: runnable as
+#   isingmark sweep --config examples/configs/sweep_cpu.yaml
+# with no other flags.
+backend: cpu-sa
+topology_preset: smoke
+seed: 0
+output_dir: ./out
+num_jobs: 20
+param_grid:
+  num_reads: [64, 128]
+  num_sweeps: [100, 500]

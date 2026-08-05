@@ -2,11 +2,15 @@
 //! Command-line argument parsing: the `isingmark` clap [`Parser`], its
 //! subcommands, and the options common to every mode.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::{Args, Parser, Subcommand};
 
 use crate::backend::builtin_registry;
+use crate::config::{
+    self, merge, FileConfig, DEFAULT_HARDNESS, DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_TIME_S,
+    DEFAULT_NUM_JOBS, DEFAULT_NUM_PROBLEMS, DEFAULT_NUM_TRIALS, DEFAULT_OUTPUT_DIR, DEFAULT_SEED,
+};
 use crate::modes::comparative::ComparativeConfig;
 use crate::modes::reproducibility::ReproConfig;
 use crate::modes::scaling::{self, ScalingConfig};
@@ -65,32 +69,41 @@ pub struct CompareArgs {
 
 /// Options common to every mode: which backend and topology to use, how
 /// hard to drive it, and where to write results.
+///
+/// Fields that a YAML config file can also supply are `Option` with **no**
+/// clap `default_value` / `default_value_t`: a clap default would make an
+/// omitted flag indistinguishable from an explicit user value, so
+/// [`merge`] would see `Some(default)` and the config file's value would
+/// be silently ignored. Defaults are applied in each mode's `into_config`
+/// via [`merge`] instead; help text names the default.
 #[derive(Debug, Args)]
 pub struct CommonArgs {
     /// Backend to benchmark. See `backend::builtin_registry` for the fixed
-    /// set of names this maps to.
+    /// set of names this maps to. Required from `--backend` or `--config`.
     #[arg(long, value_parser = parse_backend)]
-    pub backend: String,
-    /// Exactly one of `--topology-preset`/`--topology-file` is required.
+    pub backend: Option<String>,
+    /// Topology source: at most one of the two flags; required from a flag
+    /// or from `--config` after merge.
     #[command(flatten)]
     pub topology_source: TopologySource,
     /// Difficulty in `[0.0, 1.0]`; interpolates between a backend's min and
-    /// max sample parameters.
-    #[arg(long, value_parser = parse_hardness, default_value_t = 0.5)]
-    pub hardness: f64,
-    /// Seed for deterministic problem generation.
-    #[arg(long, default_value_t = 0)]
-    pub seed: u64,
-    /// Directory to write JSONL records and the run summary to. Created if
-    /// it does not already exist.
-    #[arg(long, default_value = "./out")]
-    pub output_dir: PathBuf,
-    /// YAML config file. Flags override values from this file. The flag
-    /// exists for forward compatibility with a later config-loading task,
-    /// but loading is not implemented yet: every mode's `into_config`
-    /// rejects this with an explicit error rather than silently ignoring
-    /// it, since a run at hardcoded defaults with no signal the file was
-    /// never read is worse than refusing to start.
+    /// max sample parameters (default: 0.5).
+    #[arg(long, value_parser = parse_hardness, help = "Difficulty in [0.0, 1.0] (default: 0.5)")]
+    pub hardness: Option<f64>,
+    /// Seed for deterministic problem generation (default: 0).
+    #[arg(long, help = "Seed for deterministic problem generation (default: 0)")]
+    pub seed: Option<u64>,
+    /// Directory to write JSONL records and the run summary to (default: ./out).
+    /// Created if it does not already exist.
+    #[arg(
+        long,
+        help = "Output directory for JSONL records and summary (default: ./out)"
+    )]
+    pub output_dir: Option<PathBuf>,
+    /// YAML config file. Explicit flags override values from this file;
+    /// the file overrides built-in defaults. A config file can supply
+    /// backend, topology, and every other option this mode accepts, so
+    /// `isingmark <mode> --config FILE` is sufficient on its own.
     #[arg(long)]
     pub config: Option<PathBuf>,
     /// Increase output verbosity. Repeatable. Accepted for forward
@@ -99,10 +112,13 @@ pub struct CommonArgs {
     pub verbosity: u8,
 }
 
-/// Exactly one topology source is required: a bundled fixture name, or a
-/// spec file path.
+/// Topology source: a bundled fixture name, or a spec file path. At most
+/// one may be set on the CLI (`multiple = false`). Neither is required at
+/// clap parse time (`required = false`) because a `--config` file may
+/// supply the topology instead; after merge, exactly one source must
+/// resolve or `into_config` errors.
 #[derive(Debug, Args)]
-#[group(required = true, multiple = false)]
+#[group(required = false, multiple = false)]
 pub struct TopologySource {
     /// Bundled fixture name (e.g. `"smoke"`).
     #[arg(long)]
@@ -113,14 +129,9 @@ pub struct TopologySource {
 }
 
 impl TopologySource {
-    /// Resolve to a [`TopologyRef`].
-    ///
-    /// Clap's `required(true), multiple(false)` group on this struct
-    /// already prevents both fields being `None` or both `Some` when
-    /// parsed from `argv`, but this stays a total, error-returning
-    /// function (rather than trusting that invariant with an
-    /// `unreachable!()`) since nothing stops a caller from constructing
-    /// this struct directly, bypassing clap entirely.
+    /// Resolve to a [`TopologyRef`] from this flag pair alone (no config
+    /// file). Prefer [`resolve_topology`] when a config file may also
+    /// supply the topology.
     ///
     /// # Errors
     ///
@@ -140,43 +151,117 @@ impl TopologySource {
     }
 }
 
+/// Load the optional YAML config named by `path`, or return an empty
+/// [`FileConfig`] when no path was given.
+fn load_optional_config(path: Option<&Path>) -> Result<FileConfig, String> {
+    match path {
+        None => Ok(FileConfig::default()),
+        Some(p) => config::load_config(p).map_err(|e| e.to_string()),
+    }
+}
+
+/// Resolve backend: flag beats file; error if neither supplied.
+fn resolve_backend(
+    flag: Option<String>,
+    file: Option<String>,
+    config_path: Option<&Path>,
+) -> Result<String, String> {
+    match (flag, file) {
+        (Some(b), _) | (None, Some(b)) => {
+            // File values skip clap's value_parser; re-check the registry.
+            parse_backend(&b)
+        }
+        (None, None) => Err(missing_required("backend", "--backend", config_path)),
+    }
+}
+
+/// Resolve topology: flag beats file; error if neither supplied. Flag
+/// mutual exclusion is clap's job; file mutual exclusion is checked here.
+fn resolve_topology(
+    flag: &TopologySource,
+    file: &FileConfig,
+    config_path: Option<&Path>,
+) -> Result<TopologyRef, String> {
+    match (&flag.topology_preset, &flag.topology_file) {
+        (Some(name), None) => Ok(TopologyRef::Preset(name.clone())),
+        (None, Some(path)) => Ok(TopologyRef::File(path.clone())),
+        (Some(_), Some(_)) => {
+            Err("--topology-preset and --topology-file are mutually exclusive".to_string())
+        }
+        (None, None) => match (&file.topology_preset, &file.topology_file) {
+            (Some(name), None) => Ok(TopologyRef::Preset(name.clone())),
+            (None, Some(path)) => Ok(TopologyRef::File(path.clone())),
+            (Some(_), Some(_)) => Err(
+                "config file sets both topology_preset and topology_file; only one is allowed"
+                    .to_string(),
+            ),
+            (None, None) => Err(missing_required(
+                "topology",
+                "--topology-preset/--topology-file",
+                config_path,
+            )),
+        },
+    }
+}
+
+/// Build the "not set by FLAG and absent from …" message shape used for
+/// backend and topology (and any other required-after-merge field).
+fn missing_required(what: &str, flag: &str, config_path: Option<&Path>) -> String {
+    match config_path {
+        Some(p) => format!(
+            "no {what}: not set by {flag} and absent from {}",
+            p.display()
+        ),
+        None => format!("no {what}: not set by {flag} and no --config file was given"),
+    }
+}
+
 /// `isingmark throughput` arguments.
 #[derive(Debug, Args)]
 pub struct ThroughputArgs {
     #[command(flatten)]
     pub common: CommonArgs,
     /// How long to keep dispatching jobs, e.g. `"30s"`, `"5m"`, `"2h"`.
+    /// Required from `--duration` or `--config`.
     #[arg(long, value_parser = parse_duration_arg)]
-    pub duration: f64,
+    pub duration: Option<f64>,
 }
 
 impl ThroughputArgs {
-    /// Build a [`ThroughputConfig`] from parsed arguments.
+    /// Build a [`ThroughputConfig`] from parsed arguments, merging
+    /// `--config` file values under explicit flags.
     ///
     /// # Errors
     ///
-    /// Returns a message if the mutually exclusive topology group was
-    /// somehow left unresolved (see [`TopologySource::to_ref`]), or if
-    /// `--config` was given (see [`CommonArgs::config`]'s doc comment:
-    /// config loading is not implemented yet, and silently ignoring the
-    /// flag would run at hardcoded defaults with no signal that the file
-    /// was never read).
+    /// Returns a message if the config file cannot be loaded, if a
+    /// required field (backend, topology, duration) is set by neither flag
+    /// nor file, or if a file value fails validation.
     pub fn into_config(self) -> Result<ThroughputConfig, String> {
-        if self.common.config.is_some() {
-            return Err(
-                "--config is not implemented yet; YAML config loading lands in a later task \
-                 (drop the flag and pass every option on the command line for now)"
-                    .to_string(),
-            );
-        }
-        let topology = self.common.topology_source.to_ref()?;
+        let config_path = self.common.config.as_deref();
+        let file = load_optional_config(config_path)?;
+        let backend = resolve_backend(self.common.backend, file.backend.clone(), config_path)?;
+        let topology = resolve_topology(&self.common.topology_source, &file, config_path)?;
+        let hardness = merge(self.common.hardness, file.hardness, DEFAULT_HARDNESS);
+        let seed = merge(self.common.seed, file.seed, DEFAULT_SEED);
+        let output_dir = merge(
+            self.common.output_dir,
+            file.output_dir.clone(),
+            PathBuf::from(DEFAULT_OUTPUT_DIR),
+        );
+        let duration_s = match (self.duration, file.duration.as_deref()) {
+            (Some(d), _) => d,
+            (None, Some(s)) => throughput::parse_duration(s).map_err(|e| e.to_string())?,
+            (None, None) => {
+                return Err(missing_required("duration", "--duration", config_path));
+            }
+        };
         Ok(ThroughputConfig {
-            backend: self.common.backend,
+            backend,
             topology,
-            hardness: self.common.hardness,
-            duration_s: self.duration,
-            seed: self.common.seed,
-            output_dir: self.common.output_dir,
+            hardness,
+            duration_s,
+            seed,
+            output_dir,
             backend_bin_override: None,
             backend_args_override: None,
         })
@@ -195,39 +280,47 @@ pub struct SweepArgs {
     /// metal), or `num_reads` + `anneal_time_us` for an annealing one
     /// (dwave). `--hardness` (from `CommonArgs`) is not used by this mode
     /// — cell parameters come entirely from this grid instead of a
-    /// hardness curve.
+    /// hardness curve. Required from `--param-grid` or `--config`.
     #[arg(long, value_parser = parse_param_grid_arg)]
-    pub param_grid: ParamGrid,
-    /// Jobs drawn per cell. Every cell draws the identical sequence (same
-    /// seed, same count) — see `modes::sweep`'s module docs for why.
-    #[arg(long, value_parser = parse_num_jobs, default_value_t = 20)]
-    pub num_jobs: u32,
+    pub param_grid: Option<ParamGrid>,
+    /// Jobs drawn per cell (default: 20). Every cell draws the identical
+    /// sequence (same seed, same count) — see `modes::sweep`'s module docs
+    /// for why.
+    #[arg(long, value_parser = parse_num_jobs, help = "Jobs drawn per cell (default: 20)")]
+    pub num_jobs: Option<u32>,
 }
 
 impl SweepArgs {
-    /// Build a [`SweepConfig`] from parsed arguments.
+    /// Build a [`SweepConfig`] from parsed arguments, merging `--config`
+    /// file values under explicit flags.
     ///
     /// # Errors
     ///
-    /// Same conditions as [`ThroughputArgs::into_config`]: an unresolved
-    /// mutually exclusive topology group, or `--config` (not implemented
-    /// yet).
+    /// Returns a message if the config file cannot be loaded, or if a
+    /// required field is set by neither flag nor file.
     pub fn into_config(self) -> Result<SweepConfig, String> {
-        if self.common.config.is_some() {
-            return Err(
-                "--config is not implemented yet; YAML config loading lands in a later task \
-                 (drop the flag and pass every option on the command line for now)"
-                    .to_string(),
-            );
-        }
-        let topology = self.common.topology_source.to_ref()?;
+        let config_path = self.common.config.as_deref();
+        let file = load_optional_config(config_path)?;
+        let backend = resolve_backend(self.common.backend, file.backend.clone(), config_path)?;
+        let topology = resolve_topology(&self.common.topology_source, &file, config_path)?;
+        let seed = merge(self.common.seed, file.seed, DEFAULT_SEED);
+        let output_dir = merge(
+            self.common.output_dir,
+            file.output_dir.clone(),
+            PathBuf::from(DEFAULT_OUTPUT_DIR),
+        );
+        let grid = self
+            .param_grid
+            .or(file.param_grid.clone())
+            .ok_or_else(|| missing_required("param-grid", "--param-grid", config_path))?;
+        let num_jobs = merge(self.num_jobs, file.num_jobs, DEFAULT_NUM_JOBS);
         Ok(SweepConfig {
-            backend: self.common.backend,
+            backend,
             topology,
-            grid: self.param_grid,
-            num_jobs: self.num_jobs,
-            seed: self.common.seed,
-            output_dir: self.common.output_dir,
+            grid,
+            num_jobs,
+            seed,
+            output_dir,
             backend_bin_override: None,
             backend_args_override: None,
         })
@@ -262,47 +355,76 @@ pub struct TttArgs {
     // enforced the same way `TopologySource`'s own required group is,
     // rather than deferring to `modes::ttt::run_ttt`'s own
     // `ModeError::EmptyTargets` for a mistake catchable this early.
+    // Not `required = true`: a `--config` file may supply the list. An
+    // empty Vec after clap parse means the flag was absent; `into_config`
+    // then takes the file value or errors.
     #[arg(
         long,
-        required = true,
         allow_hyphen_values = true,
         value_delimiter = ',',
         value_parser = parse_one_energy_target_arg
     )]
     pub energy_targets: Vec<i64>,
-    /// Trials attempted per target, before any `--max-time-s` cutoff.
-    #[arg(long, value_parser = parse_num_trials, default_value_t = 20)]
-    pub num_trials: u32,
-    /// Wall-clock budget per target, in seconds, checked between trials.
-    #[arg(long, value_parser = parse_max_time_s, default_value_t = 30.0)]
-    pub max_time_s: f64,
+    /// Trials attempted per target, before any `--max-time-s` cutoff
+    /// (default: 20).
+    #[arg(long, value_parser = parse_num_trials, help = "Trials attempted per target (default: 20)")]
+    pub num_trials: Option<u32>,
+    /// Wall-clock budget per target, in seconds, checked between trials
+    /// (default: 30.0).
+    #[arg(long, value_parser = parse_max_time_s, help = "Wall-clock budget per target in seconds (default: 30.0)")]
+    pub max_time_s: Option<f64>,
 }
 
 impl TttArgs {
-    /// Build a [`TttConfig`] from parsed arguments.
+    /// Build a [`TttConfig`] from parsed arguments, merging `--config`
+    /// file values under explicit flags.
     ///
     /// # Errors
     ///
-    /// Same conditions as [`ThroughputArgs::into_config`]: an unresolved
-    /// mutually exclusive topology group, or `--config` (not implemented
-    /// yet).
+    /// Returns a message if the config file cannot be loaded, or if a
+    /// required field is set by neither flag nor file.
     pub fn into_config(self) -> Result<TttConfig, String> {
-        if self.common.config.is_some() {
-            return Err(
-                "--config is not implemented yet; YAML config loading lands in a later task \
-                 (drop the flag and pass every option on the command line for now)"
-                    .to_string(),
-            );
-        }
-        let topology = self.common.topology_source.to_ref()?;
+        let config_path = self.common.config.as_deref();
+        let file = load_optional_config(config_path)?;
+        let backend = resolve_backend(self.common.backend, file.backend.clone(), config_path)?;
+        let topology = resolve_topology(&self.common.topology_source, &file, config_path)?;
+        let seed = merge(self.common.seed, file.seed, DEFAULT_SEED);
+        let output_dir = merge(
+            self.common.output_dir,
+            file.output_dir.clone(),
+            PathBuf::from(DEFAULT_OUTPUT_DIR),
+        );
+        let energy_targets_milli = if self.energy_targets.is_empty() {
+            match &file.energy_targets {
+                Some(vals) if !vals.is_empty() => vals
+                    .iter()
+                    .map(|v| {
+                        // Reuse the shared natural-to-milli conversion so
+                        // file and flag paths cannot drift on rounding.
+                        ttt::parse_one_energy_target(&v.to_string()).map_err(|e| e.to_string())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                _ => {
+                    return Err(missing_required(
+                        "energy-targets",
+                        "--energy-targets",
+                        config_path,
+                    ));
+                }
+            }
+        } else {
+            self.energy_targets
+        };
+        let num_trials = merge(self.num_trials, file.num_trials, DEFAULT_NUM_TRIALS);
+        let max_time_s = merge(self.max_time_s, file.max_time_s, DEFAULT_MAX_TIME_S);
         Ok(TttConfig {
-            backend: self.common.backend,
+            backend,
             topology,
-            energy_targets_milli: self.energy_targets,
-            num_trials: self.num_trials,
-            max_time_s: self.max_time_s,
-            seed: self.common.seed,
-            output_dir: self.common.output_dir,
+            energy_targets_milli,
+            num_trials,
+            max_time_s,
+            seed,
+            output_dir,
             backend_bin_override: None,
             backend_args_override: None,
         })
@@ -317,46 +439,59 @@ pub struct ComparativeArgs {
     /// Reference benchmark JSONL file (e.g. another run's `records.jsonl`)
     /// to match this backend's best-energy distribution against.
     /// `--hardness` (from `CommonArgs`) is not used by this mode — hardness
-    /// is the value this search computes, not an input to it.
+    /// is the value this search computes, not an input to it. Required from
+    /// `--target-file` or `--config`.
     #[arg(long)]
-    pub target_file: PathBuf,
-    /// Jobs drawn per hardness evaluation. Every evaluation draws the
-    /// identical sequence (same seed, same count) — see
+    pub target_file: Option<PathBuf>,
+    /// Jobs drawn per hardness evaluation (default: 20). Every evaluation
+    /// draws the identical sequence (same seed, same count) — see
     /// `modes::comparative`'s module docs for why.
-    #[arg(long, value_parser = parse_num_jobs, default_value_t = 20)]
-    pub num_jobs: u32,
+    #[arg(long, value_parser = parse_num_jobs, help = "Jobs drawn per hardness evaluation (default: 20)")]
+    pub num_jobs: Option<u32>,
     /// Maximum number of evaluations to run before reporting whatever
-    /// hardness the bracket has narrowed to. The search may stop earlier
-    /// once the bracket narrows below `0.01`.
-    #[arg(long, value_parser = parse_max_iterations, default_value_t = 10)]
-    pub max_iterations: u32,
+    /// hardness the bracket has narrowed to (default: 10). The search may
+    /// stop earlier once the bracket narrows below `0.01`.
+    #[arg(long, value_parser = parse_max_iterations, help = "Max hardness-search evaluations (default: 10)")]
+    pub max_iterations: Option<u32>,
 }
 
 impl ComparativeArgs {
-    /// Build a [`ComparativeConfig`] from parsed arguments.
+    /// Build a [`ComparativeConfig`] from parsed arguments, merging
+    /// `--config` file values under explicit flags.
     ///
     /// # Errors
     ///
-    /// Same conditions as [`ThroughputArgs::into_config`]: an unresolved
-    /// mutually exclusive topology group, or `--config` (not implemented
-    /// yet).
+    /// Returns a message if the config file cannot be loaded, or if a
+    /// required field is set by neither flag nor file.
     pub fn into_config(self) -> Result<ComparativeConfig, String> {
-        if self.common.config.is_some() {
-            return Err(
-                "--config is not implemented yet; YAML config loading lands in a later task \
-                 (drop the flag and pass every option on the command line for now)"
-                    .to_string(),
-            );
-        }
-        let topology = self.common.topology_source.to_ref()?;
+        let config_path = self.common.config.as_deref();
+        let file = load_optional_config(config_path)?;
+        let backend = resolve_backend(self.common.backend, file.backend.clone(), config_path)?;
+        let topology = resolve_topology(&self.common.topology_source, &file, config_path)?;
+        let seed = merge(self.common.seed, file.seed, DEFAULT_SEED);
+        let output_dir = merge(
+            self.common.output_dir,
+            file.output_dir.clone(),
+            PathBuf::from(DEFAULT_OUTPUT_DIR),
+        );
+        let target_file = self
+            .target_file
+            .or(file.target_file.clone())
+            .ok_or_else(|| missing_required("target-file", "--target-file", config_path))?;
+        let num_jobs = merge(self.num_jobs, file.num_jobs, DEFAULT_NUM_JOBS);
+        let max_iterations = merge(
+            self.max_iterations,
+            file.max_iterations,
+            DEFAULT_MAX_ITERATIONS,
+        );
         Ok(ComparativeConfig {
-            backend: self.common.backend,
+            backend,
             topology,
-            target_file: self.target_file,
-            num_jobs: self.num_jobs,
-            max_iterations: self.max_iterations,
-            seed: self.common.seed,
-            output_dir: self.common.output_dir,
+            target_file,
+            num_jobs,
+            max_iterations,
+            seed,
+            output_dir,
             backend_bin_override: None,
             backend_args_override: None,
         })
@@ -366,45 +501,46 @@ impl ComparativeArgs {
 /// `isingmark scaling` arguments. Does not flatten [`CommonArgs`]: unlike
 /// every other mode, scaling generates its own topology per requested node
 /// count (see `modes::scaling`'s module doc) rather than accepting one via
-/// `--topology-preset`/`--topology-file`, so `CommonArgs::topology_source`'s
-/// required mutually exclusive group does not apply here. Every other
-/// `CommonArgs` field this mode does use (`--backend`, `--hardness`,
-/// `--seed`, `--output-dir`, `--config`, `--verbose`) is repeated directly
-/// below instead, with the identical value parsers.
+/// `--topology-preset`/`--topology-file`, so `CommonArgs::topology_source`
+/// does not apply here. Every other `CommonArgs` field this mode does use
+/// (`--backend`, `--hardness`, `--seed`, `--output-dir`, `--config`,
+/// `--verbose`) is repeated directly below instead, with the identical
+/// value parsers and the same no-clap-default rule (see [`CommonArgs`]).
 #[derive(Debug, Args)]
 pub struct ScalingArgs {
-    /// Backend to benchmark. See `backend::builtin_registry` for the fixed
-    /// set of names this maps to.
+    /// Backend to benchmark. Required from `--backend` or `--config`.
     #[arg(long, value_parser = parse_backend)]
-    pub backend: String,
+    pub backend: Option<String>,
     /// Node counts to generate a random 3-regular topology for,
     /// comma-separated (e.g. `"8,16,32"`). Each must be even and at least 4
     /// (a 3-regular graph is impossible otherwise — every node needs 3
     /// distinct neighbours), and the list must not repeat a value (two
-    /// identical sizes would collide on one output subdirectory).
+    /// identical sizes would collide on one output subdirectory). Required
+    /// from `--sizes` or `--config`.
     #[arg(
         long,
-        required = true,
         value_delimiter = ',',
         value_parser = parse_one_scaling_size_arg
     )]
     pub sizes: Vec<usize>,
-    /// Difficulty in `[0.0, 1.0]`, held fixed across every size.
-    #[arg(long, value_parser = parse_hardness, default_value_t = 0.5)]
-    pub hardness: f64,
-    /// Jobs drawn per size.
-    #[arg(long, value_parser = parse_num_jobs, default_value_t = 20)]
-    pub num_jobs: u32,
+    /// Difficulty in `[0.0, 1.0]`, held fixed across every size (default: 0.5).
+    #[arg(long, value_parser = parse_hardness, help = "Difficulty in [0.0, 1.0] (default: 0.5)")]
+    pub hardness: Option<f64>,
+    /// Jobs drawn per size (default: 20).
+    #[arg(long, value_parser = parse_num_jobs, help = "Jobs drawn per size (default: 20)")]
+    pub num_jobs: Option<u32>,
     /// Seed for deterministic problem generation and deterministic
-    /// topology generation (see `modes::scaling`'s module doc).
-    #[arg(long, default_value_t = 0)]
-    pub seed: u64,
-    /// Directory to write JSONL records and the run summary to. Created if
-    /// it does not already exist.
-    #[arg(long, default_value = "./out")]
-    pub output_dir: PathBuf,
-    /// YAML config file. See `CommonArgs::config`'s doc: not implemented
-    /// yet.
+    /// topology generation (default: 0).
+    #[arg(long, help = "Seed for problem and topology generation (default: 0)")]
+    pub seed: Option<u64>,
+    /// Directory to write JSONL records and the run summary to (default: ./out).
+    #[arg(
+        long,
+        help = "Output directory for JSONL records and summary (default: ./out)"
+    )]
+    pub output_dir: Option<PathBuf>,
+    /// YAML config file. Explicit flags override values from this file;
+    /// the file overrides built-in defaults.
     #[arg(long)]
     pub config: Option<PathBuf>,
     /// Increase output verbosity. Repeatable. Accepted for forward
@@ -414,27 +550,49 @@ pub struct ScalingArgs {
 }
 
 impl ScalingArgs {
-    /// Build a [`ScalingConfig`] from parsed arguments.
+    /// Build a [`ScalingConfig`] from parsed arguments, merging `--config`
+    /// file values under explicit flags.
     ///
     /// # Errors
     ///
-    /// Returns a message if `--config` was given (see `CommonArgs::config`'s
-    /// doc comment: config loading is not implemented yet).
+    /// Returns a message if the config file cannot be loaded, or if a
+    /// required field is set by neither flag nor file.
     pub fn into_config(self) -> Result<ScalingConfig, String> {
-        if self.config.is_some() {
-            return Err(
-                "--config is not implemented yet; YAML config loading lands in a later task \
-                 (drop the flag and pass every option on the command line for now)"
-                    .to_string(),
-            );
-        }
+        let config_path = self.config.as_deref();
+        let file = load_optional_config(config_path)?;
+        let backend = resolve_backend(self.backend, file.backend.clone(), config_path)?;
+        let hardness = merge(self.hardness, file.hardness, DEFAULT_HARDNESS);
+        let seed = merge(self.seed, file.seed, DEFAULT_SEED);
+        let output_dir = merge(
+            self.output_dir,
+            file.output_dir.clone(),
+            PathBuf::from(DEFAULT_OUTPUT_DIR),
+        );
+        let num_jobs = merge(self.num_jobs, file.num_jobs, DEFAULT_NUM_JOBS);
+        let sizes = if self.sizes.is_empty() {
+            match &file.sizes {
+                Some(s) if !s.is_empty() => {
+                    // Re-validate each size with the same rules as the flag
+                    // value_parser so a file cannot smuggle an odd/too-small
+                    // size past clap.
+                    for &n in s {
+                        scaling::parse_one_scaling_size(&n.to_string())
+                            .map_err(|e| e.to_string())?;
+                    }
+                    s.clone()
+                }
+                _ => return Err(missing_required("sizes", "--sizes", config_path)),
+            }
+        } else {
+            self.sizes
+        };
         Ok(ScalingConfig {
-            backend: self.backend,
-            sizes: self.sizes,
-            hardness: self.hardness,
-            num_jobs: self.num_jobs,
-            seed: self.seed,
-            output_dir: self.output_dir,
+            backend,
+            sizes,
+            hardness,
+            num_jobs,
+            seed,
+            output_dir,
             backend_bin_override: None,
             backend_args_override: None,
         })
@@ -446,11 +604,11 @@ impl ScalingArgs {
 pub struct ReproducibilityArgs {
     #[command(flatten)]
     pub common: CommonArgs,
-    /// Jobs drawn per run. Both runs draw the identical sequence (same
-    /// seed, same count) against the same topology — see
+    /// Jobs drawn per run (default: 20). Both runs draw the identical
+    /// sequence (same seed, same count) against the same topology — see
     /// `modes::reproducibility`'s module doc for why.
-    #[arg(long, value_parser = parse_num_jobs, default_value_t = 20)]
-    pub num_problems: u32,
+    #[arg(long, value_parser = parse_num_jobs, help = "Jobs drawn per run (default: 20)")]
+    pub num_problems: Option<u32>,
     /// Difficulty in `[0.0, 1.0]` for the second run. Defaults to
     /// `--hardness` (the ordinary "is this backend reproducible at a fixed
     /// effort" use case — see `modes::reproducibility`'s module doc); set
@@ -461,32 +619,36 @@ pub struct ReproducibilityArgs {
 }
 
 impl ReproducibilityArgs {
-    /// Build a [`ReproConfig`] from parsed arguments.
+    /// Build a [`ReproConfig`] from parsed arguments, merging `--config`
+    /// file values under explicit flags.
     ///
     /// # Errors
     ///
-    /// Same conditions as [`ThroughputArgs::into_config`]: an unresolved
-    /// mutually exclusive topology group, or `--config` (not implemented
-    /// yet).
+    /// Returns a message if the config file cannot be loaded, or if a
+    /// required field is set by neither flag nor file.
     pub fn into_config(self) -> Result<ReproConfig, String> {
-        if self.common.config.is_some() {
-            return Err(
-                "--config is not implemented yet; YAML config loading lands in a later task \
-                 (drop the flag and pass every option on the command line for now)"
-                    .to_string(),
-            );
-        }
-        let topology = self.common.topology_source.to_ref()?;
-        let hardness_a = self.common.hardness;
-        let hardness_b = self.hardness_b.unwrap_or(hardness_a);
+        let config_path = self.common.config.as_deref();
+        let file = load_optional_config(config_path)?;
+        let backend = resolve_backend(self.common.backend, file.backend.clone(), config_path)?;
+        let topology = resolve_topology(&self.common.topology_source, &file, config_path)?;
+        let hardness_a = merge(self.common.hardness, file.hardness, DEFAULT_HARDNESS);
+        // hardness_b: flag > file > hardness_a (not the global default).
+        let hardness_b = self.hardness_b.or(file.hardness_b).unwrap_or(hardness_a);
+        let seed = merge(self.common.seed, file.seed, DEFAULT_SEED);
+        let output_dir = merge(
+            self.common.output_dir,
+            file.output_dir.clone(),
+            PathBuf::from(DEFAULT_OUTPUT_DIR),
+        );
+        let num_problems = merge(self.num_problems, file.num_problems, DEFAULT_NUM_PROBLEMS);
         Ok(ReproConfig {
-            backend: self.common.backend,
+            backend,
             topology,
-            num_problems: self.num_problems,
+            num_problems,
             hardness_a,
             hardness_b,
-            seed: self.common.seed,
-            output_dir: self.common.output_dir,
+            seed,
+            output_dir,
             backend_bin_override: None,
             backend_args_override: None,
         })
@@ -618,24 +780,24 @@ fn parse_backend(s: &str) -> Result<String, String> {
     }
 }
 
-/// `--hardness` value parser. clap's default `f64` parser is
-/// `f64::from_str`, which accepts `nan`/`inf`/`-inf`;
+/// `--hardness` / `--hardness-b` value parser. clap's default `f64` parser
+/// is `f64::from_str`, which accepts `nan`/`inf`/`-inf`;
 /// `params::ParamCurve::resolve` is total and silently maps `NaN` to the
 /// curve minimum, so an un-guarded `--hardness nan` would exit cleanly with
 /// a full, successful-looking result set while every job silently ran at
 /// the curve's easiest setting. Reject anything non-finite or outside
-/// `[0.0, 1.0]` here, at parse time, instead.
+/// `[0.0, 1.0]` here, at parse time, instead — reusing
+/// [`config::validate_hardness`] so the file-config path cannot diverge.
 fn parse_hardness(s: &str) -> Result<f64, String> {
     let value: f64 = s
         .parse()
         .map_err(|_| format!("{s:?} is not a valid number"))?;
+    // Prefer the raw token in the non-finite message (matches prior CLI
+    // wording that quoted `nan`/`inf` as the user typed them).
     if !value.is_finite() {
         return Err(format!("--hardness must be a finite number, got {s:?}"));
     }
-    if !(0.0..=1.0).contains(&value) {
-        return Err(format!("--hardness must be in [0.0, 1.0], got {value}"));
-    }
-    Ok(value)
+    config::validate_hardness(value, "--hardness")
 }
 
 /// `--duration` value parser, delegating to `throughput::parse_duration`.
@@ -786,14 +948,14 @@ mod tests {
         ])
         .expect("valid invocation parses");
         let args = throughput_args(cli);
-        assert_eq!(args.common.backend, "cpu-sa");
+        assert_eq!(args.common.backend.as_deref(), Some("cpu-sa"));
         assert_eq!(
             args.common.topology_source.topology_preset.as_deref(),
             Some("smoke")
         );
-        assert!((args.common.hardness - 0.5).abs() < f64::EPSILON);
-        assert!((args.duration - 30.0).abs() < f64::EPSILON);
-        assert_eq!(args.common.seed, 42);
+        assert_eq!(args.common.hardness, Some(0.5));
+        assert_eq!(args.duration, Some(30.0));
+        assert_eq!(args.common.seed, Some(42));
     }
 
     #[test]
@@ -849,8 +1011,40 @@ mod tests {
 
     #[test]
     fn missing_topology_source_is_rejected() {
-        parse(&["throughput", "--backend", "cpu-sa", "--duration", "30s"])
-            .expect_err("one of --topology-preset/--topology-file is required");
+        // Topology is no longer clap-required (a --config file may supply
+        // it); into_config must still reject a run with no topology from
+        // either source.
+        let cli = parse(&["throughput", "--backend", "cpu-sa", "--duration", "30s"])
+            .expect("clap accepts missing topology when no --config");
+        let err = throughput_args(cli)
+            .into_config()
+            .expect_err("topology required after merge");
+        assert!(
+            err.contains("topology"),
+            "error must name topology, got: {err}"
+        );
+        assert!(
+            err.contains("no --config file was given"),
+            "error must note absence of config file, got: {err}"
+        );
+    }
+
+    #[test]
+    fn missing_backend_is_rejected_naming_flag_and_no_config() {
+        let cli = parse(&[
+            "throughput",
+            "--topology-preset",
+            "smoke",
+            "--duration",
+            "30s",
+        ])
+        .expect("clap accepts missing backend when no --config");
+        let err = throughput_args(cli)
+            .into_config()
+            .expect_err("backend required after merge");
+        assert!(err.contains("backend"), "got: {err}");
+        assert!(err.contains("--backend"), "got: {err}");
+        assert!(err.contains("no --config file was given"), "got: {err}");
     }
 
     #[test]
@@ -920,30 +1114,60 @@ mod tests {
         assert_eq!(cfg.backend_args_override, None);
     }
 
-    /// `--config` is plan-mandated to exist as a flag, but loading is not
-    /// implemented yet; `into_config` must reject it explicitly rather than
-    /// silently running at hardcoded defaults with no signal the file was
-    /// never read.
+    /// End-to-end: a real config file supplies hardness when the flag is
+    /// absent, and that value reaches the resulting mode config. Distinct
+    /// from the default (0.5) so a merge that ignores the file cannot pass.
     #[test]
-    fn config_flag_is_rejected_until_config_loading_is_implemented() {
+    fn throughput_config_file_supplies_hardness_when_flag_absent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("t.yaml");
+        std::fs::write(
+            &path,
+            "backend: cpu-sa\ntopology_preset: smoke\nhardness: 0.7\nduration: 30s\n",
+        )
+        .expect("write");
+        let cli = parse(&["throughput", "--config", path.to_str().expect("utf8 path")])
+            .expect("clap accepts --config alone");
+        let cfg = throughput_args(cli)
+            .into_config()
+            .expect("complete config file must build ThroughputConfig");
+        assert_eq!(cfg.backend, "cpu-sa");
+        assert_eq!(
+            cfg.topology,
+            crate::modes::TopologyRef::Preset("smoke".to_string())
+        );
+        assert!(
+            (cfg.hardness - 0.7).abs() < f64::EPSILON,
+            "file hardness 0.7 must reach mode config, got {}",
+            cfg.hardness
+        );
+        assert!((cfg.duration_s - 30.0).abs() < f64::EPSILON);
+    }
+
+    /// Explicit flag overrides the config file (distinct values).
+    #[test]
+    fn throughput_explicit_flag_overrides_config_file_hardness() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("t.yaml");
+        std::fs::write(
+            &path,
+            "backend: cpu-sa\ntopology_preset: smoke\nhardness: 0.7\nduration: 30s\n",
+        )
+        .expect("write");
         let cli = parse(&[
             "throughput",
-            "--backend",
-            "cpu-sa",
-            "--topology-preset",
-            "smoke",
-            "--duration",
-            "30s",
             "--config",
-            "bench.yaml",
+            path.to_str().expect("utf8 path"),
+            "--hardness",
+            "0.9",
         ])
-        .expect("clap itself accepts --config; rejection happens in into_config");
-        let args = throughput_args(cli);
-        let err = args
-            .into_config()
-            .expect_err("--config must be rejected until it is implemented");
-        assert!(err.contains("--config"));
-        assert!(err.contains("not implemented"));
+        .expect("parse");
+        let cfg = throughput_args(cli).into_config().expect("merge");
+        assert!(
+            (cfg.hardness - 0.9).abs() < f64::EPSILON,
+            "flag 0.9 must beat file 0.7, got {}",
+            cfg.hardness
+        );
     }
 
     #[test]
@@ -965,11 +1189,12 @@ mod tests {
         ])
         .expect("valid invocation parses");
         let args = sweep_args(cli);
-        assert_eq!(args.common.backend, "cpu-sa");
-        assert_eq!(args.param_grid.num_reads, vec![64, 128]);
-        assert_eq!(args.param_grid.num_sweeps, vec![100, 500]);
-        assert_eq!(args.num_jobs, 10);
-        assert_eq!(args.common.seed, 42);
+        assert_eq!(args.common.backend.as_deref(), Some("cpu-sa"));
+        let grid = args.param_grid.as_ref().expect("param_grid set");
+        assert_eq!(grid.num_reads, vec![64, 128]);
+        assert_eq!(grid.num_sweeps, vec![100, 500]);
+        assert_eq!(args.num_jobs, Some(10));
+        assert_eq!(args.common.seed, Some(42));
     }
 
     /// A malformed `--param-grid` (here, a `0` value) must be rejected at
@@ -1047,25 +1272,19 @@ mod tests {
     }
 
     #[test]
-    fn sweep_config_flag_is_rejected_until_config_loading_is_implemented() {
-        let cli = parse(&[
-            "sweep",
-            "--backend",
-            "cpu-sa",
-            "--topology-preset",
-            "smoke",
-            "--param-grid",
-            r#"{"num_reads":[64]}"#,
-            "--config",
-            "bench.yaml",
-        ])
-        .expect("clap itself accepts --config; rejection happens in into_config");
-        let args = sweep_args(cli);
-        let err = args
-            .into_config()
-            .expect_err("--config must be rejected until it is implemented");
-        assert!(err.contains("--config"));
-        assert!(err.contains("not implemented"));
+    fn sweep_config_file_supplies_param_grid_when_flag_absent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("s.yaml");
+        std::fs::write(
+            &path,
+            "backend: cpu-sa\ntopology_preset: smoke\nparam_grid:\n  num_reads: [64, 128]\n  num_sweeps: [100]\nnum_jobs: 5\n",
+        )
+        .expect("write");
+        let cli = parse(&["sweep", "--config", path.to_str().expect("utf8")]).expect("parse");
+        let cfg = sweep_args(cli).into_config().expect("complete config");
+        assert_eq!(cfg.grid.num_reads, vec![64, 128]);
+        assert_eq!(cfg.grid.num_sweeps, vec![100]);
+        assert_eq!(cfg.num_jobs, 5);
     }
 
     #[test]
@@ -1089,11 +1308,11 @@ mod tests {
         ])
         .expect("valid invocation parses");
         let args = ttt_args(cli);
-        assert_eq!(args.common.backend, "cpu-sa");
+        assert_eq!(args.common.backend.as_deref(), Some("cpu-sa"));
         assert_eq!(args.energy_targets, vec![-5_000, -10_000, -15_000]);
-        assert_eq!(args.num_trials, 10);
-        assert!((args.max_time_s - 5.0).abs() < f64::EPSILON);
-        assert_eq!(args.common.seed, 42);
+        assert_eq!(args.num_trials, Some(10));
+        assert_eq!(args.max_time_s, Some(5.0));
+        assert_eq!(args.common.seed, Some(42));
     }
 
     /// `--energy-targets` accepts natural units, not milli — pinned here at
@@ -1234,25 +1453,19 @@ mod tests {
     }
 
     #[test]
-    fn ttt_config_flag_is_rejected_until_config_loading_is_implemented() {
-        let cli = parse(&[
-            "ttt",
-            "--backend",
-            "cpu-sa",
-            "--topology-preset",
-            "smoke",
-            "--energy-targets",
-            "-5",
-            "--config",
-            "bench.yaml",
-        ])
-        .expect("clap itself accepts --config; rejection happens in into_config");
-        let args = ttt_args(cli);
-        let err = args
-            .into_config()
-            .expect_err("--config must be rejected until it is implemented");
-        assert!(err.contains("--config"));
-        assert!(err.contains("not implemented"));
+    fn ttt_config_file_supplies_energy_targets_when_flag_absent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("ttt.yaml");
+        std::fs::write(
+            &path,
+            "backend: cpu-sa\ntopology_preset: smoke\nenergy_targets: [-5.0, -10.0]\nnum_trials: 7\nmax_time_s: 12.5\n",
+        )
+        .expect("write");
+        let cli = parse(&["ttt", "--config", path.to_str().expect("utf8")]).expect("parse");
+        let cfg = ttt_args(cli).into_config().expect("complete config");
+        assert_eq!(cfg.energy_targets_milli, vec![-5_000, -10_000]);
+        assert_eq!(cfg.num_trials, 7);
+        assert!((cfg.max_time_s - 12.5).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -1276,26 +1489,30 @@ mod tests {
         ])
         .expect("valid invocation parses");
         let args = comparative_args(cli);
-        assert_eq!(args.common.backend, "cpu-sa");
+        assert_eq!(args.common.backend.as_deref(), Some("cpu-sa"));
         assert_eq!(
-            args.target_file,
-            std::path::PathBuf::from("reference.jsonl")
+            args.target_file.as_deref(),
+            Some(std::path::Path::new("reference.jsonl"))
         );
-        assert_eq!(args.num_jobs, 15);
-        assert_eq!(args.max_iterations, 5);
-        assert_eq!(args.common.seed, 42);
+        assert_eq!(args.num_jobs, Some(15));
+        assert_eq!(args.max_iterations, Some(5));
+        assert_eq!(args.common.seed, Some(42));
     }
 
     #[test]
     fn comparative_target_file_is_required() {
-        parse(&[
+        let cli = parse(&[
             "comparative",
             "--backend",
             "cpu-sa",
             "--topology-preset",
             "smoke",
         ])
-        .expect_err("--target-file is required");
+        .expect("clap accepts missing target-file when no --config");
+        let err = comparative_args(cli)
+            .into_config()
+            .expect_err("--target-file required after merge");
+        assert!(err.contains("target-file"), "got: {err}");
     }
 
     /// `--max-iterations 0` would silently produce a search that reports
@@ -1377,25 +1594,22 @@ mod tests {
     }
 
     #[test]
-    fn comparative_config_flag_is_rejected_until_config_loading_is_implemented() {
-        let cli = parse(&[
-            "comparative",
-            "--backend",
-            "cpu-sa",
-            "--topology-preset",
-            "smoke",
-            "--target-file",
-            "reference.jsonl",
-            "--config",
-            "bench.yaml",
-        ])
-        .expect("clap itself accepts --config; rejection happens in into_config");
-        let args = comparative_args(cli);
-        let err = args
+    fn comparative_config_file_supplies_target_file_when_flag_absent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("c.yaml");
+        std::fs::write(
+            &path,
+            "backend: dwave\ntopology_preset: smoke\ntarget_file: reference.jsonl\nnum_jobs: 12\nmax_iterations: 6\n",
+        )
+        .expect("write");
+        let cli = parse(&["comparative", "--config", path.to_str().expect("utf8")]).expect("parse");
+        let cfg = comparative_args(cli)
             .into_config()
-            .expect_err("--config must be rejected until it is implemented");
-        assert!(err.contains("--config"));
-        assert!(err.contains("not implemented"));
+            .expect("complete config");
+        assert_eq!(cfg.backend, "dwave");
+        assert_eq!(cfg.target_file, std::path::PathBuf::from("reference.jsonl"));
+        assert_eq!(cfg.num_jobs, 12);
+        assert_eq!(cfg.max_iterations, 6);
     }
 
     #[test]
@@ -1417,11 +1631,11 @@ mod tests {
         ])
         .expect("valid invocation parses");
         let args = scaling_args(cli);
-        assert_eq!(args.backend, "cpu-sa");
+        assert_eq!(args.backend.as_deref(), Some("cpu-sa"));
         assert_eq!(args.sizes, vec![8, 16, 32]);
-        assert!((args.hardness - 0.5).abs() < f64::EPSILON);
-        assert_eq!(args.num_jobs, 10);
-        assert_eq!(args.seed, 42);
+        assert_eq!(args.hardness, Some(0.5));
+        assert_eq!(args.num_jobs, Some(10));
+        assert_eq!(args.seed, Some(42));
     }
 
     /// Scaling does not take a topology source at all — unlike every other
@@ -1457,7 +1671,12 @@ mod tests {
 
     #[test]
     fn scaling_sizes_is_required() {
-        parse(&["scaling", "--backend", "cpu-sa"]).expect_err("--sizes is required");
+        let cli = parse(&["scaling", "--backend", "cpu-sa"])
+            .expect("clap accepts missing sizes when no --config");
+        let err = scaling_args(cli)
+            .into_config()
+            .expect_err("--sizes required after merge");
+        assert!(err.contains("sizes"), "got: {err}");
     }
 
     #[test]
@@ -1494,23 +1713,19 @@ mod tests {
     }
 
     #[test]
-    fn scaling_config_flag_is_rejected_until_config_loading_is_implemented() {
-        let cli = parse(&[
-            "scaling",
-            "--backend",
-            "cpu-sa",
-            "--sizes",
-            "8",
-            "--config",
-            "bench.yaml",
-        ])
-        .expect("clap itself accepts --config; rejection happens in into_config");
-        let args = scaling_args(cli);
-        let err = args
-            .into_config()
-            .expect_err("--config must be rejected until it is implemented");
-        assert!(err.contains("--config"));
-        assert!(err.contains("not implemented"));
+    fn scaling_config_file_supplies_sizes_when_flag_absent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sc.yaml");
+        std::fs::write(
+            &path,
+            "backend: cpu-sa\nsizes: [8, 16]\nhardness: 0.75\nnum_jobs: 5\n",
+        )
+        .expect("write");
+        let cli = parse(&["scaling", "--config", path.to_str().expect("utf8")]).expect("parse");
+        let cfg = scaling_args(cli).into_config().expect("complete config");
+        assert_eq!(cfg.sizes, vec![8, 16]);
+        assert!((cfg.hardness - 0.75).abs() < f64::EPSILON);
+        assert_eq!(cfg.num_jobs, 5);
     }
 
     #[test]
@@ -1532,9 +1747,9 @@ mod tests {
         ])
         .expect("valid invocation parses");
         let args = reproducibility_args(cli);
-        assert_eq!(args.common.backend, "cpu-sa");
-        assert_eq!(args.num_problems, 15);
-        assert!((args.common.hardness - 0.4).abs() < f64::EPSILON);
+        assert_eq!(args.common.backend.as_deref(), Some("cpu-sa"));
+        assert_eq!(args.num_problems, Some(15));
+        assert_eq!(args.common.hardness, Some(0.4));
         assert_eq!(args.hardness_b, None);
     }
 
@@ -1619,23 +1834,25 @@ mod tests {
     }
 
     #[test]
-    fn reproducibility_config_flag_is_rejected_until_config_loading_is_implemented() {
-        let cli = parse(&[
-            "reproducibility",
-            "--backend",
-            "cpu-sa",
-            "--topology-preset",
-            "smoke",
-            "--config",
-            "bench.yaml",
-        ])
-        .expect("clap itself accepts --config; rejection happens in into_config");
-        let args = reproducibility_args(cli);
-        let err = args
+    fn reproducibility_config_file_supplies_fields_when_flags_absent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("r.yaml");
+        std::fs::write(
+            &path,
+            "backend: cpu-sa\ntopology_preset: smoke\nhardness: 0.6\nnum_problems: 7\n",
+        )
+        .expect("write");
+        let cli =
+            parse(&["reproducibility", "--config", path.to_str().expect("utf8")]).expect("parse");
+        let cfg = reproducibility_args(cli)
             .into_config()
-            .expect_err("--config must be rejected until it is implemented");
-        assert!(err.contains("--config"));
-        assert!(err.contains("not implemented"));
+            .expect("complete config");
+        assert!((cfg.hardness_a - 0.6).abs() < f64::EPSILON);
+        assert!(
+            (cfg.hardness_b - 0.6).abs() < f64::EPSILON,
+            "hardness_b defaults to hardness_a from file"
+        );
+        assert_eq!(cfg.num_problems, 7);
     }
 
     #[test]
