@@ -122,15 +122,23 @@ fn read_summary(output_dir: &Path) -> serde_json::Value {
 /// one that always returns a fixed `0.5`, `|0.5 - 0.3| = 0.2 > 0.15`) would
 /// pass.
 ///
-/// Also asserts `final_ks_distance` is present — this reference is a real,
-/// matchable distribution, so the recovered hardness's own evaluation
-/// should overlap it substantially (a well-defined, if not necessarily
-/// exactly `0.0`, distance) — as a first line of evidence that the search
-/// is actually comparing against this file's own distribution and not some
-/// other value. The decisive test for that specific failure mode is
-/// [`hermetic_comparative_recovers_a_second_well_separated_hardness`]
-/// (a single passing case here does not distinguish "matched the reference"
-/// from "got lucky against a constant" — two well-separated targets do).
+/// Also asserts `final_ks_distance` is both present *and small* — this
+/// reference is a real, matchable distribution (unlike
+/// [`hermetic_comparative_reports_a_large_ks_distance_for_an_unmatchable_reference`]'s
+/// deliberately disjoint one), so a correctly computed `ks_distance` must
+/// reflect that overlap. Measured directly against the clean code: this
+/// exact case (target `0.3`, seed `42`, `num_jobs = 40`) reports
+/// `final_ks_distance = 0.0` (a perfect distributional overlap at the
+/// recovered hardness, even though the recovered hardness itself is off by
+/// ~0.073 — see `comparative`'s own module doc on the plateau/tie-break
+/// mechanism for why those are different questions). The `< 0.5` bound
+/// below is deliberately far looser than the observed `0.0`, so it is not
+/// sensitive to that value drifting somewhat on a future change, but it
+/// still fails decisively (by a margin of `0.5`, not a near-miss) against a
+/// stub that always reports a maximal `1.0` — the mirror image of
+/// [`hermetic_comparative_reports_a_large_ks_distance_for_an_unmatchable_reference`]'s
+/// own bound, so together the two tests bracket `ks_distance` from both
+/// directions rather than checking only one.
 #[tokio::test]
 async fn hermetic_comparative_recovers_hardness_within_tolerance_of_the_reference() {
     let target_dir = tempfile::tempdir().expect("create temp dir");
@@ -154,9 +162,12 @@ async fn hermetic_comparative_recovers_hardness_within_tolerance_of_the_referenc
     assert!(!records.is_empty(), "the final iteration must have records");
 
     let summary = read_summary(dir.path());
+    let ks = summary["config"]["final_ks_distance"]
+        .as_f64()
+        .expect("final_ks_distance must be a present number for a real, matchable reference");
     assert!(
-        summary["config"]["final_ks_distance"].as_f64().is_some(),
-        "final_ks_distance must be a present number for a real, matchable reference"
+        ks < 0.5,
+        "a genuinely good match must report a small ks_distance (clean code: 0.0), got {ks}"
     );
 }
 
