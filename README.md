@@ -1,6 +1,6 @@
 # IsingMark
 
-Annealer-agnostic Ising benchmark CLI. Spawns a quip miner binary, feeds consensus-identical problems, and writes JSONL records plus a summary JSON. Does not join a chain.
+Annealer-agnostic Ising benchmark CLI. It spawns a quip miner binary and feeds it consensus-identical problems. Each run writes JSONL records plus a summary JSON. It does not join a chain.
 
 ## Install and build
 
@@ -75,7 +75,7 @@ isingmark scaling --backend cpu-sa --sizes 8,16 --num-jobs 5
 
 ### reproducibility
 
-Two batches on the same problem sequence; two-sample KS test.
+Two batches on the same problem sequence, compared with a two-sample KS test.
 
 ```bash
 isingmark reproducibility --backend cpu-sa --topology-preset smoke \

@@ -6,3 +6,6 @@
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Default --output-dir for every mode
+out/

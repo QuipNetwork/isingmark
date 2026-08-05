@@ -1,6 +1,6 @@
 # IsingMark: Annealer Benchmark Tool
 
-Standalone, annealer-agnostic benchmarking tool for Ising-model solvers. IsingMark acts as a coordinator: it spawns a quip miner binary over a Unix socket, feeds consensus-identical problems, and records results. It does not join a chain and does not submit work.
+Standalone, annealer-agnostic benchmarking tool for Ising-model solvers. IsingMark acts as a coordinator. It spawns a quip miner binary over a Unix socket and feeds it consensus-identical problems, then records the results. It does not join a chain and does not submit work.
 
 Language: Rust (edition 2021, toolchain 1.97.1). License: AGPL-3.0-or-later.
 
@@ -59,7 +59,7 @@ CLI -> load YAML config, merge flags
     -> text table; optional PNG if --plot and feature plot
 ```
 
-Backends are miner binaries invoked with `--quip-coordinator unix://...` and `--miner-id isingmark-0`. Each mode builds a unique socket path under the system temporary directory (for example `isingmark-<pid>-<n>.sock` for throughput; other modes use a mode-specific prefix). The registry probes each binary with `--capabilities` and `--check` when those paths run.
+Backends are miner binaries invoked with `--quip-coordinator unix://...` and `--miner-id isingmark-0`. Each mode builds a unique socket path under the system temporary directory. Throughput uses `isingmark-<pid>-<n>.sock`, and other modes use a mode-specific prefix. The registry probes each binary with `--capabilities` and `--check` when those paths run.
 
 ## Built-in backends
 
@@ -129,7 +129,7 @@ isingmark reproducibility --backend cpu-sa --topology-preset smoke \
 
 ### compare
 
-Post-hoc only: read two JSONL files, compare passed best energies, print stats and KS. No miner is spawned.
+Post-hoc only. It reads two JSONL files and compares their passed best energies, then prints the summary statistics and the KS result. No miner is spawned.
 
 ```bash
 isingmark compare --file-a results_a.jsonl --file-b results_b.jsonl
