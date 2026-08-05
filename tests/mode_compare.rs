@@ -337,15 +337,16 @@ fn format_comparison_table_carries_asymmetric_counts() {
         table.contains("failed/rejected records excluded"),
         "table must state the passed-only filter: {table}"
     );
-    // Means appear so a table that only prints counts still fails if the
-    // stats block is dropped.
+    // Labelled mean rows (not a bare number that p50 can also produce).
+    // Placement under the correct header is covered by
+    // `format_table_places_each_mean_under_the_right_header`.
     assert!(
-        table.contains("-2.0000") || table.contains("mean: -2"),
-        "A mean: {table}"
+        table.contains("mean: -2.0000"),
+        "A mean row with mean: label: {table}"
     );
     assert!(
-        table.contains("3.0000") || table.contains("mean: 3"),
-        "B mean: {table}"
+        table.contains("mean: 3.0000"),
+        "B mean row with mean: label: {table}"
     );
 }
 
@@ -361,4 +362,253 @@ fn report_fields_are_internally_consistent() {
     assert!(report.b.min <= report.b.mean && report.b.mean <= report.b.max);
     assert!((0.0..=1.0).contains(&report.ks));
     assert!((0.0..=1.0).contains(&report.p_value));
+}
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening fixtures (Task 14 fix round 1)
+// ---------------------------------------------------------------------------
+
+/// Partial-overlap middle case: neither identical nor fully disjoint.
+///
+/// Energies in natural units (milli / 1000):
+/// - A = {1, 2, 3, 4, 5}
+/// - B = {2, 3, 4, 5, 6}
+///
+/// Hand-derived two-sample KS distance (max absolute CDF gap over the
+/// pooled step points; n = m = 5):
+///
+/// ```text
+///   x=1: F_A=1/5=0.2, F_B=0/5=0.0  -> |diff|=0.2
+///   x=2: F_A=2/5=0.4, F_B=1/5=0.2  -> |diff|=0.2
+///   x=3: F_A=3/5=0.6, F_B=2/5=0.4  -> |diff|=0.2
+///   x=4: F_A=4/5=0.8, F_B=3/5=0.6  -> |diff|=0.2
+///   x=5: F_A=5/5=1.0, F_B=4/5=0.8  -> |diff|=0.2
+///   x=6: F_A=5/5=1.0, F_B=5/5=1.0  -> |diff|=0.0
+///   max = 0.2 exactly
+/// ```
+///
+/// Means: A = 3.0, B = 4.0. A stub that redefines ks as
+/// `|mean_a − mean_b| / (|mean_a| + |mean_b|)` yields 1/7 ≈ 0.1429, not
+/// 0.2. A binary stub (0 if equal else 1) yields 1.0. Both fail the exact
+/// pin below. The asymptotic p-value for D=0.2, n=m=5 is ~0.9996 (lambda
+/// ≈ 0.354; Kolmogorov Q), so a binary p stub (1 if ks==0 else 0) yields
+/// 0.0 and fails the lower bound.
+#[test]
+fn partial_overlap_ks_is_the_hand_derived_intermediate_value() {
+    let dir = tempfile::tempdir().expect("temp");
+    let path_a = dir.path().join("a.jsonl");
+    let path_b = dir.path().join("b.jsonl");
+    for (i, milli) in [1_000_i64, 2_000, 3_000, 4_000, 5_000]
+        .into_iter()
+        .enumerate()
+    {
+        append_jsonl(&path_a, &record(&format!("a{i}"), milli, true)).expect("write A");
+    }
+    for (i, milli) in [2_000_i64, 3_000, 4_000, 5_000, 6_000]
+        .into_iter()
+        .enumerate()
+    {
+        append_jsonl(&path_b, &record(&format!("b{i}"), milli, true)).expect("write B");
+    }
+
+    let report = run_compare(&path_a, &path_b).expect("compare");
+
+    assert!(
+        (report.ks - 0.2).abs() < 1e-12,
+        "partial overlap must yield ks=0.2 (hand-derived max CDF gap), \
+         not a binary 0/1 stub or a mean-difference proxy; got {}",
+        report.ks
+    );
+    // Binary p (0 when ks != 0) fails this. Real asymptotic p ≈ 0.9996.
+    assert!(
+        report.p_value > 0.99,
+        "partial overlap p must stay high for n=m=5, D=0.2 (real ≈0.9996), \
+         not a binary 0/1 stub; got {}",
+        report.p_value
+    );
+    // Confirm the mean-diff proxy would have differed: means are 3 and 4.
+    assert!((report.a.mean - 3.0).abs() < 1e-12, "mean A");
+    assert!((report.b.mean - 4.0).abs() < 1e-12, "mean B");
+}
+
+/// `Stats::std` is population std (divide by N). For A = {−1,−2,−3}:
+/// mean = −2, variance = ((1)^2 + 0 + (1)^2)/3 = 2/3, std = sqrt(2/3).
+/// For B = {1,2,3,4,5}: mean = 3, variance = (4+1+0+1+4)/5 = 2, std = sqrt(2).
+#[test]
+fn report_std_matches_hand_derived_population_std() {
+    let (_dir, path_a, path_b) = fixture_pair();
+    let report = run_compare(&path_a, &path_b).expect("compare");
+
+    let expected_a = (2.0_f64 / 3.0).sqrt();
+    assert!(
+        (report.a.std - expected_a).abs() < 1e-12,
+        "std A must be sqrt(2/3)≈{expected_a} (population /N), got {}",
+        report.a.std
+    );
+    let expected_b = 2.0_f64.sqrt();
+    assert!(
+        (report.b.std - expected_b).abs() < 1e-12,
+        "std B must be sqrt(2)≈{expected_b}, got {}",
+        report.b.std
+    );
+}
+
+/// Percentiles use linear interpolation h = q*(n−1) (numpy default / R type 7).
+///
+/// A sorted = [−3, −2, −1], n=3:
+/// - p50: h=0.5*2=1.0 → exact index 1 → −2.0
+/// - p90: h=0.9*2=1.8 → lo=1, hi=2, frac=0.8 → −2 + 0.8*(−1−(−2)) = −1.2
+/// - p99: h=0.99*2=1.98 → lo=1, hi=2, frac=0.98 → −2 + 0.98 = −1.02
+///
+/// B sorted = [1, 2, 3, 4, 5], n=5:
+/// - p50: h=0.5*4=2.0 → exact index 2 → 3.0
+/// - p90: h=0.9*4=3.6 → lo=3, hi=4, frac=0.6 → 4 + 0.6*(5−4) = 4.6
+/// - p99: h=0.99*4=3.96 → lo=3, hi=4, frac=0.96 → 4 + 0.96 = 4.96
+#[test]
+fn report_percentiles_match_hand_derived_passed_energies() {
+    let (_dir, path_a, path_b) = fixture_pair();
+    let report = run_compare(&path_a, &path_b).expect("compare");
+
+    assert!(
+        (report.a.p50 - -2.0).abs() < 1e-12,
+        "A p50 must be -2.0, got {}",
+        report.a.p50
+    );
+    assert!(
+        (report.a.p90 - -1.2).abs() < 1e-12,
+        "A p90 must be -1.2, got {}",
+        report.a.p90
+    );
+    assert!(
+        (report.a.p99 - -1.02).abs() < 1e-12,
+        "A p99 must be -1.02, got {}",
+        report.a.p99
+    );
+    assert!(
+        (report.b.p50 - 3.0).abs() < 1e-12,
+        "B p50 must be 3.0, got {}",
+        report.b.p50
+    );
+    assert!(
+        (report.b.p90 - 4.6).abs() < 1e-12,
+        "B p90 must be 4.6, got {}",
+        report.b.p90
+    );
+    assert!(
+        (report.b.p99 - 4.96).abs() < 1e-12,
+        "B p99 must be 4.96, got {}",
+        report.b.p99
+    );
+}
+
+/// Table means are anchored under the correct file header, not merely
+/// present somewhere. A/B values differ so a swapped stats-block render
+/// fails. The `mean:` label is required so a dropped mean row cannot be
+/// satisfied by a `p50:` line that happens to share the same number.
+#[test]
+fn format_table_places_each_mean_under_the_right_header() {
+    let (_dir, path_a, path_b) = fixture_pair();
+    let report = run_compare(&path_a, &path_b).expect("compare");
+    let table = format_comparison_table(&report);
+
+    let a_pos = table
+        .find("file A (passed energies")
+        .expect("A header must be present");
+    let b_pos = table
+        .find("file B (passed energies")
+        .expect("B header must be present");
+    let mean_a = table
+        .find("mean: -2.0000")
+        .expect("A mean line must be present with the mean: label");
+    let mean_b = table
+        .find("mean: 3.0000")
+        .expect("B mean line must be present with the mean: label");
+
+    assert!(
+        a_pos < mean_a && mean_a < b_pos,
+        "mean: -2.0000 must sit under file A and before file B:\n{table}"
+    );
+    assert!(
+        b_pos < mean_b,
+        "mean: 3.0000 must sit under file B:\n{table}"
+    );
+}
+
+/// A record with `passed == false` and `rejected == false` must still be
+/// excluded. Under the correct `.filter(|r| r.passed)` it is out; under a
+/// wrong `.filter(|r| !r.rejected)` it is in. The energy is far from the
+/// passed sample so inclusion moves the mean and the count.
+#[test]
+fn passed_false_rejected_false_is_still_excluded() {
+    let dir = tempfile::tempdir().expect("temp");
+    let path_a = dir.path().join("a.jsonl");
+    let path_b = dir.path().join("b.jsonl");
+
+    append_jsonl(&path_a, &record("ok", 0, true)).expect("write passed A");
+    // Non-complementary flags: neither accepted nor rejected.
+    let mut odd = record("odd", 1_000_000, false);
+    odd.rejected = false;
+    append_jsonl(&path_a, &odd).expect("write odd A");
+
+    append_jsonl(&path_b, &record("b0", 0, true)).expect("write B");
+    append_jsonl(&path_b, &record("b1", 0, true)).expect("write B");
+
+    let report = run_compare(&path_a, &path_b).expect("compare");
+    assert_eq!(
+        report.n_a, 1,
+        "only passed==true counts; !rejected would also admit the odd record"
+    );
+    assert!(
+        (report.a.mean - 0.0).abs() < 1e-12,
+        "odd energy 1000.0 must not enter the mean; got {}",
+        report.a.mean
+    );
+}
+
+/// End-to-end: the built binary maps `--file-a` / `--file-b` to the
+/// correct sides of the printed table. A swap in `main`'s match arm would
+/// put B's mean under the file A header.
+#[test]
+fn compare_cli_maps_file_a_and_file_b_to_the_correct_table_sides() {
+    let (_dir, path_a, path_b) = fixture_pair();
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_isingmark"));
+    let output = std::process::Command::new(&bin)
+        .args([
+            "compare",
+            "--file-a",
+            path_a.to_str().expect("utf-8 path A"),
+            "--file-b",
+            path_b.to_str().expect("utf-8 path B"),
+        ])
+        .output()
+        .expect("spawn isingmark compare");
+
+    assert!(
+        output.status.success(),
+        "compare CLI must exit 0; stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let table = String::from_utf8(output.stdout).expect("utf-8 stdout");
+
+    let a_pos = table
+        .find("file A (passed energies")
+        .expect("CLI table must name file A");
+    let b_pos = table
+        .find("file B (passed energies")
+        .expect("CLI table must name file B");
+    let mean_a = table
+        .find("mean: -2.0000")
+        .expect("CLI must print A's mean under its label");
+    let mean_b = table
+        .find("mean: 3.0000")
+        .expect("CLI must print B's mean under its label");
+
+    assert!(
+        a_pos < mean_a && mean_a < b_pos,
+        "--file-a mean must appear under file A (not swapped):\n{table}"
+    );
+    assert!(
+        b_pos < mean_b,
+        "--file-b mean must appear under file B (not swapped):\n{table}"
+    );
 }

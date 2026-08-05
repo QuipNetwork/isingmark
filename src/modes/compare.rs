@@ -243,4 +243,21 @@ mod tests {
             "p_value must appear in scientific notation: {table}"
         );
     }
+
+    /// Means under the correct A/B header with the `mean:` label. Sample
+    /// report uses distinct means (−2 vs 3) so a swapped stats block fails,
+    /// and the label so a dropped mean row cannot hide behind `p50:`.
+    #[test]
+    fn format_comparison_table_places_means_under_correct_headers() {
+        let table = format_comparison_table(&sample_report());
+        let a_pos = table.find("file A (passed energies").expect("A header");
+        let b_pos = table.find("file B (passed energies").expect("B header");
+        let mean_a = table.find("mean: -2.0000").expect("A mean line");
+        let mean_b = table.find("mean: 3.0000").expect("B mean line");
+        assert!(
+            a_pos < mean_a && mean_a < b_pos,
+            "A mean under A before B: {table}"
+        );
+        assert!(b_pos < mean_b, "B mean under B: {table}");
+    }
 }
