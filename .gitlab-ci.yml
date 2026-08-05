@@ -31,6 +31,12 @@ default:
   before_script:
     - rustc --version
     - cargo --version
+    # quip-proto's build script runs prost-build, which shells out to protoc.
+    # Every job that compiles the crate needs it; the rust image does not
+    # ship it. Without it the build fails at quip-proto with "Could not find
+    # `protoc`", before any lint or test runs.
+    - apt-get update -qq && apt-get install -y -qq protobuf-compiler
+    - protoc --version
     - rustup component add rustfmt clippy
 
 stages:
@@ -55,8 +61,11 @@ test:
   before_script:
     - rustc --version
     - cargo --version
+    # This job replaces the default before_script, so it must install protoc
+    # itself (see the default block for why the build needs it).
     # Fetch CPU miner binaries onto $PATH (upstream script from quip-miner).
-    - apt-get update -qq && apt-get install -y -qq git ca-certificates curl
+    - apt-get update -qq && apt-get install -y -qq protobuf-compiler git ca-certificates curl
+    - protoc --version
     - git clone --filter=blob:none --no-checkout "${QUIP_MINER_REPO}" /tmp/quip-miner
     - git -C /tmp/quip-miner fetch --depth 1 origin "${QUIP_MINER_REV}"
     - git -C /tmp/quip-miner checkout "${QUIP_MINER_REV}"
