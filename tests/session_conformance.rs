@@ -902,6 +902,124 @@ async fn quip_cpu_sa_conformance() {
     );
 }
 
+/// Two jobs that share a `job_id` and are both in flight must each reach a
+/// terminal state and produce a record. A flat `HashMap` insert silently
+/// evicts the first entry; the surviving entry absorbs one `Result` and the
+/// other becomes an orphan — so the run emits fewer records than jobs
+/// dispatched. Credits=2 puts both in flight before either answers.
+#[tokio::test]
+async fn duplicate_job_id_both_in_flight_each_get_a_terminal_record() {
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let mut jobs = draw_jobs(&spec, 21, 2);
+    // Structural duplicate: same job_id and same problem body (paired-design
+    // cells share the nonce, which is both the job_id and the sole entropy
+    // for the problem draw). Count of terminal records is under test, not
+    // energy pairing across distinct bodies.
+    jobs[1] = jobs[0].clone();
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    let backend = fake_miner_backend(vec!["--credits".to_string(), "2".to_string()]);
+
+    let report = run_with(&backend, &spec, jobs, &sock_path).await;
+
+    assert!(report.handshake_ok);
+    assert_eq!(
+        report.records.len(),
+        2,
+        "both same-id dispatches must produce a record, not one silent eviction; \
+         orphan_results={}, records={:?}",
+        report.orphan_results,
+        report.records
+    );
+    assert_eq!(
+        report.orphan_results, 0,
+        "with a FIFO queue per id, neither Result is an orphan"
+    );
+    for record in &report.records {
+        assert!(
+            record.passed || record.rejected,
+            "each record must be a real terminal state: {record:?}"
+        );
+    }
+}
+
+/// Fatal mid-flight with two same-id jobs in the in-flight queue must abandon
+/// both entries (one record each), not one record for the distinct id.
+#[tokio::test]
+async fn duplicate_job_id_abandon_on_fatal_emits_one_record_per_entry() {
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let mut jobs = draw_jobs(&spec, 22, 3);
+    jobs[1] = jobs[0].clone();
+    jobs[2] = jobs[0].clone();
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    // credits=3 puts all three same-id jobs in flight; fatal on the first
+    // received job abandons the rest still queued under that id.
+    let backend = fake_miner_backend(vec![
+        "--credits".to_string(),
+        "3".to_string(),
+        "--fatal-after".to_string(),
+        "1".to_string(),
+    ]);
+
+    let report = run_with(&backend, &spec, jobs, &sock_path).await;
+
+    assert!(report.handshake_ok);
+    assert_eq!(
+        report.records.len(),
+        3,
+        "abandon must emit one record per in-flight entry, including duplicate ids; got {:?}",
+        report.records
+    );
+    assert!(
+        report.records.iter().all(|r| r.rejected),
+        "every same-id entry abandoned by Fatal must be rejected: {:?}",
+        report.records
+    );
+}
+
+/// After the first of two same-id Results, the second entry is still in
+/// flight: the session must not shut down early. Going silent on job 2 leaves
+/// that entry for unresponsive abandonment — two terminal records, not one.
+#[tokio::test]
+async fn duplicate_job_id_outstanding_entry_blocks_shutdown_until_terminal() {
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let mut jobs = draw_jobs(&spec, 23, 2);
+    jobs[1] = jobs[0].clone();
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    let backend = fake_miner_backend(vec![
+        "--credits".to_string(),
+        "2".to_string(),
+        "--go-silent-after".to_string(),
+        "2".to_string(),
+    ]);
+
+    // Lower the missed-ping threshold so the unresponsive path trips quickly
+    // once the second same-id entry is left unanswered.
+    let report = run_with_max_missed_pings(&backend, &spec, jobs, &sock_path, 1).await;
+
+    assert!(report.handshake_ok);
+    assert_eq!(
+        report.records.len(),
+        2,
+        "first Result must not shut the session down while the second same-id \
+         entry is still outstanding; orphan_results={}, records={:?}",
+        report.orphan_results,
+        report.records
+    );
+    assert!(
+        report.miner_unresponsive,
+        "second same-id entry left unanswered must trip unresponsive abandonment"
+    );
+    let abandoned = report.records.iter().filter(|r| r.rejected).count();
+    assert_eq!(
+        abandoned, 1,
+        "exactly one of the two same-id entries should be abandoned: {:?}",
+        report.records
+    );
+}
+
 /// A miner-emitted `Result` for a `job_id` the coordinator never dispatched
 /// must increment `RunReport::orphan_results` (F7 observability counter).
 /// Uses `--stray-result-after` on the fake miner; does not change dispatch.
