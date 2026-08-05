@@ -254,7 +254,7 @@ pub async fn run_comparative(cfg: &ComparativeConfig) -> Result<(Vec<JobRecord>,
         .records
         .iter()
         .filter(|r| r.passed)
-        .map(|r| milli_to_f64(r.best_energy_milli))
+        .filter_map(|r| r.best_energy_milli.map(milli_to_f64))
         .collect();
     let target_mean = describe(&target_energies)
         .map(|s| s.mean)
@@ -403,7 +403,7 @@ async fn evaluate_iteration(
         .records
         .iter()
         .filter(|r| r.passed)
-        .map(|r| milli_to_f64(r.best_energy_milli))
+        .filter_map(|r| r.best_energy_milli.map(milli_to_f64))
         .collect();
     // No passed record this iteration is treated as the worst possible
     // outcome (push the search toward more effort) rather than crashing

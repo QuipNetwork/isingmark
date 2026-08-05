@@ -94,8 +94,16 @@ async fn hermetic_reproducibility_identical_runs_report_differs_false() {
     assert_eq!(run_a.records.len(), cfg.num_problems as usize);
     assert_eq!(run_b.records.len(), cfg.num_problems as usize);
 
-    let energies_a: Vec<i64> = run_a.records.iter().map(|r| r.best_energy_milli).collect();
-    let energies_b: Vec<i64> = run_b.records.iter().map(|r| r.best_energy_milli).collect();
+    let energies_a: Vec<i64> = run_a
+        .records
+        .iter()
+        .filter_map(|r| r.best_energy_milli)
+        .collect();
+    let energies_b: Vec<i64> = run_b
+        .records
+        .iter()
+        .filter_map(|r| r.best_energy_milli)
+        .collect();
     assert_eq!(
         energies_a, energies_b,
         "identical hardness against a deterministic backend must produce byte-identical energies"

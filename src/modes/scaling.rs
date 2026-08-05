@@ -663,7 +663,7 @@ fn build_summary(
                 .records
                 .iter()
                 .filter(|r| r.passed)
-                .map(|r| milli_to_f64(r.best_energy_milli))
+                .filter_map(|r| r.best_energy_milli.map(milli_to_f64))
                 .collect();
             let wall_mss: Vec<f64> = o
                 .report

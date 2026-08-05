@@ -495,11 +495,11 @@ fn build_summary(cfg: &SweepConfig, spec: &TopologySpec, outcomes: &[CellOutcome
                 .records
                 .iter()
                 .filter(|r| r.passed)
-                .map(|r| milli_to_f64(r.best_energy_milli))
+                .filter_map(|r| r.best_energy_milli.map(milli_to_f64))
                 .collect();
             // Every record's own dispatch-to-result wall time, regardless of
-            // pass/fail/reject: unlike `best_energy_milli` (meaningless for
-            // a job that never produced a solution), `JobRecord::wall_ms` is
+            // pass/fail/reject: unlike `best_energy_milli` (None when a job
+            // never produced a solution), `JobRecord::wall_ms` is
             // well-defined for every terminal record.
             let wall_mss: Vec<f64> = o
                 .report

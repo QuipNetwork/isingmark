@@ -24,7 +24,7 @@ use isingmark::record::JobRecord;
 use isingmark::topology::{load_fixture, load_topology, TopologySpec};
 use quip_proto::v1::{Job, SetTarget};
 use quip_protocol::scoring::{energy_milli, set_diversity};
-use quip_protocol::wire::decode_i32_le;
+use quip_protocol::wire::{decode_i32_le, decode_spins};
 
 /// Draw `count` deterministic jobs against `spec`. `deadline_ms: 0` means
 /// "no deadline" on the wire; a small nonzero constant (as
@@ -66,8 +66,8 @@ fn sparse_ids_spec() -> TopologySpec {
 /// A small, fast `SetTarget` used by every test so a real annealing/SA
 /// backend does not spend more wall time per job than a conformance test
 /// needs. `anneal_time_us` is deliberately non-zero: a stub that hardcodes
-/// `JobRecord::anneal_time_us` to `0` would be indistinguishable from a
-/// correct read of a `0`-valued target.
+/// `JobRecord::requested_anneal_time_us` to `0` would be indistinguishable
+/// from a correct read of a `0`-valued target.
 fn small_target() -> SetTarget {
     SetTarget {
         max_energy_milli: i64::MAX,
@@ -77,6 +77,21 @@ fn small_target() -> SetTarget {
         num_sweeps: 50,
         anneal_time_us: 30,
     }
+}
+
+/// Decode a lowercase hex string of even length into bytes.
+fn hex_decode(hex: &str) -> Vec<u8> {
+    assert!(
+        hex.len().is_multiple_of(2),
+        "hex string length must be even: {hex}"
+    );
+    let mut out = Vec::with_capacity(hex.len() / 2);
+    for i in (0..hex.len()).step_by(2) {
+        let byte = u8::from_str_radix(&hex[i..i + 2], 16)
+            .expect("best_spins_hex is lowercase hex produced by hex_encode");
+        out.push(byte);
+    }
+    out
 }
 
 fn fake_miner_backend(args: Vec<String>) -> BackendSpec {
@@ -247,13 +262,34 @@ async fn fake_miner_happy_path_solves_every_job_and_recomputes_matching_energy()
         assert_eq!(record.reject_reason, None);
         assert_eq!(
             record.best_energy_milli,
-            expected_all_plus_one_energy(&spec, job)
+            Some(expected_all_plus_one_energy(&spec, job))
         );
-        assert_eq!(record.reads, 1, "fake miner reports 1 read via SamplerMeta");
-        assert_eq!(record.sweeps, 0);
         assert_eq!(
-            record.anneal_time_us, 30,
+            record.measured_reads,
+            Some(1),
+            "fake miner reports 1 read via SamplerMeta"
+        );
+        assert_eq!(record.measured_sweeps, Some(0));
+        assert_eq!(
+            record.requested_reads, 8,
+            "requested params come from SetTarget, not SamplerMeta"
+        );
+        assert_eq!(record.requested_sweeps, 50);
+        assert_eq!(
+            record.requested_anneal_time_us, 30,
             "sourced from the requested SetTarget"
+        );
+        // Non-circular energy check: decode best_spins_hex and recompute.
+        let spins_hex = record
+            .best_spins_hex
+            .as_deref()
+            .expect("passed job must expose winning spins");
+        let spins = decode_spins(&hex_decode(spins_hex)).expect("best_spins_hex must decode");
+        let recomputed = expected_energy_for_spins(&spec, job, &spins);
+        assert_eq!(
+            Some(recomputed),
+            record.best_energy_milli,
+            "best_energy_milli must equal energy of best_spins_hex, without using record.passed"
         );
     }
     assert_eq!(report.miner_exit_code, 0);
@@ -281,7 +317,7 @@ async fn fake_miner_energy_lie_is_caught_by_local_recompute() {
     // "never trust a miner-reported energy_milli" contract under test.
     assert_eq!(
         record.best_energy_milli,
-        expected_all_plus_one_energy(&spec, &jobs[0])
+        Some(expected_all_plus_one_energy(&spec, &jobs[0]))
     );
     assert!(
         !record.passed,
@@ -309,7 +345,8 @@ async fn fake_miner_best_of_n_selects_the_minimum_energy_and_matches_diversity()
     let record = &report.records[0];
     assert_eq!(record.n_solutions, 3);
     assert_eq!(
-        record.reads, 3,
+        record.measured_reads,
+        Some(3),
         "fake miner reports one read per solution via SamplerMeta"
     );
 
@@ -324,13 +361,37 @@ async fn fake_miner_best_of_n_selects_the_minimum_energy_and_matches_diversity()
         "fixture/seed must produce distinct energies across solutions, or \
          .min()/.max()/.next()/.last() are indistinguishable here: {expected_energies:?}"
     );
-    let expected_best = *expected_energies
+    let best_idx = expected_energies
         .iter()
-        .min()
+        .enumerate()
+        .min_by_key(|(_, &e)| e)
+        .map(|(i, _)| i)
         .expect("3 energies were computed above");
+    let expected_best = expected_energies[best_idx];
+    assert_ne!(
+        best_idx, 0,
+        "fixture must make the winning solution not the first, so a \
+         first-solution spins mutation is observable; energies={expected_energies:?}"
+    );
     assert_eq!(
-        record.best_energy_milli, expected_best,
+        record.best_energy_milli,
+        Some(expected_best),
         "best-of-N must select the minimum recomputed energy, not the first/last/maximum"
+    );
+
+    let spins_hex = record
+        .best_spins_hex
+        .as_deref()
+        .expect("multi-solution result must expose winning spins");
+    let spins = decode_spins(&hex_decode(spins_hex)).expect("best_spins_hex must decode");
+    assert_eq!(
+        spins, expected_solutions[best_idx],
+        "best_spins_hex must be the winning solution's spins, not the first solution's"
+    );
+    assert_eq!(
+        expected_energy_for_spins(&spec, &jobs[0], &spins),
+        expected_best,
+        "energy of best_spins_hex must equal best_energy_milli without using record.passed"
     );
 
     let expected_diversity = expected_diversity_milli(&expected_solutions);
@@ -363,7 +424,7 @@ async fn fake_miner_sparse_node_ids_topology_resolves_edges_by_position() {
         );
         assert_eq!(
             record.best_energy_milli,
-            expected_all_plus_one_energy(&spec, job),
+            Some(expected_all_plus_one_energy(&spec, job)),
             "a raw-id-instead-of-position bug would push every edge past \
              spins.len() == 4 and silently skip every coupling term"
         );
@@ -390,6 +451,22 @@ async fn fake_miner_reject_is_recorded_with_reason_and_does_not_affect_other_job
     assert!(!rejected.passed);
     assert_eq!(rejected.reject_reason.as_deref(), Some("MALFORMED"));
     assert_eq!(rejected.n_solutions, 0);
+    assert_eq!(
+        rejected.best_energy_milli, None,
+        "a reject has no solutions, so best_energy_milli must be None not Some(0)"
+    );
+    assert_eq!(rejected.best_spins_hex, None);
+    assert_eq!(
+        rejected.measured_reads, None,
+        "a reject never ran, so measured params must be None"
+    );
+    assert_eq!(rejected.measured_sweeps, None);
+    assert_eq!(
+        rejected.requested_reads, 8,
+        "reject still records what was requested via SetTarget"
+    );
+    assert_eq!(rejected.requested_sweeps, 50);
+    assert_eq!(rejected.requested_anneal_time_us, 30);
 
     for job in [&jobs[0], &jobs[2]] {
         let record = record_by_job_id(&report.records, job);
@@ -868,31 +945,32 @@ async fn quip_cpu_sa_conformance() {
     let dir = tempfile::tempdir().expect("create temp dir");
     let sock_path = dir.path().join("coordinator.sock");
 
-    let report = run_with(&backend, &spec, jobs, &sock_path).await;
+    let report = run_with(&backend, &spec, jobs.clone(), &sock_path).await;
 
     assert!(
         report.handshake_ok,
         "handshake with the real quip-cpu-sa binary must succeed"
     );
     assert_eq!(report.records.len(), 4);
-    for record in &report.records {
+    for job in &jobs {
+        let record = record_by_job_id(&report.records, job);
         assert!(
             record.n_solutions > 0,
             "record has no solutions: {record:?}"
         );
-        // `passed` is defined as "the coordinator's local recompute of
-        // energy_milli for the returned spins matches the miner's own
-        // report" (session.rs::build_result_record): RunReport/JobRecord
-        // do not expose the winning solution's spins to this test, so this
-        // is how the "best_energy_milli equals a locally recomputed
-        // energy_milli for the returned spins" requirement is checked here
-        // without reaching into session.rs's private state. The
-        // fake-miner-driven tests above additionally recompute the expected
-        // energy from scratch, independently of this flag, since their
-        // solutions are deterministic and known ahead of time.
-        assert!(
-            record.passed,
-            "recomputed energy must match the miner's report: {record:?}"
+        // Non-circular: decode best_spins_hex, recompute from the job's own
+        // h/j/edges, assert equality with best_energy_milli directly — not
+        // via record.passed.
+        let spins_hex = record
+            .best_spins_hex
+            .as_deref()
+            .expect("real miner solution must expose winning spins");
+        let spins = decode_spins(&hex_decode(spins_hex)).expect("best_spins_hex must decode");
+        let recomputed = expected_energy_for_spins(&spec, job, &spins);
+        assert_eq!(
+            record.best_energy_milli,
+            Some(recomputed),
+            "best_energy_milli must equal energy of best_spins_hex: {record:?}"
         );
     }
     assert_eq!(report.miner_exit_code, 0);

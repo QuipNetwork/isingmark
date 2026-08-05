@@ -348,14 +348,16 @@ pub fn plot_energy_cdfs(a: &[f64], b: &[f64], out: &Path) -> Result<(), PlotErro
 }
 
 /// Mean of a cell's passed `best_energy_milli` values in natural units, or
-/// `None` when the cell has no passed records.
+/// `None` when the cell has no passed records with a present energy.
 fn cell_mean_energy(cell: &CellOutcome) -> Option<f64> {
     let mut sum = 0.0;
     let mut n = 0_usize;
     for record in &cell.report.records {
         if record.passed {
-            sum += milli_to_f64(record.best_energy_milli);
-            n += 1;
+            if let Some(energy) = record.best_energy_milli {
+                sum += milli_to_f64(energy);
+                n += 1;
+            }
         }
     }
     if n == 0 {

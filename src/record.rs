@@ -27,7 +27,13 @@ pub struct JobRecord {
     /// Number of solutions the backend returned.
     pub n_solutions: usize,
     /// Best (lowest) energy among the returned solutions, in milli-units.
-    pub best_energy_milli: i64,
+    /// `Some(e)` only when at least one solution was returned and its energy
+    /// was recomputed; `None` on empty results, rejects, and abandoned jobs.
+    /// Never a sentinel zero: a genuine zero-energy solution is `Some(0)`.
+    pub best_energy_milli: Option<i64>,
+    /// Packed spins of the lowest-energy solution, hex, LSB-first. `None` when
+    /// no solution was returned.
+    pub best_spins_hex: Option<String>,
     /// Diversity among the returned solutions, in milli-units.
     pub diversity_milli: u32,
     /// Whether the job satisfied the run's acceptance criteria.
@@ -41,13 +47,17 @@ pub struct JobRecord {
     pub device_access_time_us: u64,
     /// Total wall time to complete the job, in milliseconds.
     pub wall_ms: u64,
-    /// Reads requested for this job.
-    pub reads: u32,
-    /// Sweeps per read requested for this job (sweeping backends).
-    pub sweeps: u32,
-    /// Anneal time requested for this job, in microseconds (annealing
-    /// backends).
-    pub anneal_time_us: u32,
+    /// What the coordinator asked for via `SetTarget`. Always populated.
+    pub requested_reads: u32,
+    pub requested_sweeps: u32,
+    /// Requested anneal time in microseconds. Always populated from
+    /// `SetTarget`. There is no `measured_anneal_time_us`: `SamplerMeta` does
+    /// not carry one (only `qpu_access_us`, which this schema does not record).
+    pub requested_anneal_time_us: u32,
+    /// What the miner reported it actually did. `None` when the miner sent no
+    /// `SamplerMeta`, and on rejected or abandoned jobs.
+    pub measured_reads: Option<u32>,
+    pub measured_sweeps: Option<u32>,
 }
 
 /// Append `rec` as one JSON line to `path`, creating the file if it does not

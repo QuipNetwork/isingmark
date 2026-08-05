@@ -377,17 +377,20 @@ struct TargetOutcome {
 }
 
 /// Seconds-to-reach for every trial in `outcome` that satisfied its own
-/// target (`record.passed && record.best_energy_milli <= target_milli`),
-/// in trial order (not sorted — callers needing a distribution, e.g.
+/// target (`record.passed && best_energy_milli <= target_milli`), in trial
+/// order (not sorted — callers needing a distribution, e.g.
 /// [`median_and_p99`], sort their own copy first). `record.passed` is
-/// checked first: a rejected or abandoned-in-flight record always reports
-/// `best_energy_milli: 0`, which would otherwise spuriously "reach" any
-/// non-negative target despite never having produced a real solution.
+/// checked first; a rejected or abandoned-in-flight record has
+/// `best_energy_milli: None` and cannot satisfy the energy bound.
 fn reached_times_s(outcome: &TargetOutcome) -> Vec<f64> {
     outcome
         .records
         .iter()
-        .filter(|r| r.passed && r.best_energy_milli <= outcome.target_milli)
+        .filter(|r| {
+            r.passed
+                && r.best_energy_milli
+                    .is_some_and(|e| e <= outcome.target_milli)
+        })
         .map(|r| wall_ms_to_seconds(r.wall_ms))
         .collect()
 }
