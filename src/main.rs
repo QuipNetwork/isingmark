@@ -208,7 +208,9 @@ fn format_reproducibility_message(
     report: &ReproReport,
     summary_path: &std::path::Path,
 ) -> String {
-    let mut message = format!("ks_statistic: {:.4}\n", report.ks_statistic); // MUTATION: dropped hardness lines
+    let mut message = format!("hardness_a: {:.4}\n", cfg.hardness_a);
+    let _ = writeln!(message, "hardness_b: {:.4}", cfg.hardness_b);
+    let _ = writeln!(message, "ks_statistic: {:.4}", report.ks_statistic);
     let _ = writeln!(message, "p_value: {:.4e}", report.p_value);
     let _ = writeln!(
         message,
