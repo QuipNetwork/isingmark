@@ -16,8 +16,14 @@ variables:
   CARGO_TERM_COLOR: always
   # Pinned toolchain (must match rust-toolchain.toml channel).
   RUST_VERSION: "1.97.1"
+  # Crate deps pin this git rev (see Cargo.toml / Cargo.lock).
   QUIP_MINER_REV: "623af0700d36359687b1e69d866ae782d932a0e9"
   QUIP_MINER_REPO: "https://gitlab.com/quip.network/quip-miner.git"
+  # Package-registry tag used by fetch-miners.sh. Default in the script at
+  # QUIP_MINER_REV is v0.3.0; set explicitly here so the coupling to the
+  # crate rev is visible. Keep this in sync when bumping QUIP_MINER_REV /
+  # the pinned quip-miner crates — do not change one without checking the other.
+  MINERS_TAG: "v0.3.0"
   MINERS_DIR: "${CI_PROJECT_DIR}/miners"
 
 default:
@@ -42,6 +48,7 @@ clippy:
   stage: clippy
   script:
     - cargo clippy --all-targets -- -D warnings
+    - cargo clippy --all-targets --features plot -- -D warnings
 
 test:
   stage: test
@@ -53,6 +60,9 @@ test:
     - git clone --filter=blob:none --no-checkout "${QUIP_MINER_REPO}" /tmp/quip-miner
     - git -C /tmp/quip-miner fetch --depth 1 origin "${QUIP_MINER_REV}"
     - git -C /tmp/quip-miner checkout "${QUIP_MINER_REV}"
+    # MINERS_TAG is set in variables above; export so the script does not
+    # rely on its internal default alone.
+    - export MINERS_TAG="${MINERS_TAG}"
     - MINER_SET=cpu bash /tmp/quip-miner/crates/quip-coordinator/tools/fetch-miners.sh "${MINERS_DIR}"
     - export PATH="${MINERS_DIR}:${PATH}"
     # Fail the job if the real binary is still missing (do not soft-skip).
@@ -60,6 +70,7 @@ test:
   script:
     # Intentionally NO ISINGMARK_ALLOW_MISSING_MINERS: real miner path only.
     - cargo test --all-targets
+    - cargo test --all-targets --features plot
 
 build_plot:
   stage: build

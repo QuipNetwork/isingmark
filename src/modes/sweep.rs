@@ -445,10 +445,16 @@ fn cell_dir_name(cell: &Cell, kind: BackendKind) -> String {
 /// [`CellOutcome`]. `totals` aggregates across every cell; `config` carries
 /// the requested grid alongside each cell's own directory, parameters, and
 /// per-cell stats (via `stats::describe` over that cell's passed jobs'
-/// `best_energy_milli`, and separately over every one of that cell's
-/// records' `wall_ms`), plus that cell's own miner failure state — so a
-/// cell a backend failed partway through is distinguishable from a
-/// complete one without needing the raw `RunReport`.
+/// `best_energy_milli` converted to **natural units** (`/ 1000`), and
+/// separately over every one of that cell's records' `wall_ms`), plus that
+/// cell's own miner failure state — so a cell a backend failed partway
+/// through is distinguishable from a complete one without needing the raw
+/// `RunReport`.
+///
+/// The JSON key for energy stats is `best_energy_stats` (natural units), not
+/// `best_energy_milli_stats`: the values are already divided by 1000 to match
+/// the human-facing table units, and a `_milli` suffix would invite a silent
+/// 1000× misread against `JobRecord::best_energy_milli`.
 ///
 /// `session_wall_ms` (one number per cell) and `wall_ms_stats` (a
 /// distribution, one entry per record) answer different questions and must
@@ -513,7 +519,10 @@ fn build_summary(cfg: &SweepConfig, spec: &TopologySpec, outcomes: &[CellOutcome
                 "miner_exit_code": o.report.miner_exit_code,
                 "miner_unresponsive": o.report.miner_unresponsive,
                 "miner_stderr_tail": o.report.miner_stderr_tail,
-                "best_energy_milli_stats": stats_json(describe(&energies)),
+                "orphan_results": o.report.orphan_results,
+                // Natural units (best_energy_milli / 1000), not milli — see
+                // `build_summary`'s doc.
+                "best_energy_stats": stats_json(describe(&energies)),
                 "wall_ms_stats": stats_json(describe(&wall_mss)),
             })
         })

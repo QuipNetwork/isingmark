@@ -235,6 +235,22 @@ fn missing_required(what: &str, flag: &str, config_path: Option<&Path>) -> Strin
     }
 }
 
+/// Warn when a shared config file carries `hardness` for a mode that does
+/// not use it. A flat `FileConfig` union may legitimately hold keys for
+/// several modes, so this is a warning rather than an error (unlike an
+/// explicit `--hardness` flag, which is a per-invocation instruction).
+/// Same stderr mechanism as `config::warn_zero_bounds`.
+fn warn_unused_config_hardness(mode: &str, reason: &str) {
+    #[expect(
+        clippy::print_stderr,
+        reason = "unused config-key warning is operator-facing diagnostic on stderr; \
+                  not a substitute for structured logging (none wired yet)"
+    )]
+    {
+        eprintln!("warning: config file sets hardness, which is ignored by {mode} ({reason})");
+    }
+}
+
 /// `isingmark throughput` arguments.
 #[derive(Debug, Args)]
 pub struct ThroughputArgs {
@@ -322,11 +338,28 @@ impl SweepArgs {
     ///
     /// # Errors
     ///
-    /// Returns a message if the config file cannot be loaded, or if a
-    /// required field is set by neither flag nor file.
+    /// Returns a message if the config file cannot be loaded, if a required
+    /// field is set by neither flag nor file, or if `--hardness` was set
+    /// (this mode takes cell parameters from the grid, not a hardness curve).
     pub fn into_config(self) -> Result<SweepConfig, String> {
         let config_path = self.common.config.as_deref();
         let file = load_optional_config(config_path)?;
+        // Explicit `--hardness` is an error: the flag is a per-invocation
+        // instruction and this mode never reads it. A `hardness` key in a
+        // shared config file is only a warning (union schema).
+        if self.common.hardness.is_some() {
+            return Err(
+                "--hardness is not used by sweep: cell parameters come from --param-grid \
+                 (or param_grid in the config file), not from a hardness curve"
+                    .to_string(),
+            );
+        }
+        if file.hardness.is_some() {
+            warn_unused_config_hardness(
+                "sweep",
+                "cell parameters come from param_grid, not a hardness curve",
+            );
+        }
         let backend = resolve_backend(self.common.backend, file.backend.clone(), config_path)?;
         let topology = resolve_topology(&self.common.topology_source, &file, config_path)?;
         let seed = merge(self.common.seed, file.seed, DEFAULT_SEED);
@@ -412,11 +445,28 @@ impl TttArgs {
     ///
     /// # Errors
     ///
-    /// Returns a message if the config file cannot be loaded, or if a
-    /// required field is set by neither flag nor file.
+    /// Returns a message if the config file cannot be loaded, if a required
+    /// field is set by neither flag nor file, or if `--hardness` was set
+    /// (this mode leaves sample parameters unset).
     pub fn into_config(self) -> Result<TttConfig, String> {
         let config_path = self.common.config.as_deref();
         let file = load_optional_config(config_path)?;
+        // Explicit `--hardness` is an error: ttt dispatches with unset sample
+        // parameters (backend defaults). A config-file `hardness` is only a
+        // warning (shared FileConfig union).
+        if self.common.hardness.is_some() {
+            return Err(
+                "--hardness is not used by ttt: sample parameters are left unset so \
+                 each trial defers to the backend's own defaults, not a hardness curve"
+                    .to_string(),
+            );
+        }
+        if file.hardness.is_some() {
+            warn_unused_config_hardness(
+                "ttt",
+                "sample parameters are left unset (backend defaults), not taken from hardness",
+            );
+        }
         let backend = resolve_backend(self.common.backend, file.backend.clone(), config_path)?;
         let topology = resolve_topology(&self.common.topology_source, &file, config_path)?;
         let seed = merge(self.common.seed, file.seed, DEFAULT_SEED);
@@ -492,11 +542,29 @@ impl ComparativeArgs {
     ///
     /// # Errors
     ///
-    /// Returns a message if the config file cannot be loaded, or if a
-    /// required field is set by neither flag nor file.
+    /// Returns a message if the config file cannot be loaded, if a required
+    /// field is set by neither flag nor file, or if `--hardness` was set
+    /// (hardness is an output of this mode's search, not an input).
     pub fn into_config(self) -> Result<ComparativeConfig, String> {
         let config_path = self.common.config.as_deref();
         let file = load_optional_config(config_path)?;
+        // Explicit `--hardness` is an error: comparative *searches for* the
+        // hardness that matches the reference, so hardness is an output, not
+        // an input. A config-file `hardness` is only a warning (union schema).
+        if self.common.hardness.is_some() {
+            return Err(
+                "--hardness is not used by comparative: hardness is an *output* of this \
+                 mode (the search reports the hardness matching the reference distribution), \
+                 not an input"
+                    .to_string(),
+            );
+        }
+        if file.hardness.is_some() {
+            warn_unused_config_hardness(
+                "comparative",
+                "hardness is searched for against the reference file, not taken from config",
+            );
+        }
         let backend = resolve_backend(self.common.backend, file.backend.clone(), config_path)?;
         let topology = resolve_topology(&self.common.topology_source, &file, config_path)?;
         let seed = merge(self.common.seed, file.seed, DEFAULT_SEED);
@@ -1355,6 +1423,31 @@ mod tests {
         assert_eq!(cfg.num_jobs, 5);
     }
 
+    /// Explicit `--hardness` on sweep is an error: cell params come from the
+    /// grid, not a hardness curve (F2).
+    #[test]
+    fn sweep_explicit_hardness_flag_is_rejected() {
+        let cli = parse(&[
+            "sweep",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--param-grid",
+            r#"{"num_reads":[64],"num_sweeps":[100]}"#,
+            "--hardness",
+            "0.9",
+        ])
+        .expect("clap still accepts CommonArgs hardness");
+        let message = sweep_args(cli)
+            .into_config()
+            .expect_err("--hardness must be rejected for sweep");
+        assert!(
+            message.contains("--hardness") && message.contains("param-grid"),
+            "got: {message}"
+        );
+    }
+
     #[test]
     fn a_full_valid_ttt_invocation_parses() {
         let cli = parse(&[
@@ -1536,6 +1629,30 @@ mod tests {
         assert!((cfg.max_time_s - 12.5).abs() < f64::EPSILON);
     }
 
+    /// Explicit `--hardness` on ttt is an error: sample params stay unset (F2).
+    #[test]
+    fn ttt_explicit_hardness_flag_is_rejected() {
+        let cli = parse(&[
+            "ttt",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--energy-targets",
+            "-5",
+            "--hardness",
+            "0.9",
+        ])
+        .expect("clap still accepts CommonArgs hardness");
+        let message = ttt_args(cli)
+            .into_config()
+            .expect_err("--hardness must be rejected for ttt");
+        assert!(
+            message.contains("--hardness") && message.contains("unset"),
+            "got: {message}"
+        );
+    }
+
     #[test]
     fn a_full_valid_comparative_invocation_parses() {
         let cli = parse(&[
@@ -1659,6 +1776,31 @@ mod tests {
         );
         assert_eq!(cfg.backend_bin_override, None);
         assert_eq!(cfg.backend_args_override, None);
+    }
+
+    /// Explicit `--hardness` on comparative is an error: hardness is an
+    /// output of the search, not an input (F2).
+    #[test]
+    fn comparative_explicit_hardness_flag_is_rejected() {
+        let cli = parse(&[
+            "comparative",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--target-file",
+            "reference.jsonl",
+            "--hardness",
+            "0.9",
+        ])
+        .expect("clap still accepts CommonArgs hardness");
+        let message = comparative_args(cli)
+            .into_config()
+            .expect_err("--hardness must be rejected for comparative");
+        assert!(
+            message.contains("--hardness") && message.contains("output"),
+            "got: {message}"
+        );
     }
 
     #[test]

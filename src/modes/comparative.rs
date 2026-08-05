@@ -109,7 +109,7 @@
 //! [`BRACKET_STOP_WIDTH`], normally does) stop before actually using every
 //! one of those directories.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::backend::{builtin_registry, run_session, BackendSpec, RunParams};
@@ -287,6 +287,14 @@ pub async fn run_comparative(cfg: &ComparativeConfig) -> Result<(Vec<JobRecord>,
     let mut final_records: Vec<JobRecord> = Vec::new();
     let mut final_ks: Option<f64> = None;
     let mut iterations_json: Vec<serde_json::Value> = Vec::new();
+    // Aggregate across every iteration (same meaning as sweep/ttt/scaling
+    // totals), not only the final evaluation.
+    let mut totals = Totals {
+        jobs: 0,
+        passed: 0,
+        rejected: 0,
+        skipped_lines: 0,
+    };
 
     for i in 0..cfg.max_iterations {
         if hi - lo < BRACKET_STOP_WIDTH {
@@ -294,53 +302,23 @@ pub async fn run_comparative(cfg: &ComparativeConfig) -> Result<(Vec<JobRecord>,
         }
         let mid = lo + (hi - lo) / 2.0;
         let (dir, records_path, dir_name) = &iter_paths[i as usize];
-        std::fs::create_dir_all(dir).map_err(ModeError::Io)?;
-        std::fs::File::create(records_path).map_err(ModeError::Io)?;
-
-        let params = cfg.param_curve.resolve(backend.kind, mid);
-        let jobs = draw_jobs(&spec, cfg.seed, cfg.num_jobs, &params);
-
-        let sock_path = unique_sock_path();
-        let report = run_session(RunParams {
-            backend: &backend,
-            spec: &spec,
-            jobs,
-            sock_path: &sock_path,
-            target: None,
-        })
+        let eval = evaluate_iteration(
+            cfg,
+            &backend,
+            &spec,
+            mid,
+            (dir, records_path, dir_name),
+            &target_energies,
+        )
         .await?;
 
-        for record in &report.records {
-            append_jsonl(records_path, record).map_err(ModeError::Io)?;
-        }
-
-        let energies: Vec<f64> = report
-            .records
-            .iter()
-            .filter(|r| r.passed)
-            .map(|r| milli_to_f64(r.best_energy_milli))
-            .collect();
-        // No passed record this iteration is treated as the worst possible
-        // outcome (push the search toward more effort) rather than
-        // crashing or silently guessing a direction — see this module's
-        // doc on what a degenerate evaluation does to the search.
-        let our_mean = describe(&energies).map_or(f64::INFINITY, |s| s.mean);
-        let ks = ks_distance(&energies, &target_energies);
-
-        iterations_json.push(serde_json::json!({
-            "dir": dir_name,
-            "hardness": mid,
-            "num_reads": params.num_reads,
-            "num_sweeps": params.num_sweeps,
-            "anneal_time_us": params.anneal_time_us,
-            "jobs": report.records.len(),
-            "mean_best_energy": finite_or_null(our_mean),
-            "ks_distance": ks,
-        }));
-
+        totals.jobs += eval.jobs;
+        totals.passed += eval.passed;
+        totals.rejected += eval.rejected;
+        iterations_json.push(eval.iteration_json);
         final_hardness = mid;
-        final_records = report.records;
-        final_ks = ks;
+        final_records = eval.records;
+        final_ks = eval.ks;
 
         // Strict `>`, not `>=`: an exact tie (common on the bundled
         // fixtures, where `ParamCurve::resolve`'s step function makes
@@ -351,7 +329,7 @@ pub async fn run_comparative(cfg: &ComparativeConfig) -> Result<(Vec<JobRecord>,
         // reference's mean rather than to any particular hardness within
         // it. This is a real, deterministic bias on a fixture with wide
         // plateaus, not sampling noise.
-        if our_mean > target_mean {
+        if eval.mean_best_energy > target_mean {
             lo = mid;
         } else {
             hi = mid;
@@ -360,18 +338,102 @@ pub async fn run_comparative(cfg: &ComparativeConfig) -> Result<(Vec<JobRecord>,
 
     validate_hardness(final_hardness)?;
 
-    let summary = build_summary(
+    let summary = build_summary(&SummaryParts {
         cfg,
-        &spec,
-        jsonl.skipped_lines,
+        spec: &spec,
+        target_file_skipped_lines: jsonl.skipped_lines,
         final_hardness,
-        final_ks,
-        &iterations_json,
-        &final_records,
-    );
+        final_ks_distance: final_ks,
+        iterations_json: &iterations_json,
+        totals,
+        final_records: &final_records,
+    });
     write_summary(&cfg.output_dir.join(SUMMARY_FILENAME), &summary).map_err(ModeError::Io)?;
 
     Ok((final_records, final_hardness))
+}
+
+/// Outcome of one hardness-search evaluation (one `run_session`).
+struct IterationEval {
+    records: Vec<JobRecord>,
+    jobs: usize,
+    passed: usize,
+    rejected: usize,
+    mean_best_energy: f64,
+    ks: Option<f64>,
+    iteration_json: serde_json::Value,
+}
+
+/// Run one comparative iteration: draw jobs at `hardness`, session, write
+/// JSONL, compute mean/KS, and build that iteration's summary JSON object.
+/// `paths` is `(iteration_dir, records_jsonl_path, dir_name_for_summary)`.
+async fn evaluate_iteration(
+    cfg: &ComparativeConfig,
+    backend: &BackendSpec,
+    spec: &TopologySpec,
+    hardness: f64,
+    paths: (&Path, &Path, &str),
+    target_energies: &[f64],
+) -> Result<IterationEval, ModeError> {
+    let (dir, records_path, dir_name) = paths;
+    std::fs::create_dir_all(dir).map_err(ModeError::Io)?;
+    std::fs::File::create(records_path).map_err(ModeError::Io)?;
+
+    let params = cfg.param_curve.resolve(backend.kind, hardness);
+    let jobs = draw_jobs(spec, cfg.seed, cfg.num_jobs, &params);
+
+    let sock_path = unique_sock_path();
+    let report = run_session(RunParams {
+        backend,
+        spec,
+        jobs,
+        sock_path: &sock_path,
+        target: None,
+    })
+    .await?;
+
+    for record in &report.records {
+        append_jsonl(records_path, record).map_err(ModeError::Io)?;
+    }
+
+    let jobs_n = report.records.len();
+    let passed = report.records.iter().filter(|r| r.passed).count();
+    let rejected = report.records.iter().filter(|r| r.rejected).count();
+    let energies: Vec<f64> = report
+        .records
+        .iter()
+        .filter(|r| r.passed)
+        .map(|r| milli_to_f64(r.best_energy_milli))
+        .collect();
+    // No passed record this iteration is treated as the worst possible
+    // outcome (push the search toward more effort) rather than crashing
+    // or silently guessing a direction — see this module's doc.
+    let mean_best_energy = describe(&energies).map_or(f64::INFINITY, |s| s.mean);
+    let ks = ks_distance(&energies, target_energies);
+
+    let iteration_json = serde_json::json!({
+        "dir": dir_name,
+        "hardness": hardness,
+        "num_reads": params.num_reads,
+        "num_sweeps": params.num_sweeps,
+        "anneal_time_us": params.anneal_time_us,
+        "jobs": jobs_n,
+        "passed": passed,
+        "rejected": rejected,
+        "orphan_results": report.orphan_results,
+        "mean_best_energy": finite_or_null(mean_best_energy),
+        "ks_distance": ks,
+    });
+
+    Ok(IterationEval {
+        records: report.records,
+        jobs: jobs_n,
+        passed,
+        rejected,
+        mean_best_energy,
+        ks,
+        iteration_json,
+    })
 }
 
 /// Resolve `cfg.backend` against the built-in registry, applying
@@ -467,59 +529,61 @@ fn finite_or_null(value: f64) -> serde_json::Value {
     }
 }
 
-/// Build the closing [`Summary`] from every evaluated iteration
-/// (`iterations_json`, already rendered by the caller) and the search's
-/// final outcome. `totals` aggregates across every iteration's dispatched
-/// jobs; `config` carries the requested run parameters, `cfg.target_file`'s
-/// own `skipped_lines` (so a reference file with unparseable lines is
-/// never silently treated as if it were complete — see this module's doc),
-/// every iteration's own record, and the final chosen hardness/
-/// `ks_distance`.
-fn build_summary(
-    cfg: &ComparativeConfig,
-    spec: &TopologySpec,
+/// Inputs to [`build_summary`], bundled so the call stays under clippy's
+/// argument-count limit while still naming each field.
+struct SummaryParts<'a> {
+    cfg: &'a ComparativeConfig,
+    spec: &'a TopologySpec,
     target_file_skipped_lines: usize,
     final_hardness: f64,
     final_ks_distance: Option<f64>,
-    iterations_json: &[serde_json::Value],
-    final_records: &[JobRecord],
-) -> Summary {
-    let totals = Totals {
-        jobs: final_records.len(),
-        passed: final_records.iter().filter(|r| r.passed).count(),
-        rejected: final_records.iter().filter(|r| r.rejected).count(),
-        // Every iteration's records file is created empty and exclusively
-        // written by this call, same reasoning as `sweep::build_summary`;
-        // `target_file_skipped_lines` (a distinct file this run only
-        // reads) is carried separately, in `config`, below.
-        skipped_lines: 0,
-    };
+    iterations_json: &'a [serde_json::Value],
+    totals: Totals,
+    final_records: &'a [JobRecord],
+}
 
+/// Build the closing [`Summary`] from every evaluated iteration and the
+/// search's final outcome. `totals` aggregates across **every** iteration's
+/// dispatched jobs (same meaning as sweep/ttt/scaling/reproducibility);
+/// the final evaluation's own counts are also reported under
+/// `config.final_evaluation_*` so a reader can still inspect the last
+/// bracket step alone.
+///
+/// `totals.skipped_lines` is always 0 here: every iteration's records file
+/// is created empty and exclusively written by this call (same reasoning as
+/// `sweep::build_summary`); `target_file_skipped_lines` is a distinct file
+/// this run only reads and is carried in `config` instead.
+fn build_summary(p: &SummaryParts<'_>) -> Summary {
     let config = serde_json::json!({
-        "backend": cfg.backend,
-        "topology": cfg.topology.label(),
-        "seed": cfg.seed,
-        "num_jobs": cfg.num_jobs,
-        "max_iterations": cfg.max_iterations,
-        "target_file": cfg.target_file.display().to_string(),
-        "target_file_skipped_lines": target_file_skipped_lines,
-        "final_hardness": final_hardness,
-        "final_ks_distance": final_ks_distance,
-        "iterations": iterations_json,
+        "backend": p.cfg.backend,
+        "topology": p.cfg.topology.label(),
+        "seed": p.cfg.seed,
+        "num_jobs": p.cfg.num_jobs,
+        "max_iterations": p.cfg.max_iterations,
+        "target_file": p.cfg.target_file.display().to_string(),
+        "target_file_skipped_lines": p.target_file_skipped_lines,
+        "final_hardness": p.final_hardness,
+        "final_ks_distance": p.final_ks_distance,
+        // Last evaluation only — distinct from `totals`, which sums every
+        // iteration.
+        "final_evaluation_jobs": p.final_records.len(),
+        "final_evaluation_passed": p.final_records.iter().filter(|r| r.passed).count(),
+        "final_evaluation_rejected": p.final_records.iter().filter(|r| r.rejected).count(),
+        "iterations": p.iterations_json,
     });
 
     Summary {
         mode: "comparative".to_string(),
-        backend: cfg.backend.clone(),
+        backend: p.cfg.backend.clone(),
         topology: TopologyInfo {
-            name: cfg.topology.label(),
-            num_nodes: spec.nodes.len(),
-            num_edges: spec.edges.len(),
-            topology_hash: hex_encode(&spec.topology_hash()),
+            name: p.cfg.topology.label(),
+            num_nodes: p.spec.nodes.len(),
+            num_edges: p.spec.edges.len(),
+            topology_hash: hex_encode(&p.spec.topology_hash()),
         },
         hardware: HardwareInfo::detect(),
         config,
-        totals,
+        totals: p.totals,
     }
 }
 

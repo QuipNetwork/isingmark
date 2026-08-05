@@ -624,6 +624,10 @@ pub fn parse_one_scaling_size(entry: &str) -> Result<usize, ParseError> {
 /// edge counts, topology hash, and `stats::describe`-derived energy/wall-time
 /// distributions.
 ///
+/// Energy stats under the JSON key `best_energy_stats` are in **natural
+/// units** (`best_energy_milli / 1000`), not milli — same convention as
+/// `sweep::build_summary` and the human-facing compare table.
+///
 /// `Summary::topology` has no single applicable value here (unlike every
 /// other mode, which benchmarks one shared topology): each size generates
 /// its own. It is populated with a descriptive label and zeroed counts,
@@ -679,7 +683,10 @@ fn build_summary(
                 "miner_exit_code": o.report.miner_exit_code,
                 "miner_unresponsive": o.report.miner_unresponsive,
                 "miner_stderr_tail": o.report.miner_stderr_tail,
-                "best_energy_milli_stats": stats_json(describe(&energies)),
+                "orphan_results": o.report.orphan_results,
+                // Natural units (best_energy_milli / 1000), not milli — see
+                // `build_summary`'s doc.
+                "best_energy_stats": stats_json(describe(&energies)),
                 "wall_ms_stats": stats_json(describe(&wall_mss)),
             })
         })

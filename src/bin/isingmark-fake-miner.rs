@@ -146,6 +146,12 @@ struct Cli {
     /// asks for more only ever receives what that one grant produced.
     #[arg(long)]
     report_jobs_received_after_ms: Option<u64>,
+    /// 1-based ordinal: after solving that job, also send a `Result` with a
+    /// synthetic unknown `job_id` that the coordinator never dispatched.
+    /// Exercises `RunReport::orphan_results` (observability for stray /
+    /// duplicate terminal messages) without changing coordinator dispatch.
+    #[arg(long)]
+    stray_result_after: Option<u32>,
 }
 
 /// Map a session/CLI failure to a documented exit code (64/69/70/77).
@@ -603,6 +609,19 @@ async fn run() -> Result<(), ExitCode> {
                     .await
                     .map_err(|_| ExitCode::InternalFatal)?;
                 } else {
+                    if cli.stray_result_after == Some(jobs_seen) {
+                        // Send the unknown-id Result *before* the real one so
+                        // the coordinator still has the real job in-flight and
+                        // does not shut down before reading the orphan.
+                        let stray = JobResult {
+                            job_id: b"isingmark-stray-orphan-job-id".to_vec(),
+                            solutions: Vec::new(),
+                            meta: None,
+                        };
+                        tx.send(miner(miner_msg::Msg::Result(stray)))
+                            .await
+                            .map_err(|_| ExitCode::InternalFatal)?;
+                    }
                     let result =
                         solve(&job, topo.as_ref(), cli.energy_lie_milli, cli.num_solutions);
                     tx.send(miner(miner_msg::Msg::Result(result)))

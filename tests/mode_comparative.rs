@@ -492,3 +492,70 @@ async fn hermetic_comparative_every_iteration_replays_the_identical_job_sequence
         );
     }
 }
+
+/// `totals` must sum every iteration's dispatched jobs, not only the final
+/// evaluation (F3). A multi-iteration search that only counted the last
+/// batch would under-report wall cost side-by-side with sweep/ttt.
+#[tokio::test]
+async fn hermetic_comparative_totals_aggregate_across_every_iteration() {
+    let target_dir = tempfile::tempdir().expect("create temp dir");
+    let target_path = target_dir.path().join("reference.jsonl");
+    generate_reference_at_hardness(0.3, 10, 7, &target_path).await;
+
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = ComparativeConfig {
+        num_jobs: 10,
+        max_iterations: 30,
+        seed: 7,
+        ..base_config(dir.path().to_path_buf(), target_path)
+    };
+
+    let (final_records, _) = run_comparative(&cfg).await.expect("search succeeds");
+
+    let mut sum_jobs = 0usize;
+    let mut sum_passed = 0usize;
+    let mut sum_rejected = 0usize;
+    let mut iterations = 0usize;
+    for i in 0..cfg.max_iterations {
+        let path = iter_dir(dir.path(), i).join(RECORDS_FILENAME);
+        if !path.exists() {
+            break;
+        }
+        let jsonl = read_jsonl(&path).expect("records.jsonl is readable");
+        sum_jobs += jsonl.records.len();
+        sum_passed += jsonl.records.iter().filter(|r| r.passed).count();
+        sum_rejected += jsonl.records.iter().filter(|r| r.rejected).count();
+        iterations += 1;
+    }
+    assert!(
+        iterations >= 2,
+        "need at least two iterations so totals can exceed the final evaluation alone"
+    );
+
+    let summary = read_summary(dir.path());
+    assert_eq!(
+        summary["totals"]["jobs"].as_u64().expect("jobs"),
+        sum_jobs as u64,
+        "totals.jobs must equal the sum of every iter_*/records.jsonl"
+    );
+    assert_eq!(
+        summary["totals"]["passed"].as_u64().expect("passed"),
+        sum_passed as u64
+    );
+    assert_eq!(
+        summary["totals"]["rejected"].as_u64().expect("rejected"),
+        sum_rejected as u64
+    );
+    assert_eq!(
+        summary["config"]["final_evaluation_jobs"]
+            .as_u64()
+            .expect("final_evaluation_jobs"),
+        final_records.len() as u64,
+        "final_evaluation_jobs is the last iteration only"
+    );
+    assert!(
+        sum_jobs > final_records.len(),
+        "aggregate totals must exceed the final evaluation alone (got totals={sum_jobs}, final={})",
+        final_records.len()
+    );
+}

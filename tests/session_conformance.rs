@@ -901,3 +901,28 @@ async fn quip_cpu_sa_conformance() {
         "coordinator socket must be removed on every exit path"
     );
 }
+
+/// A miner-emitted `Result` for a `job_id` the coordinator never dispatched
+/// must increment `RunReport::orphan_results` (F7 observability counter).
+/// Uses `--stray-result-after` on the fake miner; does not change dispatch.
+#[tokio::test]
+async fn fake_miner_stray_result_increments_orphan_results() {
+    let backend = fake_miner_backend(vec!["--stray-result-after".into(), "1".into()]);
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let jobs = draw_jobs(&spec, 11, 1);
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    let report = run_with(&backend, &spec, jobs, &sock_path).await;
+
+    assert!(report.handshake_ok);
+    assert_eq!(
+        report.records.len(),
+        1,
+        "the real job still gets one terminal record"
+    );
+    assert!(
+        report.orphan_results >= 1,
+        "stray Result must count as an orphan, got orphan_results={}",
+        report.orphan_results
+    );
+}

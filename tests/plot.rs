@@ -109,6 +109,7 @@ mod with_plot_feature {
                 miner_exit_code: 0,
                 miner_unresponsive: false,
                 miner_stderr_tail: None,
+                orphan_results: 0,
                 run_wall_ms: 100,
             },
         }

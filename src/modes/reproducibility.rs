@@ -461,7 +461,11 @@ fn build_summary(
             "miner_exit_code": report.miner_exit_code,
             "miner_unresponsive": report.miner_unresponsive,
             "miner_stderr_tail": report.miner_stderr_tail,
-            "best_energy_milli_stats": stats_json(describe(&energies)),
+            "orphan_results": report.orphan_results,
+            // Natural units (best_energy_milli / 1000), not milli. The key is
+            // `best_energy_stats` so a consumer does not treat these as
+            // matching `JobRecord::best_energy_milli` (a silent 1000× error).
+            "best_energy_stats": stats_json(describe(&energies)),
         })
     };
 

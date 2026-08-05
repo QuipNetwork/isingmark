@@ -167,12 +167,20 @@ async fn run_ttt(cfg: &TttConfig, plot: Option<&Path>) -> ExitCode {
 /// anything not in the typed return value.
 async fn run_comparative(cfg: &ComparativeConfig) -> ExitCode {
     match comparative::run_comparative(cfg).await {
-        Ok((records, hardness)) => {
+        Ok((_final_records, hardness)) => {
             let summary_path = cfg.output_dir.join(comparative::SUMMARY_FILENAME);
             let ks_distance = read_final_ks_distance(&summary_path);
+            // `totals.jobs` is the true aggregate across every iteration
+            // (matches summary.json and every other multi-session mode),
+            // not the final evaluation alone.
+            let total_records = read_totals_jobs(&summary_path);
             let mut message = format!("matched hardness: {hardness:.4}\n");
             let _ = writeln!(message, "ks_distance: {}", format_ks_distance(ks_distance));
-            let _ = writeln!(message, "records: {}", records.len());
+            let _ = writeln!(
+                message,
+                "records: {}",
+                total_records.map_or_else(|| "?".to_string(), |n| n.to_string())
+            );
             let _ = writeln!(message, "summary: {}", summary_path.display());
             succeed(&message)
         }
@@ -341,6 +349,15 @@ fn read_final_ks_distance(summary_path: &std::path::Path) -> Option<f64> {
     json.get("config")?.get("final_ks_distance")?.as_f64()
 }
 
+/// Read `totals.jobs` from a summary.json (aggregate across every
+/// iteration for comparative mode). Same round-trip pattern as
+/// [`read_final_ks_distance`].
+fn read_totals_jobs(summary_path: &std::path::Path) -> Option<u64> {
+    let text = std::fs::read_to_string(summary_path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&text).ok()?;
+    json.get("totals")?.get("jobs")?.as_u64()
+}
+
 /// Render an optional `ks_distance` for the CLI's human-facing line:
 /// `"n/a"` for `None` (see [`read_final_ks_distance`]'s doc for the two
 /// distinct cases that produce it), four decimal places otherwise —
@@ -425,6 +442,7 @@ mod tests {
             miner_exit_code: 0,
             miner_unresponsive: false,
             miner_stderr_tail: None,
+            orphan_results: 0,
             run_wall_ms: 1_000,
         }
     }
@@ -614,6 +632,28 @@ mod tests {
             "a tiny nonzero p_value must not render as flat 0.0000: {message}"
         );
         assert!(message.to_lowercase().contains("e-8"), "got: {message}");
+    }
+
+    /// Ordinary-magnitude p-values must also use `{:.4e}` scientific
+    /// notation. The tiny-value test above only pins the lower end of the
+    /// constant space; without this, a regression that formats mid-range
+    /// values as fixed-point would still pass.
+    #[test]
+    fn reproducibility_message_renders_an_ordinary_p_value_in_scientific_notation() {
+        let report = ReproReport {
+            ks_statistic: 0.1,
+            p_value: 0.5,
+            differs: false,
+        };
+        let message = format_reproducibility_message(
+            &repro_config(0.0, 1.0),
+            &report,
+            std::path::Path::new("/tmp/out/summary.json"),
+        );
+        assert!(
+            message.contains("p_value: 5.0000e-1"),
+            "ordinary p_value must render with {{:.4e}}, got: {message}"
+        );
     }
 
     /// `differs` must always be printed alongside the exact threshold it

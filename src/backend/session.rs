@@ -31,7 +31,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -72,6 +72,26 @@ const OUTBOUND_CHANNEL_DEPTH: usize = 16;
 /// Grace period advertised on `Shutdown`, and reused as the bound on the
 /// post-shutdown inbound drain and on waiting for the child to exit after
 /// the session loop ends.
+///
+/// **Why 2 seconds, and why it is shorter than `PING_INTERVAL` (3s) and
+/// `DISPATCH_SEND_TIMEOUT` (30s):** this is not a liveness or dispatch
+/// bound. It is only how long `run_session_inner` waits for the drive task
+/// to finish *after* `child.wait()` has already returned (miner process
+/// gone). On every production path that reaches that branch, peer death
+/// closes the Unix socket promptly: inbound EOF / channel close runs
+/// `abandon_in_flight` and `FinishSignal` well under 2 seconds. Contended
+/// abort regression tests (see `fake_miner_abort_mid_job_under_contention_*`)
+/// are the empirical bound that this window is enough to keep every
+/// already-decoded record without data loss today.
+///
+/// Raising this to match `DISPATCH_SEND_TIMEOUT` would only help if the
+/// drive task stayed blocked *after* the child was already reaped and
+/// still needed tens of seconds to commit records — a scenario not
+/// observed under test. Changing concurrency timing at the end of a long
+/// fix series without a reproducible race is how a data-loss bug gets
+/// reintroduced rather than removed. Do **not** lengthen this constant
+/// without a failing reproduction that shows late commits after child
+/// exit under the current 2s bound.
 const SHUTDOWN_GRACE_MS: u32 = 2_000;
 
 /// How long to wait for *any* inbound message before sending the miner a
@@ -204,6 +224,12 @@ pub struct RunReport {
     /// `tracing::error!` to stderr, with no other signal reaching the
     /// coordinator at all.
     pub miner_stderr_tail: Option<String>,
+    /// Count of `Result` / `Reject` messages whose `job_id` was not in the
+    /// in-flight map (stray id, or a second terminal message after the
+    /// first already removed the entry). Observability only: the message
+    /// is still dropped; this counter does not change dispatch or repair
+    /// the known duplicate-`job_id` defect.
+    pub orphan_results: u64,
     /// Total wall time of the call, in milliseconds.
     pub run_wall_ms: u64,
 }
@@ -402,6 +428,7 @@ async fn run_session_inner(
         miner_exit_code,
         miner_unresponsive: progress.miner_unresponsive.load(Ordering::Acquire),
         miner_stderr_tail,
+        orphan_results: progress.orphan_results.load(Ordering::Acquire),
         run_wall_ms: duration_ms(start.elapsed()),
     })
 }
@@ -455,6 +482,7 @@ impl StderrTail {
 struct SessionProgress {
     handshake_ok: AtomicBool,
     miner_unresponsive: AtomicBool,
+    orphan_results: AtomicU64,
     records: Mutex<Vec<JobRecord>>,
 }
 
@@ -483,6 +511,11 @@ impl SessionProgress {
     /// See [`Self::set_handshake_ok`]: same cross-task publication reasoning.
     fn set_unresponsive(&self) {
         self.miner_unresponsive.store(true, Ordering::Release);
+    }
+
+    /// Count a `Result`/`Reject` whose `job_id` was not in-flight.
+    fn note_orphan_result(&self) {
+        let _ = self.orphan_results.fetch_add(1, Ordering::Release);
     }
 
     fn snapshot_records(&self) -> Vec<JobRecord> {
@@ -757,6 +790,11 @@ async fn drive_session(
                                 target,
                                 start.elapsed(),
                             ));
+                        } else {
+                            // Unknown job_id: drop the payload (dispatch
+                            // logic unchanged) but count it for summary
+                            // observability — see RunReport::orphan_results.
+                            progress.note_orphan_result();
                         }
                         if maybe_shutdown(&remaining, &in_flight, &tx).await {
                             break;
@@ -770,6 +808,8 @@ async fn drive_session(
                                 target,
                                 start.elapsed(),
                             ));
+                        } else {
+                            progress.note_orphan_result();
                         }
                         if maybe_shutdown(&remaining, &in_flight, &tx).await {
                             break;

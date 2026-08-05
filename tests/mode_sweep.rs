@@ -63,7 +63,7 @@ fn read_summary(output_dir: &std::path::Path) -> Summary {
 /// Independent milli-to-natural conversion, matching
 /// `modes::sweep::milli_to_f64` (private to that module, so this test
 /// re-derives it rather than importing it) — used to compute this test's
-/// own expectation for `best_energy_milli_stats`, rather than trusting the
+/// own expectation for `best_energy_stats`, rather than trusting the
 /// summary's own arithmetic.
 #[expect(
     clippy::cast_precision_loss,
@@ -194,7 +194,7 @@ async fn hermetic_sweep_summary_aggregates_totals_and_lists_every_cell() {
         );
         assert_eq!(cell["jobs"].as_u64(), Some(cfg.num_jobs.into()));
 
-        // `best_energy_milli_stats`/`wall_ms_stats` are the fields that make
+        // `best_energy_stats`/`wall_ms_stats` are the fields that make
         // a sweep comparable across cells at all; nothing above touches
         // them, so a mutation that nulls, drops, or mis-scales either would
         // otherwise ship green. Recompute the expected min/max independently
@@ -221,10 +221,10 @@ async fn hermetic_sweep_summary_aggregates_totals_and_lists_every_cell() {
         let expected_max = energies.iter().copied().fold(f64::NEG_INFINITY, f64::max);
 
         let energy_stats_msg = format!(
-            "cell {}: best_energy_milli_stats must be a non-null object",
+            "cell {}: best_energy_stats must be a non-null object",
             cell_report.dir_name
         );
-        let energy_stats = cell["best_energy_milli_stats"]
+        let energy_stats = cell["best_energy_stats"]
             .as_object()
             .expect(&energy_stats_msg);
         let e_min = energy_stats["min"].as_f64().expect("min is a number");
@@ -232,19 +232,19 @@ async fn hermetic_sweep_summary_aggregates_totals_and_lists_every_cell() {
         let e_p50 = energy_stats["p50"].as_f64().expect("p50 is a number");
         assert!(
             (e_min - expected_min).abs() < 1e-9,
-            "cell {}: best_energy_milli_stats.min must match records.jsonl's own min, \
+            "cell {}: best_energy_stats.min must match records.jsonl's own min, \
              got {e_min} expected {expected_min}",
             cell_report.dir_name
         );
         assert!(
             (e_max - expected_max).abs() < 1e-9,
-            "cell {}: best_energy_milli_stats.max must match records.jsonl's own max, \
+            "cell {}: best_energy_stats.max must match records.jsonl's own max, \
              got {e_max} expected {expected_max}",
             cell_report.dir_name
         );
         assert!(
             e_min <= e_p50 && e_p50 <= e_max,
-            "cell {}: best_energy_milli_stats must satisfy min <= p50 <= max, got {e_min} <= {e_p50} <= {e_max}",
+            "cell {}: best_energy_stats must satisfy min <= p50 <= max, got {e_min} <= {e_p50} <= {e_max}",
             cell_report.dir_name
         );
 

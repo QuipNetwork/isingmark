@@ -1,7 +1,11 @@
-# Complete comparative config: runnable as
+# Comparative config for the dwave backend.
+#
+# Requires a records.jsonl from a prior run as target_file (reference.jsonl
+# is not shipped). Example:
 #   isingmark comparative --config examples/configs/comparative_dwave.yaml
-# with no other flags. target_file must point at a prior run's records.jsonl.
-# A real run needs a records file from a prior run (reference.jsonl is not shipped).
+# after placing a prior run's records at ./reference.jsonl (or editing
+# target_file below). A real run also needs the quip-dwave-qa binary on PATH.
+#
 # param_curve deliberately differs from the built-in default so the file value is exercised.
 backend: dwave
 topology_preset: smoke

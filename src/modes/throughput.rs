@@ -183,11 +183,12 @@ pub async fn run_throughput_with_summary(
     write_summary(&summary_path, &summary).map_err(ModeError::Io)?;
 
     let report = RunReport {
-        handshake_ok: agg.any_handshake_ok,
+        handshake_ok: agg.all_handshake_ok,
         records: agg.records,
         miner_exit_code: agg.last_exit_code,
         miner_unresponsive: agg.any_unresponsive,
         miner_stderr_tail: agg.last_stderr_tail,
+        orphan_results: agg.orphan_results,
         run_wall_ms: agg.total_wall_ms,
     };
     Ok((report, summary))
@@ -245,10 +246,17 @@ fn target_wall(duration_s: f64) -> Duration {
 struct Aggregate {
     records: Vec<JobRecord>,
     total_wall_ms: u64,
-    any_handshake_ok: bool,
+    /// True only when **every** completed batch's handshake succeeded.
+    /// A later failed handshake must not be masked by an earlier success
+    /// (unlike the prior OR-combine, which reported success if any batch
+    /// shook hands). Unresponsive is still OR-ed: any unresponsive batch
+    /// surfaces as unresponsive for the run.
+    all_handshake_ok: bool,
     any_unresponsive: bool,
+    orphan_results: u64,
     last_exit_code: i32,
     last_stderr_tail: Option<String>,
+    batches_run: u32,
 }
 
 /// Repeatedly draw a [`BATCH_SIZE`]-job batch from `source` and run a
@@ -269,10 +277,14 @@ async fn dispatch_until_duration(
     let mut agg = Aggregate {
         records: Vec::new(),
         total_wall_ms: 0,
-        any_handshake_ok: false,
+        // Vacuous true until the first batch; zero batches leave this false
+        // via `batches_run == 0` below.
+        all_handshake_ok: true,
         any_unresponsive: false,
+        orphan_results: 0,
         last_exit_code: 0,
         last_stderr_tail: None,
+        batches_run: 0,
     };
     let mut total_wall = Duration::ZERO;
 
@@ -305,8 +317,10 @@ async fn dispatch_until_duration(
             append_jsonl(records_path, record).map_err(ModeError::Io)?;
         }
 
-        agg.any_handshake_ok |= report.handshake_ok;
+        // AND across batches: a later failed handshake must not be masked.
+        agg.all_handshake_ok &= report.handshake_ok;
         agg.any_unresponsive |= report.miner_unresponsive;
+        agg.orphan_results = agg.orphan_results.saturating_add(report.orphan_results);
         agg.last_exit_code = report.miner_exit_code;
         if report.miner_stderr_tail.is_some() {
             agg.last_stderr_tail = report.miner_stderr_tail;
@@ -314,12 +328,17 @@ async fn dispatch_until_duration(
         total_wall += Duration::from_millis(report.run_wall_ms);
         let handshake_ok = report.handshake_ok;
         agg.records.extend(report.records);
+        agg.batches_run = agg.batches_run.saturating_add(1);
 
         if !handshake_ok {
             break;
         }
     }
 
+    // No batch ran → handshake did not succeed.
+    if agg.batches_run == 0 {
+        agg.all_handshake_ok = false;
+    }
     agg.total_wall_ms = duration_ms(total_wall);
     Ok(agg)
 }
@@ -357,6 +376,7 @@ fn build_summary(
         "miner_exit_code": agg.last_exit_code,
         "miner_unresponsive": agg.any_unresponsive,
         "miner_stderr_tail": agg.last_stderr_tail.clone(),
+        "orphan_results": agg.orphan_results,
     });
 
     Summary {
