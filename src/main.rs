@@ -2,19 +2,22 @@
 //! `IsingMark` CLI entry point.
 
 use std::fmt::Write as _;
+use std::path::Path;
 use std::process::ExitCode;
 
 use clap::Parser as _;
 use isingmark::backend::RunReport;
-use isingmark::cli::{Cli, Command};
+use isingmark::cli::{Cli, Command, CompareArgs};
 use isingmark::modes::comparative::{self, ComparativeConfig};
 use isingmark::modes::compare::{self, format_comparison_table};
 use isingmark::modes::reproducibility::{self, ReproConfig, ReproReport};
 use isingmark::modes::scaling::{self, ScalingConfig};
-use isingmark::modes::sweep::{self, SweepConfig};
+use isingmark::modes::sweep::{self, SweepConfig, SweepReport};
 use isingmark::modes::throughput::{self, ThroughputConfig};
-use isingmark::modes::ttt::{self, TttConfig};
+use isingmark::modes::ttt::{self, TttConfig, TttReport};
 use isingmark::report::format_summary_table;
+#[cfg(not(feature = "plot"))]
+use isingmark::report::plot_feature_required_message;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -24,14 +27,20 @@ async fn main() -> ExitCode {
             Ok(cfg) => run_throughput(&cfg).await,
             Err(message) => fail(&message),
         },
-        Command::Sweep(args) => match args.into_config() {
-            Ok(cfg) => run_sweep(&cfg).await,
-            Err(message) => fail(&message),
-        },
-        Command::Ttt(args) => match args.into_config() {
-            Ok(cfg) => run_ttt(&cfg).await,
-            Err(message) => fail(&message),
-        },
+        Command::Sweep(args) => {
+            let plot = args.plot.clone();
+            match args.into_config() {
+                Ok(cfg) => run_sweep(&cfg, plot.as_deref()).await,
+                Err(message) => fail(&message),
+            }
+        }
+        Command::Ttt(args) => {
+            let plot = args.plot.clone();
+            match args.into_config() {
+                Ok(cfg) => run_ttt(&cfg, plot.as_deref()).await,
+                Err(message) => fail(&message),
+            }
+        }
         Command::Comparative(args) => match args.into_config() {
             Ok(cfg) => run_comparative(&cfg).await,
             Err(message) => fail(&message),
@@ -44,7 +53,7 @@ async fn main() -> ExitCode {
             Ok(cfg) => run_reproducibility(&cfg).await,
             Err(message) => fail(&message),
         },
-        Command::Compare(args) => run_compare_files(&args.file_a, &args.file_b),
+        Command::Compare(args) => run_compare_files(&args),
     }
 }
 
@@ -83,9 +92,18 @@ async fn run_throughput(cfg: &ThroughputConfig) -> ExitCode {
 /// affected cell gets its own warning line via [`truncated_run_warning`],
 /// prefixed with that cell's own directory name so a multi-cell warning
 /// list is attributable to the cell it came from.
-async fn run_sweep(cfg: &SweepConfig) -> ExitCode {
+///
+/// When `plot` is `Some`, writes a sweep heatmap PNG to that path (or
+/// exits non-zero if the binary lacks the `plot` feature, or plotting
+/// fails). The flag is always parsed; only the behaviour is feature-gated.
+async fn run_sweep(cfg: &SweepConfig, plot: Option<&Path>) -> ExitCode {
     match sweep::run_sweep(cfg).await {
         Ok(report) => {
+            if let Some(path) = plot {
+                if let Err(message) = write_sweep_plot(&report, path) {
+                    return fail(&message);
+                }
+            }
             let mut message = format_summary_table(&report.summary);
             for cell in &report.cells {
                 if let Some(warning) = truncated_run_warning(&cell.report) {
@@ -93,6 +111,9 @@ async fn run_sweep(cfg: &SweepConfig) -> ExitCode {
                 }
             }
             let _ = writeln!(message, "output: {}", cfg.output_dir.display());
+            if let Some(path) = plot {
+                let _ = writeln!(message, "plot: {}", path.display());
+            }
             succeed(&message)
         }
         Err(e) => fail(&e.to_string()),
@@ -108,11 +129,22 @@ async fn run_sweep(cfg: &SweepConfig) -> ExitCode {
 /// target), so a single target's `RunReport`s would be one per trial rather
 /// than one per target, and `summary.json`'s own per-target `reached`/
 /// `trials_attempted` fields already surface a target that came up short.
-async fn run_ttt(cfg: &TttConfig) -> ExitCode {
+///
+/// When `plot` is `Some`, writes a TTT CDF PNG to that path (or exits
+/// non-zero if the binary lacks the `plot` feature, or plotting fails).
+async fn run_ttt(cfg: &TttConfig, plot: Option<&Path>) -> ExitCode {
     match ttt::run_ttt(cfg).await {
         Ok(report) => {
+            if let Some(path) = plot {
+                if let Err(message) = write_ttt_plot(&report, path) {
+                    return fail(&message);
+                }
+            }
             let mut message = format_summary_table(&report.summary);
             let _ = writeln!(message, "output: {}", cfg.output_dir.display());
+            if let Some(path) = plot {
+                let _ = writeln!(message, "plot: {}", path.display());
+            }
             succeed(&message)
         }
         Err(e) => fail(&e.to_string()),
@@ -190,10 +222,70 @@ async fn run_reproducibility(cfg: &ReproConfig) -> ExitCode {
 /// input — see `compare`'s own module doc) is a non-zero exit; a real
 /// comparison that finds a large KS distance still exits `SUCCESS` (that
 /// is a benchmark result, not a tool failure).
-fn run_compare_files(file_a: &std::path::Path, file_b: &std::path::Path) -> ExitCode {
-    match compare::run_compare(file_a, file_b) {
-        Ok(report) => succeed(&format_comparison_table(&report)),
+///
+/// When `args.plot` is set, writes an energy-CDF overlay PNG (or exits
+/// non-zero if the binary lacks the `plot` feature, or plotting fails).
+fn run_compare_files(args: &CompareArgs) -> ExitCode {
+    match compare::run_compare(&args.file_a, &args.file_b) {
+        Ok(report) => {
+            if let Some(path) = &args.plot {
+                if let Err(message) = write_compare_plot(&args.file_a, &args.file_b, path) {
+                    return fail(&message);
+                }
+            }
+            let mut message = format_comparison_table(&report);
+            if let Some(path) = &args.plot {
+                let _ = writeln!(message, "plot: {}", path.display());
+            }
+            succeed(&message)
+        }
         Err(e) => fail(&e.to_string()),
+    }
+}
+
+/// Write a sweep heatmap, or return an error message naming the missing
+/// `plot` feature when this binary was built without it.
+fn write_sweep_plot(report: &SweepReport, path: &Path) -> Result<(), String> {
+    #[cfg(feature = "plot")]
+    {
+        isingmark::report::plot_sweep_heatmap(report, path).map_err(|e| e.to_string())
+    }
+    #[cfg(not(feature = "plot"))]
+    {
+        let _ = (report, path);
+        Err(plot_feature_required_message().to_string())
+    }
+}
+
+/// Write a time-to-target CDF, or return an error message naming the
+/// missing `plot` feature when this binary was built without it.
+fn write_ttt_plot(report: &TttReport, path: &Path) -> Result<(), String> {
+    #[cfg(feature = "plot")]
+    {
+        isingmark::report::plot_ttt_cdf(report, path).map_err(|e| e.to_string())
+    }
+    #[cfg(not(feature = "plot"))]
+    {
+        let _ = (report, path);
+        Err(plot_feature_required_message().to_string())
+    }
+}
+
+/// Write an energy-CDF overlay for two JSONL files, or return an error
+/// message naming the missing `plot` feature when this binary was built
+/// without it.
+fn write_compare_plot(file_a: &Path, file_b: &Path, path: &Path) -> Result<(), String> {
+    #[cfg(feature = "plot")]
+    {
+        let energies_a = compare::load_passed_energies(file_a).map_err(|e| e.to_string())?;
+        let energies_b = compare::load_passed_energies(file_b).map_err(|e| e.to_string())?;
+        isingmark::report::plot_energy_cdfs(&energies_a, &energies_b, path)
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(feature = "plot"))]
+    {
+        let _ = (file_a, file_b, path);
+        Err(plot_feature_required_message().to_string())
     }
 }
 

@@ -8,17 +8,15 @@
 //! mkdir -p fixtures/golden
 //! quip-coordinator drive \
 //!   --miner <path-to-a-cpu-sa-miner-binary> \
-//!   --source random --topology-preset smoke --seed 42 --count 8 \
+//!   --source random --topology-file fixtures/smoke.spec.json --seed 42 --count 8 \
 //!   --report fixtures/golden/smoke_seed42.jsonl
 //! ```
 //!
-//! (The fixture committed here was generated with `--topology
-//! fixtures/smoke.spec.json` instead of `--topology-preset smoke`, because
-//! the release binary used to generate it had `CARGO_MANIFEST_DIR` baked in
-//! from a stale checkout path and could not resolve the preset fixture. That
-//! file is byte-identical to `quip-coordinator`'s own
-//! `fixtures/drive/smoke.spec.json` — verified with `diff` before use — so
-//! this is equivalent to the command above.)
+//! Use `--topology-file`, not `--topology-preset smoke`. A released
+//! `quip-coordinator` binary may have a stale baked-in `CARGO_MANIFEST_DIR`
+//! and cannot resolve the preset fixture path. `fixtures/smoke.spec.json` is
+//! byte-identical to `quip-coordinator`'s own
+//! `fixtures/drive/smoke.spec.json` (verified with `diff` before use).
 //!
 //! ## Why there are two golden fixtures
 //!
@@ -43,7 +41,7 @@
 //! for n in 1 2 3 4 5 6 7 8; do
 //!   quip-coordinator drive \
 //!     --miner <path-to-a-cpu-sa-miner-binary> \
-//!     --source random --topology-preset smoke --seed 42 --count "$n" \
+//!     --source random --topology-file fixtures/smoke.spec.json --seed 42 --count "$n" \
 //!     --report "fixtures/golden/smoke_seed42_count${n}.jsonl"
 //! done
 //! # index (n-1) = the `job_id` in count-n's report that isn't in count-(n-1)'s

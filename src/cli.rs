@@ -71,6 +71,11 @@ pub struct CompareArgs {
     /// Path to the second run's JSONL records file.
     #[arg(long)]
     pub file_b: PathBuf,
+    /// Write an energy-CDF overlay PNG to this path. Requires a binary
+    /// built with `--features plot`; without that feature the flag still
+    /// parses and the process exits non-zero with a rebuild message.
+    #[arg(long, value_name = "PATH")]
+    pub plot: Option<PathBuf>,
 }
 
 /// Options common to every mode: which backend and topology to use, how
@@ -304,6 +309,11 @@ pub struct SweepArgs {
     /// for why.
     #[arg(long, value_parser = parse_num_jobs, help = "Jobs drawn per cell (default: 20)")]
     pub num_jobs: Option<u32>,
+    /// Write a sweep-heatmap PNG to this path. Requires a binary built
+    /// with `--features plot`; without that feature the flag still parses
+    /// and the process exits non-zero with a rebuild message.
+    #[arg(long, value_name = "PATH")]
+    pub plot: Option<PathBuf>,
 }
 
 impl SweepArgs {
@@ -389,6 +399,11 @@ pub struct TttArgs {
     /// (default: 30.0).
     #[arg(long, value_parser = parse_max_time_s, help = "Wall-clock budget per target in seconds (default: 30.0)")]
     pub max_time_s: Option<f64>,
+    /// Write a time-to-target CDF PNG to this path. Requires a binary
+    /// built with `--features plot`; without that feature the flag still
+    /// parses and the process exits non-zero with a rebuild message.
+    #[arg(long, value_name = "PATH")]
+    pub plot: Option<PathBuf>,
 }
 
 impl TttArgs {

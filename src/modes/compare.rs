@@ -183,6 +183,24 @@ fn passed_energies(records: &[JobRecord]) -> Vec<f64> {
         .collect()
 }
 
+/// Load the `passed` energies (natural units) from a JSONL records file.
+/// Used by the CLI `--plot` path so the energy CDF chart can reuse the same
+/// extraction rules as [`run_compare`] without expanding [`CompareReport`].
+///
+/// # Errors
+///
+/// Returns [`ModeError::CompareFileUnreadable`] if `path` cannot be read, or
+/// [`ModeError::EmptyCompareFile`] if no `passed` records are present.
+pub fn load_passed_energies(path: &Path) -> Result<Vec<f64>, ModeError> {
+    let jsonl =
+        read_jsonl(path).map_err(|e| ModeError::CompareFileUnreadable(path.to_path_buf(), e))?;
+    let energies = passed_energies(&jsonl.records);
+    if energies.is_empty() {
+        return Err(ModeError::EmptyCompareFile(path.to_path_buf()));
+    }
+    Ok(energies)
+}
+
 #[cfg(test)]
 mod tests {
     use super::format_comparison_table;
