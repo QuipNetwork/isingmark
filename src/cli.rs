@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand};
 
 use crate::backend::builtin_registry;
+use crate::modes::comparative::ComparativeConfig;
 use crate::modes::sweep::{self, ParamGrid, SweepConfig};
 use crate::modes::throughput::{self, ThroughputConfig};
 use crate::modes::ttt::{self, TttConfig};
@@ -32,6 +33,9 @@ pub enum Command {
     /// For each `--energy-targets` value, run trials until it is reached or
     /// `--max-time-s` elapses, and report time-to-target.
     Ttt(TttArgs),
+    /// Search hardness in `[0.0, 1.0]` for the best-energy distribution
+    /// that best matches a reference `--target-file`'s own distribution.
+    Comparative(ComparativeArgs),
 }
 
 /// Options common to every mode: which backend and topology to use, how
@@ -280,6 +284,80 @@ impl TttArgs {
     }
 }
 
+/// `isingmark comparative` arguments.
+#[derive(Debug, Args)]
+pub struct ComparativeArgs {
+    #[command(flatten)]
+    pub common: CommonArgs,
+    /// Reference benchmark JSONL file (e.g. another run's `records.jsonl`)
+    /// to match this backend's best-energy distribution against.
+    /// `--hardness` (from `CommonArgs`) is not used by this mode — hardness
+    /// is the value this search computes, not an input to it.
+    #[arg(long)]
+    pub target_file: PathBuf,
+    /// Jobs drawn per hardness evaluation. Every evaluation draws the
+    /// identical sequence (same seed, same count) — see
+    /// `modes::comparative`'s module docs for why.
+    #[arg(long, value_parser = parse_num_jobs, default_value_t = 20)]
+    pub num_jobs: u32,
+    /// Maximum number of evaluations to run before reporting whatever
+    /// hardness the bracket has narrowed to. The search may stop earlier
+    /// once the bracket narrows below `0.01`.
+    #[arg(long, value_parser = parse_max_iterations, default_value_t = 10)]
+    pub max_iterations: u32,
+}
+
+impl ComparativeArgs {
+    /// Build a [`ComparativeConfig`] from parsed arguments.
+    ///
+    /// # Errors
+    ///
+    /// Same conditions as [`ThroughputArgs::into_config`]: an unresolved
+    /// mutually exclusive topology group, or `--config` (not implemented
+    /// yet).
+    pub fn into_config(self) -> Result<ComparativeConfig, String> {
+        if self.common.config.is_some() {
+            return Err(
+                "--config is not implemented yet; YAML config loading lands in a later task \
+                 (drop the flag and pass every option on the command line for now)"
+                    .to_string(),
+            );
+        }
+        let topology = self.common.topology_source.to_ref()?;
+        Ok(ComparativeConfig {
+            backend: self.common.backend,
+            topology,
+            target_file: self.target_file,
+            num_jobs: self.num_jobs,
+            max_iterations: self.max_iterations,
+            seed: self.common.seed,
+            output_dir: self.common.output_dir,
+            backend_bin_override: None,
+            backend_args_override: None,
+        })
+    }
+}
+
+/// `--max-iterations` value parser. `0` would silently produce a
+/// comparative run that reports hardness `0.0` — a plausible-looking,
+/// in-range value indistinguishable from a real finding — having run zero
+/// evaluations, with no error and `ExitCode::SUCCESS`; see
+/// `modes::ModeError::InvalidMaxIterations`'s own doc, which
+/// `comparative::run_comparative` additionally checks for callers that
+/// bypass this parser. Reject it here for the same reason
+/// `parse_num_trials`/`parse_num_jobs` reject `0`.
+fn parse_max_iterations(s: &str) -> Result<u32, String> {
+    let value: u32 = s.parse().map_err(|_| format!("{s:?} is not a valid u32"))?;
+    if value == 0 {
+        return Err(
+            "--max-iterations must not be 0 (a zero-iteration search would report hardness 0.0 \
+             with no signal that no evaluation ever ran)"
+                .to_string(),
+        );
+    }
+    Ok(value)
+}
+
 /// `--param-grid` value parser, delegating to `sweep::parse_param_grid`.
 fn parse_param_grid_arg(s: &str) -> Result<ParamGrid, String> {
     sweep::parse_param_grid(s).map_err(|e| e.to_string())
@@ -407,7 +485,7 @@ fn parse_duration_arg(s: &str) -> Result<f64, String> {
 mod tests {
     use clap::Parser as _;
 
-    use super::{Cli, Command, SweepArgs, ThroughputArgs, TttArgs};
+    use super::{Cli, Command, ComparativeArgs, SweepArgs, ThroughputArgs, TttArgs};
 
     fn parse(extra_args: &[&str]) -> Result<Cli, clap::Error> {
         let mut full_argv = vec!["isingmark"];
@@ -416,13 +494,14 @@ mod tests {
     }
 
     /// Extract the `Throughput` variant, for tests that parsed a throughput
-    /// invocation. `Command` has more than one variant (as of `sweep`/`ttt`),
-    /// so `let Command::Throughput(args) = cli.command;` is no longer an
-    /// irrefutable pattern and cannot be used directly.
+    /// invocation. `Command` has more than one variant (as of
+    /// `sweep`/`ttt`/`comparative`), so `let Command::Throughput(args) =
+    /// cli.command;` is no longer an irrefutable pattern and cannot be used
+    /// directly.
     fn throughput_args(cli: Cli) -> ThroughputArgs {
         match cli.command {
             Command::Throughput(args) => args,
-            Command::Sweep(_) | Command::Ttt(_) => {
+            Command::Sweep(_) | Command::Ttt(_) | Command::Comparative(_) => {
                 unreachable!("test only ever parses a throughput invocation")
             }
         }
@@ -432,7 +511,7 @@ mod tests {
     fn sweep_args(cli: Cli) -> SweepArgs {
         match cli.command {
             Command::Sweep(args) => args,
-            Command::Throughput(_) | Command::Ttt(_) => {
+            Command::Throughput(_) | Command::Ttt(_) | Command::Comparative(_) => {
                 unreachable!("test only ever parses a sweep invocation")
             }
         }
@@ -442,8 +521,18 @@ mod tests {
     fn ttt_args(cli: Cli) -> TttArgs {
         match cli.command {
             Command::Ttt(args) => args,
-            Command::Throughput(_) | Command::Sweep(_) => {
+            Command::Throughput(_) | Command::Sweep(_) | Command::Comparative(_) => {
                 unreachable!("test only ever parses a ttt invocation")
+            }
+        }
+    }
+
+    /// Extract the `Comparative` variant. See [`throughput_args`].
+    fn comparative_args(cli: Cli) -> ComparativeArgs {
+        match cli.command {
+            Command::Comparative(args) => args,
+            Command::Throughput(_) | Command::Sweep(_) | Command::Ttt(_) => {
+                unreachable!("test only ever parses a comparative invocation")
             }
         }
     }
@@ -929,6 +1018,149 @@ mod tests {
         ])
         .expect("clap itself accepts --config; rejection happens in into_config");
         let args = ttt_args(cli);
+        let err = args
+            .into_config()
+            .expect_err("--config must be rejected until it is implemented");
+        assert!(err.contains("--config"));
+        assert!(err.contains("not implemented"));
+    }
+
+    #[test]
+    fn a_full_valid_comparative_invocation_parses() {
+        let cli = parse(&[
+            "comparative",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--target-file",
+            "reference.jsonl",
+            "--num-jobs",
+            "15",
+            "--max-iterations",
+            "5",
+            "--seed",
+            "42",
+            "--output-dir",
+            "./out",
+        ])
+        .expect("valid invocation parses");
+        let args = comparative_args(cli);
+        assert_eq!(args.common.backend, "cpu-sa");
+        assert_eq!(
+            args.target_file,
+            std::path::PathBuf::from("reference.jsonl")
+        );
+        assert_eq!(args.num_jobs, 15);
+        assert_eq!(args.max_iterations, 5);
+        assert_eq!(args.common.seed, 42);
+    }
+
+    #[test]
+    fn comparative_target_file_is_required() {
+        parse(&[
+            "comparative",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+        ])
+        .expect_err("--target-file is required");
+    }
+
+    /// `--max-iterations 0` would silently produce a search that reports
+    /// hardness `0.0` — a plausible-looking, in-range value — having run
+    /// zero evaluations; must be rejected at parse time, matching
+    /// `--num-jobs 0`'s convention for `sweep`/`ttt`'s own zero-value
+    /// rejections.
+    #[test]
+    fn comparative_max_iterations_zero_is_rejected_at_parse_time() {
+        let err = parse(&[
+            "comparative",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--target-file",
+            "reference.jsonl",
+            "--max-iterations",
+            "0",
+        ])
+        .expect_err("--max-iterations 0 must be rejected at parse time");
+        assert!(err.to_string().contains("--max-iterations"));
+    }
+
+    #[test]
+    fn comparative_num_jobs_zero_is_rejected_at_parse_time() {
+        let err = parse(&[
+            "comparative",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--target-file",
+            "reference.jsonl",
+            "--num-jobs",
+            "0",
+        ])
+        .expect_err("--num-jobs 0 must be rejected at parse time");
+        assert!(err.to_string().contains("--num-jobs"));
+    }
+
+    #[test]
+    fn comparative_into_config_carries_every_field_through() {
+        let cli = parse(&[
+            "comparative",
+            "--backend",
+            "cpu-sa",
+            "--topology-file",
+            "fixtures/smoke.spec.json",
+            "--target-file",
+            "reference.jsonl",
+            "--num-jobs",
+            "12",
+            "--max-iterations",
+            "6",
+            "--seed",
+            "9",
+            "--output-dir",
+            "/tmp/isingmark-comparative-out",
+        ])
+        .expect("valid invocation parses");
+        let args = comparative_args(cli);
+        let cfg = args.into_config().expect("topology group resolves");
+        assert_eq!(cfg.backend, "cpu-sa");
+        assert_eq!(
+            cfg.topology,
+            crate::modes::TopologyRef::File(std::path::PathBuf::from("fixtures/smoke.spec.json"))
+        );
+        assert_eq!(cfg.target_file, std::path::PathBuf::from("reference.jsonl"));
+        assert_eq!(cfg.num_jobs, 12);
+        assert_eq!(cfg.max_iterations, 6);
+        assert_eq!(cfg.seed, 9);
+        assert_eq!(
+            cfg.output_dir,
+            std::path::PathBuf::from("/tmp/isingmark-comparative-out")
+        );
+        assert_eq!(cfg.backend_bin_override, None);
+        assert_eq!(cfg.backend_args_override, None);
+    }
+
+    #[test]
+    fn comparative_config_flag_is_rejected_until_config_loading_is_implemented() {
+        let cli = parse(&[
+            "comparative",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--target-file",
+            "reference.jsonl",
+            "--config",
+            "bench.yaml",
+        ])
+        .expect("clap itself accepts --config; rejection happens in into_config");
+        let args = comparative_args(cli);
         let err = args
             .into_config()
             .expect_err("--config must be rejected until it is implemented");

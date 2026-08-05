@@ -14,6 +14,22 @@
 //! Cargo auto-discovers every `src/bin/*.rs` file as a real binary target in
 //! every profile, including `cargo install`; the namespaced name keeps this
 //! test-only tool from landing in a user's `$PATH` under a generic name.
+//!
+//! # Solve quality depends on `num_reads` when it is set
+//!
+//! `solve`'s default behavior (one solution, all-`+1` spins) is unchanged
+//! when a job leaves `IsingProblem.num_reads` at `0` ("unset" — every path
+//! except `isingmark::modes::sweep` and `isingmark::modes::comparative`).
+//! When a job *does* set `num_reads` (nonzero), `solve` additionally runs
+//! [`multi_start_search`]: a crude, deterministic, non-random multi-restart
+//! local search whose energy is provably non-increasing in `num_reads` (see
+//! that function's doc). This exists solely so `isingmark::modes::comparative`
+//! (Task 12) has something real to search over — a fake miner whose
+//! solutions never depended on the requested sampling effort would make
+//! every hardness value look identical to that search, and no binary
+//! search could recover anything. It is **not** a model of a real
+//! annealer's behavior in any quantitative sense, only of the qualitative
+//! "more reads finds a same-or-better solution" property.
 
 use std::process::ExitCode as ProcessExitCode;
 use std::time::Duration;
@@ -211,6 +227,97 @@ fn resolve_edges(ising: &IsingProblem, topo: Option<&FakeTopo>) -> Vec<(usize, u
     }
 }
 
+/// Upper bound on [`multi_start_search`]'s restart count, so a
+/// misconfigured or adversarial `num_reads` (this crude model's only input)
+/// cannot make one job take an unbounded amount of CPU time. Comfortably
+/// above any curve this binary is actually driven at in `isingmark`'s own
+/// tests (`isingmark::modes::comparative::DEFAULT_PARAM_CURVE`'s
+/// `max_reads: 64`, the largest bound any mode currently resolves to).
+const MAX_SEARCH_RESTARTS: u32 = 4_096;
+
+/// `SplitMix64`'s mixing step (Vigna, 2015), used only to turn a small
+/// integer `step` into a well-scrambled 64-bit word for [`scan_pattern`].
+/// Deterministic and stateless (no external RNG, no seed to persist) —
+/// exactly what this binary's "same job, same parameters, same output"
+/// contract requires.
+fn splitmix64(step: u64) -> u64 {
+    let mut z = step.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// Deterministically derive spin pattern `step` of a pseudo-random scan
+/// over `{-1, +1}^n`: bit `i` (mod 64) of `splitmix64(step)` selects `+1`
+/// (`0`) or `-1` (`1`) for spin `i`. Different `step` values scramble to
+/// unrelated-looking bit patterns, so scanning `step = 0, 1, 2, ...` behaves
+/// like sampling without an obvious short repeating cycle, even though it
+/// is fully deterministic given `step`/`n`. For `n > 64` the pattern
+/// repeats every 64 spins (only 64 mixed bits exist to draw from) — a
+/// known, crude limitation, harmless for this binary's own hermetic tests
+/// (the bundled fixtures are far smaller than 64 nodes).
+fn scan_pattern(step: u64, n: usize) -> Vec<i8> {
+    let mixed = splitmix64(step);
+    (0..n)
+        .map(|i| {
+            if (mixed >> (i % 64)) & 1 == 0 {
+                1i8
+            } else {
+                -1i8
+            }
+        })
+        .collect()
+}
+
+/// Deterministic, crude "solve quality" model driving
+/// `isingmark`'s comparative-mode hardness search (Task 12): the coordinator
+/// (`isingmark::backend::session::build_result_record`, already-reviewed,
+/// not modified here) recomputes `best_energy_milli` itself from the
+/// returned `spins_bytes` — never from a miner's own reported
+/// `Solution.energy_milli` — so the only way for this fake miner to make its
+/// *actual* solve quality depend on the requested sampling effort is to
+/// return spins that really are better, not merely to shift a reported
+/// number.
+///
+/// Evaluates `restarts` independent [`scan_pattern`] draws, seeded `0, 1,
+/// ..., restarts - 1`, plus the trivial all-`+1` baseline, and returns
+/// whichever reached the lowest true energy — literal multi-start random
+/// sampling, deliberately with **no** local refinement (no greedy flip
+/// passes, no accepted uphill moves, no temperature schedule): an earlier
+/// version of this function did add a greedy single-spin-flip descent pass
+/// per restart, but on the bundled fixtures (8-node rings) that reaches a
+/// global optimum from nearly any starting point in a single restart,
+/// saturating so fast that every hardness above the curve's minimum looked
+/// identical — exactly the flat, non-distinguishable response the
+/// comparative-mode search cannot work with. Raw, non-refined sampling
+/// converges far more slowly (a global optimum among `2^n` configurations
+/// generally needs a number of draws on the order of `2^n`, not `n`), which
+/// is what actually gives `num_reads` in the tens-to-hundreds range a
+/// visibly graduated effect on this crude model's output. This is **not** a
+/// real annealer's behavior in any quantitative sense.
+///
+/// The one guarantee this function does provide, and the one the
+/// comparative-mode search actually relies on, is monotonicity: the set of
+/// patterns a larger `restarts` count tries is a strict superset of a
+/// smaller one's (`0..restarts` extends `0..restarts'` for `restarts >
+/// restarts'`), so `multi_start_search(restarts)` can only find an energy
+/// less than or equal to `multi_start_search(restarts')`'s whenever
+/// `restarts >= restarts'`, for any job.
+fn multi_start_search(h: &[f64], j: &[f64], edges: &[(usize, usize)], restarts: u32) -> Vec<i8> {
+    let n = h.len();
+    let mut best_spins = vec![1i8; n];
+    let mut best_energy = energy_milli(&best_spins, h, j, edges);
+    for step in 0..u64::from(restarts) {
+        let spins = scan_pattern(step, n);
+        let energy = energy_milli(&spins, h, j, edges);
+        if energy < best_energy {
+            best_energy = energy;
+            best_spins = spins;
+        }
+    }
+    best_spins
+}
+
 /// Solve `job`, reporting `num_solutions` distinct-spin solutions (solution
 /// `i` flips the first `i` node spins negative, capped at the node count),
 /// each with `energy_lie_milli` added on top of its true recomputed energy.
@@ -226,6 +333,20 @@ fn resolve_edges(ising: &IsingProblem, topo: Option<&FakeTopo>) -> Vec<(usize, u
 /// the prior `num_solutions`/`0` behavior when the job leaves them `0`
 /// ("unset" — `problem::ProblemSource::next_job` always does this outside
 /// of sweep mode), so every other test driving this binary is unaffected.
+///
+/// When `ising.num_reads != 0` (the wire's own "unset" sentinel — see
+/// `params::ParamCurve`'s doc), one extra solution is appended: the result
+/// of [`multi_start_search`] run for `min(ising.num_reads, `
+/// [`MAX_SEARCH_RESTARTS`]`)` restarts. This is strictly additive — every
+/// solution the old path produced is still produced unchanged — so
+/// `n_solutions` grows by exactly one rather than replacing anything, and a
+/// job that never sets `num_reads` (every path except
+/// `isingmark::modes::sweep` and `isingmark::modes::comparative`) takes
+/// exactly the old code path with no extra solution and no behavior change,
+/// keeping every prior test's expected energies and solution counts intact.
+/// `num_sweeps`/`anneal_time_us` are still echoed into `SamplerMeta` as
+/// before but do not otherwise influence solve quality in this crude model
+/// — only `num_reads` (via its restart count) does.
 fn solve(
     job: &Job,
     topo: Option<&FakeTopo>,
@@ -239,7 +360,7 @@ fn solve(
     let n = h.len();
     let count = num_solutions.max(1);
 
-    let solutions = (0..count)
+    let mut solutions: Vec<Solution> = (0..count)
         .map(|i| {
             let flips = (i as usize).min(n);
             let mut spins = vec![1i8; n];
@@ -253,6 +374,16 @@ fn solve(
             }
         })
         .collect();
+
+    if ising.num_reads != 0 {
+        let restarts = ising.num_reads.min(MAX_SEARCH_RESTARTS);
+        let spins = multi_start_search(&h, &j, &edges, restarts);
+        let true_energy = energy_milli(&spins, &h, &j, &edges);
+        solutions.push(Solution {
+            spins_bytes: encode_spins(&spins),
+            energy_milli: true_energy + energy_lie_milli,
+        });
+    }
 
     let reads = if ising.num_reads == 0 {
         count

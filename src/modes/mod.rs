@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use crate::backend::SessionError;
 use crate::topology::{self, TopologyError, TopologySpec};
 
+pub mod comparative;
 pub mod sweep;
 pub mod throughput;
 pub mod ttt;
@@ -88,6 +89,27 @@ pub enum ModeError {
     /// the first target's just-written records (`File::create` truncates an
     /// existing file rather than refusing to touch it).
     DuplicateTarget(i64),
+    /// `comparative::ComparativeConfig::max_iterations` was `0`. Rejected at
+    /// the mode level (in addition to `cli::parse_max_iterations`'s own
+    /// identical CLI-level rejection) because a zero-iteration search would
+    /// otherwise return hardness `0.0` — a plausible-looking, in-range
+    /// value indistinguishable from a real finding, unlike an empty result
+    /// set with an obviously-zero count.
+    InvalidMaxIterations,
+    /// `comparative::ComparativeConfig::target_file` could not be opened or
+    /// read.
+    TargetFileUnreadable(PathBuf, std::io::Error),
+    /// `comparative::ComparativeConfig::target_file` parsed but contained no
+    /// usable (`passed`) records to compare a search evaluation against.
+    EmptyTargetFile(PathBuf),
+    /// `comparative::run_comparative`'s own binary search produced a
+    /// non-finite or out-of-`[0.0, 1.0]` hardness. Unreachable under normal
+    /// operation (the search's bracket only ever narrows within `[0.0,
+    /// 1.0]`), but checked rather than trusted — see that function's own
+    /// doc on why a divergent search must fail loudly rather than emit a
+    /// `NaN`/out-of-range hardness into a summary that looks like every
+    /// other, valid one.
+    InvalidComputedHardness(f64),
 }
 
 impl fmt::Display for ModeError {
@@ -120,6 +142,24 @@ impl fmt::Display for ModeError {
                 "--energy-targets contains the same milli-value target twice ({milli}); \
                  each target must resolve to its own output subdirectory"
             ),
+            Self::InvalidMaxIterations => write!(
+                f,
+                "--max-iterations must not be 0 (a zero-iteration search would report hardness \
+                 0.0 with no signal that no evaluation ever ran)"
+            ),
+            Self::TargetFileUnreadable(path, e) => {
+                write!(f, "--target-file {} could not be read: {e}", path.display())
+            }
+            Self::EmptyTargetFile(path) => write!(
+                f,
+                "--target-file {} contains no usable (passed) records to match against",
+                path.display()
+            ),
+            Self::InvalidComputedHardness(value) => write!(
+                f,
+                "comparative search produced an invalid hardness ({value}); this indicates a bug \
+                 in the search's own bracket arithmetic, not a user input mistake"
+            ),
         }
     }
 }
@@ -133,9 +173,12 @@ impl std::error::Error for ModeError {
             | Self::EmptyGrid
             | Self::InapplicableGridDimension(_)
             | Self::EmptyTargets
-            | Self::DuplicateTarget(_) => None,
+            | Self::DuplicateTarget(_)
+            | Self::InvalidMaxIterations
+            | Self::EmptyTargetFile(_)
+            | Self::InvalidComputedHardness(_) => None,
             Self::Session(e) => Some(e),
-            Self::Io(e) => Some(e),
+            Self::Io(e) | Self::TargetFileUnreadable(_, e) => Some(e),
         }
     }
 }

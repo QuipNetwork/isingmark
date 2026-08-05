@@ -7,6 +7,7 @@ use std::process::ExitCode;
 use clap::Parser as _;
 use isingmark::backend::RunReport;
 use isingmark::cli::{Cli, Command};
+use isingmark::modes::comparative::{self, ComparativeConfig};
 use isingmark::modes::sweep::{self, SweepConfig};
 use isingmark::modes::throughput::{self, ThroughputConfig};
 use isingmark::modes::ttt::{self, TttConfig};
@@ -26,6 +27,10 @@ async fn main() -> ExitCode {
         },
         Command::Ttt(args) => match args.into_config() {
             Ok(cfg) => run_ttt(&cfg).await,
+            Err(message) => fail(&message),
+        },
+        Command::Comparative(args) => match args.into_config() {
+            Ok(cfg) => run_comparative(&cfg).await,
             Err(message) => fail(&message),
         },
     }
@@ -96,6 +101,29 @@ async fn run_ttt(cfg: &TttConfig) -> ExitCode {
         Ok(report) => {
             let mut message = format_summary_table(&report.summary);
             let _ = writeln!(message, "output: {}", cfg.output_dir.display());
+            succeed(&message)
+        }
+        Err(e) => fail(&e.to_string()),
+    }
+}
+
+/// Run comparative mode and report the outcome. Same exit-code convention as
+/// the other modes: `ExitCode::SUCCESS` even when the reported `ks_distance`
+/// is a poor match (a benchmark result, not a tool failure); only a
+/// `ModeError` (the search could not run at all) is a non-zero exit. Prints
+/// only the matched hardness, the final iteration's record count, and the
+/// summary path — the fixed `run_comparative` return shape (`(Vec<JobRecord>,
+/// f64)`, not a `Summary`) leaves the `ks_distance`/per-iteration detail in
+/// `summary.json` itself rather than in this line, matching how
+/// `run_ttt`/`run_sweep`'s own `summary.json` carries detail their tables
+/// don't repeat.
+async fn run_comparative(cfg: &ComparativeConfig) -> ExitCode {
+    match comparative::run_comparative(cfg).await {
+        Ok((records, hardness)) => {
+            let summary_path = cfg.output_dir.join(comparative::SUMMARY_FILENAME);
+            let mut message = format!("matched hardness: {hardness:.4}\n");
+            let _ = writeln!(message, "records: {}", records.len());
+            let _ = writeln!(message, "summary: {}", summary_path.display());
             succeed(&message)
         }
         Err(e) => fail(&e.to_string()),
