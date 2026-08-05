@@ -155,7 +155,7 @@ cargo build --features plot
 
 ### Per-job records (JSONL)
 
-One `JobRecord` per line: `job_id` (hex), `backend`, `n_solutions`, `best_energy_milli` (optional milli-units; null when no solution), `best_spins_hex` (optional; null when no solution), `diversity_milli`, `passed`, `rejected`, `reject_reason`, `device_access_time_us`, `wall_ms`, `requested_reads`, `requested_sweeps`, `requested_anneal_time_us`, `measured_reads` (optional), `measured_sweeps` (optional). There is no measured anneal time: `SamplerMeta` does not carry one.
+One `JobRecord` per line: `job_id` (hex), `backend`, `n_solutions`, `best_energy_milli` (optional milli-units; null when no solution), `best_spins_hex` (optional hex of protocol `spins_bytes`, one byte per spin `0x01`/`0xFF`, decodable with `quip_protocol::wire::decode_spins`; null when no solution), `diversity_milli`, `passed`, `rejected`, `reject_reason`, `device_access_time_us`, `wall_ms`, `requested_reads` / `requested_sweeps` / `requested_anneal_time_us` (optional; null when no `SetTarget` was sent, distinct from a genuine zero request), `measured_reads` (optional), `measured_sweeps` (optional). There is no measured anneal time: `SamplerMeta` does not carry one.
 
 Modes that refuse to overwrite refuse a non-empty existing `records.jsonl` before they start.
 

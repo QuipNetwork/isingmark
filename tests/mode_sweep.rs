@@ -130,16 +130,16 @@ async fn hermetic_sweep_produces_one_file_per_cell_with_matching_reads_and_sweep
         for record in &jsonl.records {
             assert!(record.passed, "cell {}: {record:?}", cell.dir_name);
             // Sweep sets cell params on each job's IsingProblem and runs
-            // with target: None, so requested_* stay 0; measured_* come
+            // with target: None, so requested_* stay None; measured_* come
             // from SamplerMeta, which the fake miner echoes from the job.
             assert_eq!(
-                record.requested_reads, 0,
-                "cell {} has no SetTarget, so requested_reads is 0",
+                record.requested_reads, None,
+                "cell {} has no SetTarget, so requested_reads is None",
                 cell.dir_name
             );
             assert_eq!(
-                record.requested_sweeps, 0,
-                "cell {} has no SetTarget, so requested_sweeps is 0",
+                record.requested_sweeps, None,
+                "cell {} has no SetTarget, so requested_sweeps is None",
                 cell.dir_name
             );
             assert_eq!(
@@ -428,8 +428,8 @@ async fn hermetic_sweep_output_dir_conflict_check_is_eager_before_any_cell_runs(
 
 /// An `Annealing`-kind backend sweeps `num_reads`/`anneal_time_us`, and
 /// `measured_reads` (echoed via `SamplerMeta`) is still verifiable per cell.
-/// `requested_anneal_time_us` is always `0` here: this mode passes
-/// `target: None`, and there is no measured anneal time on `SamplerMeta`.
+/// `requested_*` are `None` here: this mode passes `target: None`, and there
+/// is no measured anneal time on `SamplerMeta`.
 #[tokio::test]
 async fn hermetic_sweep_supports_an_annealing_backend_and_reads_still_match_per_cell() {
     let dir = tempfile::tempdir().expect("create temp dir");
@@ -458,9 +458,9 @@ async fn hermetic_sweep_supports_an_annealing_backend_and_reads_still_match_per_
         for record in &jsonl.records {
             // Annealing-cell sweep also uses target: None; params ride on
             // the job wire fields and show up as measured_*.
-            assert_eq!(record.requested_reads, 0);
-            assert_eq!(record.requested_sweeps, 0);
-            assert_eq!(record.requested_anneal_time_us, 0);
+            assert_eq!(record.requested_reads, None);
+            assert_eq!(record.requested_sweeps, None);
+            assert_eq!(record.requested_anneal_time_us, None);
             assert_eq!(record.measured_reads, Some(expected_reads));
             assert_eq!(record.measured_sweeps, Some(0));
         }

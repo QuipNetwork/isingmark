@@ -31,8 +31,10 @@ pub struct JobRecord {
     /// was recomputed; `None` on empty results, rejects, and abandoned jobs.
     /// Never a sentinel zero: a genuine zero-energy solution is `Some(0)`.
     pub best_energy_milli: Option<i64>,
-    /// Packed spins of the lowest-energy solution, hex, LSB-first. `None` when
-    /// no solution was returned.
+    /// Hex text of the winning solution's protocol `spins_bytes` (one byte
+    /// per spin: `0x01` for `+1`, `0xFF` for `-1`). Decode with
+    /// `quip_protocol::wire::decode_spins` after hex-decoding this field.
+    /// `None` when no solution was returned.
     pub best_spins_hex: Option<String>,
     /// Diversity among the returned solutions, in milli-units.
     pub diversity_milli: u32,
@@ -47,13 +49,16 @@ pub struct JobRecord {
     pub device_access_time_us: u64,
     /// Total wall time to complete the job, in milliseconds.
     pub wall_ms: u64,
-    /// What the coordinator asked for via `SetTarget`. Always populated.
-    pub requested_reads: u32,
-    pub requested_sweeps: u32,
-    /// Requested anneal time in microseconds. Always populated from
-    /// `SetTarget`. There is no `measured_anneal_time_us`: `SamplerMeta` does
-    /// not carry one (only `qpu_access_us`, which this schema does not record).
-    pub requested_anneal_time_us: u32,
+    /// What the coordinator asked for via `SetTarget`. `None` when no
+    /// `SetTarget` was sent for this run at all — distinct from `Some(0)`,
+    /// which is a target that genuinely requested zero.
+    pub requested_reads: Option<u32>,
+    pub requested_sweeps: Option<u32>,
+    /// Requested anneal time in microseconds from `SetTarget`. Same
+    /// `None`/`Some(0)` distinction as [`Self::requested_reads`]. There is
+    /// no `measured_anneal_time_us`: `SamplerMeta` does not carry one (only
+    /// `qpu_access_us`, which this schema does not record).
+    pub requested_anneal_time_us: Option<u32>,
     /// What the miner reported it actually did. `None` when the miner sent no
     /// `SamplerMeta`, and on rejected or abandoned jobs.
     pub measured_reads: Option<u32>,

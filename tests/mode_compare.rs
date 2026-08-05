@@ -55,9 +55,9 @@ fn record(job_id: &str, best_energy_milli: i64, passed: bool) -> JobRecord {
         },
         device_access_time_us: 0,
         wall_ms: 0,
-        requested_reads: 1,
-        requested_sweeps: 0,
-        requested_anneal_time_us: 0,
+        requested_reads: Some(1),
+        requested_sweeps: Some(0),
+        requested_anneal_time_us: Some(0),
         measured_reads: Some(1),
         measured_sweeps: Some(0),
     }

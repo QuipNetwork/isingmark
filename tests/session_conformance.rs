@@ -271,12 +271,14 @@ async fn fake_miner_happy_path_solves_every_job_and_recomputes_matching_energy()
         );
         assert_eq!(record.measured_sweeps, Some(0));
         assert_eq!(
-            record.requested_reads, 8,
+            record.requested_reads,
+            Some(8),
             "requested params come from SetTarget, not SamplerMeta"
         );
-        assert_eq!(record.requested_sweeps, 50);
+        assert_eq!(record.requested_sweeps, Some(50));
         assert_eq!(
-            record.requested_anneal_time_us, 30,
+            record.requested_anneal_time_us,
+            Some(30),
             "sourced from the requested SetTarget"
         );
         // Non-circular energy check: decode best_spins_hex and recompute.
@@ -296,6 +298,85 @@ async fn fake_miner_happy_path_solves_every_job_and_recomputes_matching_energy()
     assert!(
         !sock_path.exists(),
         "coordinator socket must be removed on every exit path"
+    );
+}
+
+/// No `SetTarget` was sent: requested params must be `None`, not a
+/// sentinel zero that collides with a genuine zero-valued target.
+#[tokio::test]
+async fn fake_miner_without_set_target_records_requested_params_as_none() {
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let jobs = draw_jobs(&spec, 11, 1);
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    let backend = fake_miner_backend(vec![]);
+
+    let report = run_session(RunParams {
+        backend: &backend,
+        spec: &spec,
+        jobs,
+        sock_path: &sock_path,
+        target: None,
+    })
+    .await
+    .expect("run_session's own setup never fails for a valid fixture backend");
+
+    assert!(report.handshake_ok);
+    assert_eq!(report.records.len(), 1);
+    let record = &report.records[0];
+    assert_eq!(
+        record.requested_reads, None,
+        "no SetTarget means requested_reads is None, not Some(0)"
+    );
+    assert_eq!(record.requested_sweeps, None);
+    assert_eq!(record.requested_anneal_time_us, None);
+    assert!(
+        record.passed,
+        "a normal result with no SetTarget still passes: {record:?}"
+    );
+}
+
+/// An explicit zero-valued `SetTarget` must record `Some(0)`, distinct from
+/// the no-target case (`None`).
+#[tokio::test]
+async fn fake_miner_with_zero_set_target_records_requested_params_as_some_zero() {
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let jobs = draw_jobs(&spec, 12, 1);
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    let backend = fake_miner_backend(vec![]);
+    let zero_target = SetTarget {
+        max_energy_milli: i64::MAX,
+        min_solutions: 0,
+        min_diversity_milli: 0,
+        num_reads: 0,
+        num_sweeps: 0,
+        anneal_time_us: 0,
+    };
+
+    let report = run_session(RunParams {
+        backend: &backend,
+        spec: &spec,
+        jobs,
+        sock_path: &sock_path,
+        target: Some(zero_target),
+    })
+    .await
+    .expect("run_session's own setup never fails for a valid fixture backend");
+
+    assert!(report.handshake_ok);
+    assert_eq!(report.records.len(), 1);
+    let record = &report.records[0];
+    assert_eq!(
+        record.requested_reads,
+        Some(0),
+        "an explicit zero SetTarget must record Some(0), not None"
+    );
+    assert_eq!(record.requested_sweeps, Some(0));
+    assert_eq!(record.requested_anneal_time_us, Some(0));
+    assert!(
+        record.passed,
+        "a normal result under a zero SetTarget still passes: {record:?}"
     );
 }
 
@@ -462,11 +543,12 @@ async fn fake_miner_reject_is_recorded_with_reason_and_does_not_affect_other_job
     );
     assert_eq!(rejected.measured_sweeps, None);
     assert_eq!(
-        rejected.requested_reads, 8,
+        rejected.requested_reads,
+        Some(8),
         "reject still records what was requested via SetTarget"
     );
-    assert_eq!(rejected.requested_sweeps, 50);
-    assert_eq!(rejected.requested_anneal_time_us, 30);
+    assert_eq!(rejected.requested_sweeps, Some(50));
+    assert_eq!(rejected.requested_anneal_time_us, Some(30));
 
     for job in [&jobs[0], &jobs[2]] {
         let record = record_by_job_id(&report.records, job);
@@ -477,6 +559,41 @@ async fn fake_miner_reject_is_recorded_with_reason_and_does_not_affect_other_job
         assert!(!record.rejected);
     }
     assert_eq!(report.miner_exit_code, 0);
+}
+
+/// A reject with no `SetTarget` must record requested params as `None`,
+/// not a sentinel `Some(0)`. Covers `build_reject_record` specifically —
+/// the happy-path no-target test only exercises `build_result_record`.
+#[tokio::test]
+async fn fake_miner_reject_without_set_target_records_requested_params_as_none() {
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let jobs = draw_jobs(&spec, 13, 1);
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    let backend = fake_miner_backend(vec!["--reject-job".to_string(), "1".to_string()]);
+
+    let report = run_session(RunParams {
+        backend: &backend,
+        spec: &spec,
+        jobs,
+        sock_path: &sock_path,
+        target: None,
+    })
+    .await
+    .expect("run_session's own setup never fails for a valid fixture backend");
+
+    assert!(report.handshake_ok);
+    assert_eq!(report.records.len(), 1);
+    let record = &report.records[0];
+    assert!(record.rejected, "expected a reject: {record:?}");
+    assert_eq!(
+        record.requested_reads, None,
+        "reject with no SetTarget must record requested_reads as None, not Some(0)"
+    );
+    assert_eq!(record.requested_sweeps, None);
+    assert_eq!(record.requested_anneal_time_us, None);
+    assert_eq!(record.measured_reads, None);
+    assert_eq!(record.measured_sweeps, None);
 }
 
 #[tokio::test]
