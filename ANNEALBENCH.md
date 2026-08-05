@@ -1,4 +1,4 @@
-# IsingMark — Annealer Benchmark Tool
+# IsingMark: Annealer Benchmark Tool
 
 Standalone, annealer-agnostic benchmarking tool for Ising-model solvers. IsingMark acts as a coordinator: it spawns a quip miner binary over a Unix socket, feeds consensus-identical problems, and records results. It does not join a chain and does not submit work.
 
@@ -59,7 +59,7 @@ CLI -> load YAML config, merge flags
     -> text table; optional PNG if --plot and feature plot
 ```
 
-Backends are miner binaries invoked with `--quip-coordinator unix:///tmp/isingmark-<pid>.sock`. The registry probes each with `--capabilities` and `--check` when those paths run.
+Backends are miner binaries invoked with `--quip-coordinator unix://...` and `--miner-id isingmark-0`. Each mode builds a unique socket path under the system temporary directory (for example `isingmark-<pid>-<n>.sock` for throughput; other modes use a mode-specific prefix). The registry probes each binary with `--capabilities` and `--check` when those paths run.
 
 ## Built-in backends
 
@@ -94,7 +94,7 @@ isingmark sweep --backend cpu-sa --topology-preset smoke \
 
 ### comparative
 
-Binary-search hardness so this backend's best-energy distribution matches a reference JSONL file. Reports matched hardness and final KS distance.
+Binary-search hardness in `[0.0, 1.0]` so this backend's mean best energy crosses a reference JSONL file's mean, then report the final KS distance on the best-energy distributions.
 
 ```bash
 isingmark comparative --backend cpu-sa --topology-preset smoke \
@@ -155,7 +155,7 @@ cargo build --features plot
 
 ### Per-job records (JSONL)
 
-One `JobRecord` per line: `job_id` (hex), `backend`, `best_energy_milli`, `diversity_milli`, `passed`, `rejected`, wall and device times, `reads`/`sweeps`/`anneal_time_us`.
+One `JobRecord` per line: `job_id` (hex), `backend`, `n_solutions`, `best_energy_milli`, `diversity_milli`, `passed`, `rejected`, `reject_reason`, `device_access_time_us`, `wall_ms`, `reads`, `sweeps`, `anneal_time_us`.
 
 Modes that refuse to overwrite refuse a non-empty existing `records.jsonl` before they start.
 

@@ -93,7 +93,14 @@ isingmark compare --file-a a.jsonl --file-b b.jsonl --plot out/cdfs.png
 
 ## Configuration files
 
-Pass `--config examples/configs/throughput_cpu.yaml` (or another file under `examples/configs/`). Explicit flags override the file. Defaults apply when both omit a field.
+A YAML file can supply backend, topology, and every other option a mode accepts, so a single `--config` flag is enough:
+
+```bash
+isingmark throughput --config examples/configs/throughput_cpu.yaml
+isingmark sweep --config examples/configs/sweep_cpu.yaml
+```
+
+Explicit flags override the file. Built-in defaults apply when both omit a field. See `examples/configs/` for complete samples.
 
 ## Tests and missing miners
 
