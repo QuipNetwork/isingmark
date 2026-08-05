@@ -9,6 +9,7 @@ use isingmark::backend::RunReport;
 use isingmark::cli::{Cli, Command};
 use isingmark::modes::sweep::{self, SweepConfig};
 use isingmark::modes::throughput::{self, ThroughputConfig};
+use isingmark::modes::ttt::{self, TttConfig};
 use isingmark::report::format_summary_table;
 
 #[tokio::main]
@@ -21,6 +22,10 @@ async fn main() -> ExitCode {
         },
         Command::Sweep(args) => match args.into_config() {
             Ok(cfg) => run_sweep(&cfg).await,
+            Err(message) => fail(&message),
+        },
+        Command::Ttt(args) => match args.into_config() {
+            Ok(cfg) => run_ttt(&cfg).await,
             Err(message) => fail(&message),
         },
     }
@@ -70,6 +75,26 @@ async fn run_sweep(cfg: &SweepConfig) -> ExitCode {
                     let _ = writeln!(message, "[{}] {warning}", cell.dir_name);
                 }
             }
+            let _ = writeln!(message, "output: {}", cfg.output_dir.display());
+            succeed(&message)
+        }
+        Err(e) => fail(&e.to_string()),
+    }
+}
+
+/// Run time-to-target mode and report the outcome. Same exit-code convention
+/// as [`run_throughput`]/[`run_sweep`]: `ExitCode::SUCCESS` even when some
+/// target was never reached (a benchmark result, not a tool failure); only a
+/// `ModeError` (the mode could not run at all) is a non-zero exit. Does not
+/// emit per-trial [`truncated_run_warning`]s the way `run_sweep` does per
+/// cell: `ttt::run_ttt` runs one `run_session` call per *trial* (not per
+/// target), so a single target's `RunReport`s would be one per trial rather
+/// than one per target, and `summary.json`'s own per-target `reached`/
+/// `trials_attempted` fields already surface a target that came up short.
+async fn run_ttt(cfg: &TttConfig) -> ExitCode {
+    match ttt::run_ttt(cfg).await {
+        Ok(report) => {
+            let mut message = format_summary_table(&report.summary);
             let _ = writeln!(message, "output: {}", cfg.output_dir.display());
             succeed(&message)
         }

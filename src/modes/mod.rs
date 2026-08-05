@@ -12,6 +12,7 @@ use crate::topology::{self, TopologyError, TopologySpec};
 
 pub mod sweep;
 pub mod throughput;
+pub mod ttt;
 
 /// A topology to benchmark against: a bundled fixture name, or a JSON file
 /// path. Every mode that needs a topology takes one of these rather than a
@@ -78,6 +79,15 @@ pub enum ModeError {
     /// error would make part of the requested grid vanish with no signal,
     /// which this crate's parameter handling has repeatedly ruled against.
     InapplicableGridDimension(String),
+    /// `ttt::TttConfig::energy_targets_milli` was empty.
+    EmptyTargets,
+    /// `ttt::TttConfig::energy_targets_milli` contained the same milli-value
+    /// target more than once. Rejected rather than silently deduplicated: a
+    /// duplicate would resolve to the same `ttt::target_dir_name`, and the
+    /// second target's `std::fs::File::create` call would silently truncate
+    /// the first target's just-written records (`File::create` truncates an
+    /// existing file rather than refusing to touch it).
+    DuplicateTarget(i64),
 }
 
 impl fmt::Display for ModeError {
@@ -104,6 +114,12 @@ impl fmt::Display for ModeError {
             Self::InapplicableGridDimension(message) => {
                 write!(f, "invalid --param-grid: {message}")
             }
+            Self::EmptyTargets => write!(f, "--energy-targets must not be empty"),
+            Self::DuplicateTarget(milli) => write!(
+                f,
+                "--energy-targets contains the same milli-value target twice ({milli}); \
+                 each target must resolve to its own output subdirectory"
+            ),
         }
     }
 }
@@ -115,7 +131,9 @@ impl std::error::Error for ModeError {
             Self::UnknownBackend(_)
             | Self::RecordsFileExists(_)
             | Self::EmptyGrid
-            | Self::InapplicableGridDimension(_) => None,
+            | Self::InapplicableGridDimension(_)
+            | Self::EmptyTargets
+            | Self::DuplicateTarget(_) => None,
             Self::Session(e) => Some(e),
             Self::Io(e) => Some(e),
         }

@@ -9,6 +9,7 @@ use clap::{Args, Parser, Subcommand};
 use crate::backend::builtin_registry;
 use crate::modes::sweep::{self, ParamGrid, SweepConfig};
 use crate::modes::throughput::{self, ThroughputConfig};
+use crate::modes::ttt::{self, TttConfig};
 use crate::modes::TopologyRef;
 
 /// `isingmark`: an annealer-agnostic Ising model benchmarking tool.
@@ -28,6 +29,9 @@ pub enum Command {
     /// Run every cell of a `--param-grid` Cartesian product against the
     /// identical set of drawn problems.
     Sweep(SweepArgs),
+    /// For each `--energy-targets` value, run trials until it is reached or
+    /// `--max-time-s` elapses, and report time-to-target.
+    Ttt(TttArgs),
 }
 
 /// Options common to every mode: which backend and topology to use, how
@@ -201,9 +205,135 @@ impl SweepArgs {
     }
 }
 
+/// `isingmark ttt` arguments.
+#[derive(Debug, Args)]
+pub struct TttArgs {
+    #[command(flatten)]
+    pub common: CommonArgs,
+    /// Energy targets to reach, in **natural units** (not milli — e.g.
+    /// `-5.0`, not `-5000`), comma-separated, e.g. `"-5.0,-10.0,-15.0"`.
+    /// Converted internally to milli-units (multiplied by 1000, rounded) to
+    /// match `record::JobRecord::best_energy_milli`; see `modes::ttt`'s
+    /// module doc for why this boundary is natural units while every
+    /// internal type is milli. `--hardness` (from `CommonArgs`) is not used
+    /// by this mode — every trial dispatches with unset sample parameters,
+    /// deferring entirely to the backend's own default, the same choice
+    /// `modes::sweep` documents for its own `target: None`.
+    // `value_delimiter`, not a whole-string parser returning `Vec<i64>`:
+    // clap's derive macro treats a `Vec<T>`-typed field as "one value of
+    // type `T` per occurrence" purely from the field's own syntactic type,
+    // regardless of what a custom `value_parser` returns — a parser
+    // returning `Vec<i64>` here mismatches what the derived
+    // `FromArgMatches` expects to downcast (`i64`, once per occurrence) and
+    // panics at parse time. `value_delimiter = ','` instead lets clap split
+    // `"-5,-10,-15"` into three occurrences itself, each run through
+    // `parse_one_energy_target_arg` (returning a single `i64`), which is
+    // exactly what a `Vec<i64>` field expects. `required = true`: an empty
+    // list would make every subsequent trial dispatch pointless, so this is
+    // enforced the same way `TopologySource`'s own required group is,
+    // rather than deferring to `modes::ttt::run_ttt`'s own
+    // `ModeError::EmptyTargets` for a mistake catchable this early.
+    #[arg(
+        long,
+        required = true,
+        allow_hyphen_values = true,
+        value_delimiter = ',',
+        value_parser = parse_one_energy_target_arg
+    )]
+    pub energy_targets: Vec<i64>,
+    /// Trials attempted per target, before any `--max-time-s` cutoff.
+    #[arg(long, value_parser = parse_num_trials, default_value_t = 20)]
+    pub num_trials: u32,
+    /// Wall-clock budget per target, in seconds, checked between trials.
+    #[arg(long, value_parser = parse_max_time_s, default_value_t = 30.0)]
+    pub max_time_s: f64,
+}
+
+impl TttArgs {
+    /// Build a [`TttConfig`] from parsed arguments.
+    ///
+    /// # Errors
+    ///
+    /// Same conditions as [`ThroughputArgs::into_config`]: an unresolved
+    /// mutually exclusive topology group, or `--config` (not implemented
+    /// yet).
+    pub fn into_config(self) -> Result<TttConfig, String> {
+        if self.common.config.is_some() {
+            return Err(
+                "--config is not implemented yet; YAML config loading lands in a later task \
+                 (drop the flag and pass every option on the command line for now)"
+                    .to_string(),
+            );
+        }
+        let topology = self.common.topology_source.to_ref()?;
+        Ok(TttConfig {
+            backend: self.common.backend,
+            topology,
+            energy_targets_milli: self.energy_targets,
+            num_trials: self.num_trials,
+            max_time_s: self.max_time_s,
+            seed: self.common.seed,
+            output_dir: self.common.output_dir,
+            backend_bin_override: None,
+            backend_args_override: None,
+        })
+    }
+}
+
 /// `--param-grid` value parser, delegating to `sweep::parse_param_grid`.
 fn parse_param_grid_arg(s: &str) -> Result<ParamGrid, String> {
     sweep::parse_param_grid(s).map_err(|e| e.to_string())
+}
+
+/// `--energy-targets` per-token value parser (see `TttArgs::energy_targets`'s
+/// comment for why this is per-token, not whole-string), delegating to
+/// `ttt::parse_one_energy_target`. Duplicate-target detection (two entries
+/// converting to the same milli-value target) is not repeated here: it
+/// needs the full parsed list at once, which this per-token parser never
+/// sees, so it is left to `modes::ttt::run_ttt`'s own
+/// `ModeError::DuplicateTarget` — the same "mode-level, not CLI-level"
+/// placement `sweep::ModeError::EmptyGrid` already uses for a check that
+/// similarly cannot be resolved from one flag's text alone.
+fn parse_one_energy_target_arg(s: &str) -> Result<i64, String> {
+    ttt::parse_one_energy_target(s).map_err(|e| e.to_string())
+}
+
+/// `--num-trials` value parser. `0` would silently produce a "successful"
+/// run that attempted nothing for every target — every target's
+/// `summary.json` entry would report `trials_attempted: 0` with no error and
+/// `ExitCode::SUCCESS` — the same failure mode `sweep::parse_num_jobs`
+/// rejects `0` for. Reject it here for the same reason.
+fn parse_num_trials(s: &str) -> Result<u32, String> {
+    let value: u32 = s.parse().map_err(|_| format!("{s:?} is not a valid u32"))?;
+    if value == 0 {
+        return Err(
+            "--num-trials must not be 0 (a zero-trial target would report an empty result with \
+             no signal that it never ran)"
+                .to_string(),
+        );
+    }
+    Ok(value)
+}
+
+/// `--max-time-s` value parser. clap's default `f64` parser accepts
+/// `nan`/`inf`/`-inf`/negative values and `0.0`; `modes::ttt::run_ttt`
+/// treats any of those as an already-exhausted budget (`modes::ttt::target_wall`
+/// degrades them to `Duration::ZERO`), which would silently attempt zero
+/// trials for every target — the same "plausible-looking, all-zero result"
+/// failure mode `--hardness`'s own `nan` guard and `--num-trials 0`'s
+/// rejection above both exist to catch. Reject anything non-finite or `<= 0`
+/// here, at parse time, instead.
+fn parse_max_time_s(s: &str) -> Result<f64, String> {
+    let value: f64 = s
+        .parse()
+        .map_err(|_| format!("{s:?} is not a valid number"))?;
+    if !value.is_finite() {
+        return Err(format!("--max-time-s must be a finite number, got {s:?}"));
+    }
+    if value <= 0.0 {
+        return Err(format!("--max-time-s must be greater than 0, got {value}"));
+    }
+    Ok(value)
 }
 
 /// `--num-jobs` value parser. `0` would silently produce a "successful" run
@@ -277,7 +407,7 @@ fn parse_duration_arg(s: &str) -> Result<f64, String> {
 mod tests {
     use clap::Parser as _;
 
-    use super::{Cli, Command, SweepArgs, ThroughputArgs};
+    use super::{Cli, Command, SweepArgs, ThroughputArgs, TttArgs};
 
     fn parse(extra_args: &[&str]) -> Result<Cli, clap::Error> {
         let mut full_argv = vec!["isingmark"];
@@ -286,13 +416,15 @@ mod tests {
     }
 
     /// Extract the `Throughput` variant, for tests that parsed a throughput
-    /// invocation. `Command` has more than one variant (as of `sweep`), so
-    /// `let Command::Throughput(args) = cli.command;` is no longer an
+    /// invocation. `Command` has more than one variant (as of `sweep`/`ttt`),
+    /// so `let Command::Throughput(args) = cli.command;` is no longer an
     /// irrefutable pattern and cannot be used directly.
     fn throughput_args(cli: Cli) -> ThroughputArgs {
         match cli.command {
             Command::Throughput(args) => args,
-            Command::Sweep(_) => unreachable!("test only ever parses a throughput invocation"),
+            Command::Sweep(_) | Command::Ttt(_) => {
+                unreachable!("test only ever parses a throughput invocation")
+            }
         }
     }
 
@@ -300,7 +432,19 @@ mod tests {
     fn sweep_args(cli: Cli) -> SweepArgs {
         match cli.command {
             Command::Sweep(args) => args,
-            Command::Throughput(_) => unreachable!("test only ever parses a sweep invocation"),
+            Command::Throughput(_) | Command::Ttt(_) => {
+                unreachable!("test only ever parses a sweep invocation")
+            }
+        }
+    }
+
+    /// Extract the `Ttt` variant. See [`throughput_args`].
+    fn ttt_args(cli: Cli) -> TttArgs {
+        match cli.command {
+            Command::Ttt(args) => args,
+            Command::Throughput(_) | Command::Sweep(_) => {
+                unreachable!("test only ever parses a ttt invocation")
+            }
         }
     }
 
@@ -598,6 +742,193 @@ mod tests {
         ])
         .expect("clap itself accepts --config; rejection happens in into_config");
         let args = sweep_args(cli);
+        let err = args
+            .into_config()
+            .expect_err("--config must be rejected until it is implemented");
+        assert!(err.contains("--config"));
+        assert!(err.contains("not implemented"));
+    }
+
+    #[test]
+    fn a_full_valid_ttt_invocation_parses() {
+        let cli = parse(&[
+            "ttt",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--energy-targets",
+            "-5,-10,-15",
+            "--num-trials",
+            "10",
+            "--max-time-s",
+            "5",
+            "--seed",
+            "42",
+            "--output-dir",
+            "./out",
+        ])
+        .expect("valid invocation parses");
+        let args = ttt_args(cli);
+        assert_eq!(args.common.backend, "cpu-sa");
+        assert_eq!(args.energy_targets, vec![-5_000, -10_000, -15_000]);
+        assert_eq!(args.num_trials, 10);
+        assert!((args.max_time_s - 5.0).abs() < f64::EPSILON);
+        assert_eq!(args.common.seed, 42);
+    }
+
+    /// `--energy-targets` accepts natural units, not milli — pinned here at
+    /// the CLI boundary (see `modes::ttt::parse_energy_targets`'s own tests
+    /// for the unit-level pin) so a regression in the CLI wiring itself
+    /// (e.g. swapping in a parser that skips the natural-to-milli
+    /// conversion) is caught independently of that module's own tests.
+    #[test]
+    fn ttt_energy_targets_are_converted_from_natural_to_milli_units() {
+        let cli = parse(&[
+            "ttt",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--energy-targets",
+            "-5",
+        ])
+        .expect("valid invocation parses");
+        let args = ttt_args(cli);
+        assert_eq!(
+            args.energy_targets,
+            vec![-5_000],
+            "-5 (natural units) must become -5000 (milli), not -5"
+        );
+    }
+
+    #[test]
+    fn ttt_malformed_energy_targets_is_rejected_at_parse_time() {
+        let err = parse(&[
+            "ttt",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--energy-targets",
+            "not-a-number",
+        ])
+        .expect_err("a malformed --energy-targets must be rejected at parse time");
+        assert!(err.to_string().contains("not-a-number"));
+    }
+
+    /// `--num-trials 0` would silently produce a ttt run that attempted
+    /// nothing for every target and still exits successfully; must be
+    /// rejected at parse time, matching `--num-jobs 0`'s convention for
+    /// `sweep`.
+    #[test]
+    fn ttt_num_trials_zero_is_rejected_at_parse_time() {
+        let err = parse(&[
+            "ttt",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--energy-targets",
+            "-5",
+            "--num-trials",
+            "0",
+        ])
+        .expect_err("--num-trials 0 must be rejected at parse time");
+        assert!(err.to_string().contains("--num-trials"));
+    }
+
+    #[test]
+    fn ttt_max_time_s_zero_is_rejected_at_parse_time() {
+        let err = parse(&[
+            "ttt",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--energy-targets",
+            "-5",
+            "--max-time-s",
+            "0",
+        ])
+        .expect_err("--max-time-s 0 must be rejected at parse time");
+        assert!(err.to_string().contains("--max-time-s"));
+    }
+
+    #[test]
+    fn ttt_max_time_s_negative_and_non_finite_are_rejected_at_parse_time() {
+        for bad in ["-1", "nan", "inf", "-inf"] {
+            parse(&[
+                "ttt",
+                "--backend",
+                "cpu-sa",
+                "--topology-preset",
+                "smoke",
+                "--energy-targets",
+                "-5",
+                "--max-time-s",
+                bad,
+            ])
+            .expect_err(&format!(
+                "--max-time-s {bad} must be rejected at parse time"
+            ));
+        }
+    }
+
+    #[test]
+    fn ttt_into_config_carries_every_field_through() {
+        let cli = parse(&[
+            "ttt",
+            "--backend",
+            "cpu-sa",
+            "--topology-file",
+            "fixtures/smoke.spec.json",
+            "--energy-targets",
+            "-5,-10",
+            "--num-trials",
+            "7",
+            "--max-time-s",
+            "12.5",
+            "--seed",
+            "9",
+            "--output-dir",
+            "/tmp/isingmark-ttt-out",
+        ])
+        .expect("valid invocation parses");
+        let args = ttt_args(cli);
+        let cfg = args.into_config().expect("topology group resolves");
+        assert_eq!(cfg.backend, "cpu-sa");
+        assert_eq!(
+            cfg.topology,
+            crate::modes::TopologyRef::File(std::path::PathBuf::from("fixtures/smoke.spec.json"))
+        );
+        assert_eq!(cfg.energy_targets_milli, vec![-5_000, -10_000]);
+        assert_eq!(cfg.num_trials, 7);
+        assert!((cfg.max_time_s - 12.5).abs() < f64::EPSILON);
+        assert_eq!(cfg.seed, 9);
+        assert_eq!(
+            cfg.output_dir,
+            std::path::PathBuf::from("/tmp/isingmark-ttt-out")
+        );
+        assert_eq!(cfg.backend_bin_override, None);
+        assert_eq!(cfg.backend_args_override, None);
+    }
+
+    #[test]
+    fn ttt_config_flag_is_rejected_until_config_loading_is_implemented() {
+        let cli = parse(&[
+            "ttt",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--energy-targets",
+            "-5",
+            "--config",
+            "bench.yaml",
+        ])
+        .expect("clap itself accepts --config; rejection happens in into_config");
+        let args = ttt_args(cli);
         let err = args
             .into_config()
             .expect_err("--config must be rejected until it is implemented");
