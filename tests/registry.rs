@@ -97,11 +97,87 @@ fn quip_cpu_sa_probe_succeeds_when_the_real_binary_is_installed() {
 /// real binaries happen to be installed.
 #[cfg(unix)]
 mod fake_miner {
+    use std::io::ErrorKind;
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
+    use std::process::Command;
+    use std::thread;
+    use std::time::Duration;
 
     use isingmark::backend::{probe_capabilities, probe_check, BackendSpec, ProbeError};
     use isingmark::params::BackendKind;
+
+    /// Write `script` to `path`, mark it mode `0755`, and confirm it can be
+    /// exec'd before returning.
+    ///
+    /// ## Why confirm with a spawn (and why a bounded ETXTBSY retry)
+    ///
+    /// These fixtures are shell scripts written and then executed in the same
+    /// process as many other test threads. On Linux, a sibling thread can
+    /// `fork` while the parent still holds a write handle to the just-written
+    /// file; the child inherits that descriptor, and `exec` of a file that is
+    /// open for writing returns `ETXTBSY` (`ErrorKind::ExecutableFileBusy`).
+    /// `probe_capabilities` then surfaces a spawn error instead of the
+    /// fixture's intended stdout/exit behaviour, and the test's variant
+    /// assertion flakes.
+    ///
+    /// Measured in the CI image (`rust:1.97.1-bookworm`): six sibling threads
+    /// calling `Command::output()` in a loop while the main thread wrote,
+    /// chmod'd, and exec'd a fixture produced **`ExecutableFileBusy` 2 times
+    /// out of 300**. macOS does not exhibit this race (the same concurrent
+    /// reproduction does not fail there), which is why the flake only appears
+    /// on Linux CI.
+    ///
+    /// Product code never writes an executable and then execs it. This is
+    /// pure fixture setup, so a bounded retry here is acceptable. The retry
+    /// stays in fixture setup — not around `probe_capabilities` /
+    /// `probe_check` — so each test still makes exactly one probe call and a
+    /// genuine spawn failure from the code under test still fails the test.
+    ///
+    /// A fixture that never becomes executable is a real failure: the bound
+    /// is finite and small, and exhausting it panics with a clear message.
+    fn write_executable_script(path: &Path, script: impl AsRef<[u8]>) {
+        std::fs::write(path, script).expect("write fixture script");
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod fixture script executable");
+        // Fail here (not at the test's probe call) so a genuine ETXTBSY from
+        // the code under test is still a hard test failure.
+        try_confirm_executable(path).expect(
+            "fixture still not executable after write+chmod; \
+             see write_executable_script docs (Linux ETXTBSY write-handle/fork race)",
+        );
+    }
+
+    /// Bounded spawn probe used only by [`write_executable_script`].
+    ///
+    /// Finite and small: a few hundred milliseconds worst case. The
+    /// write-handle window is short; once inherited FDs close, the next
+    /// attempt succeeds. Infinite retry would mask a permanently broken
+    /// fixture.
+    fn try_confirm_executable(path: &Path) -> std::io::Result<()> {
+        const MAX_ATTEMPTS: u32 = 32;
+        const RETRY_SLEEP: Duration = Duration::from_millis(5);
+
+        let mut last_busy: Option<std::io::Error> = None;
+        for _ in 0..MAX_ATTEMPTS {
+            match Command::new(path).output() {
+                // Spawn succeeded (exit status is irrelevant; the script may
+                // exit non-zero when invoked with no probe args).
+                Ok(_) => return Ok(()),
+                Err(err) if err.kind() == ErrorKind::ExecutableFileBusy => {
+                    last_busy = Some(err);
+                    thread::sleep(RETRY_SLEEP);
+                }
+                Err(err) => return Err(err),
+            }
+        }
+        Err(last_busy.unwrap_or_else(|| {
+            std::io::Error::new(
+                ErrorKind::ExecutableFileBusy,
+                "exhausted ETXTBSY retries without capturing an error",
+            )
+        }))
+    }
 
     /// Write an executable shell-script fixture to `dir` that prints a
     /// fixed, asymmetric JSON document on `--capabilities` and exits with
@@ -111,9 +187,7 @@ mod fake_miner {
         let script = format!(
             "#!/bin/sh\ncase \"$1\" in\n  --capabilities)\n    printf '%s' '{{\"backend\":\"fake\",\"algorithm\":\"sim\",\"max_nodes\":257,\"max_edges\":31}}'\n    exit 0\n    ;;\n  --check)\n    exit {check_exit_code}\n    ;;\nesac\nexit 1\n"
         );
-        std::fs::write(&path, script).expect("write fake miner script");
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
-            .expect("chmod fake miner script executable");
+        write_executable_script(&path, script);
         path
     }
 
@@ -180,10 +254,7 @@ mod fake_miner {
     fn invalid_json_stdout_is_reported_as_invalid_output() {
         let dir = tempfile::tempdir().expect("create temp dir");
         let path = dir.path().join("garbage-miner");
-        std::fs::write(&path, "#!/bin/sh\nprintf 'not json'\nexit 0\n")
-            .expect("write garbage fixture");
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
-            .expect("chmod garbage fixture executable");
+        write_executable_script(&path, "#!/bin/sh\nprintf 'not json'\nexit 0\n");
 
         let err = probe_capabilities(&spec_for(path)).expect_err("garbage stdout is not JSON");
 
@@ -200,10 +271,7 @@ mod fake_miner {
     fn invalid_utf8_stdout_is_reported_as_invalid_output_mentioning_utf8() {
         let dir = tempfile::tempdir().expect("create temp dir");
         let path = dir.path().join("non-utf8-miner");
-        std::fs::write(&path, "#!/bin/sh\nprintf '\\377\\376'\nexit 0\n")
-            .expect("write non-utf8 fixture");
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
-            .expect("chmod non-utf8 fixture executable");
+        write_executable_script(&path, "#!/bin/sh\nprintf '\\377\\376'\nexit 0\n");
 
         let err =
             probe_capabilities(&spec_for(path)).expect_err("invalid UTF-8 stdout is an error");
@@ -225,13 +293,10 @@ mod fake_miner {
     fn capabilities_nonzero_exit_reports_the_exit_code_and_stderr_reason() {
         let dir = tempfile::tempdir().expect("create temp dir");
         let path = dir.path().join("crashing-miner");
-        std::fs::write(
+        write_executable_script(
             &path,
             "#!/bin/sh\n>&2 printf 'cuda runtime not found'\nexit 3\n",
-        )
-        .expect("write crashing fixture");
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
-            .expect("chmod crashing fixture executable");
+        );
 
         let err = probe_capabilities(&spec_for(path)).expect_err("nonzero exit is an error");
 
@@ -258,9 +323,7 @@ mod fake_miner {
         let dir = tempfile::tempdir().expect("create temp dir");
         let path = dir.path().join("args-checking-miner");
         let script = "#!/bin/sh\nif [ \"$1\" = \"--extra\" ]; then\n  case \"$2\" in\n    --capabilities) printf '%s' '{\"ok\":true}'; exit 0 ;;\n    --check) exit 0 ;;\n  esac\nfi\nexit 9\n";
-        std::fs::write(&path, script).expect("write args-checking fixture");
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
-            .expect("chmod args-checking fixture executable");
+        write_executable_script(&path, script);
 
         let spec = BackendSpec {
             name: "fake".to_string(),
