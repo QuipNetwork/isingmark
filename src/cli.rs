@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand};
 
 use crate::backend::builtin_registry;
+use crate::modes::sweep::{self, ParamGrid, SweepConfig};
 use crate::modes::throughput::{self, ThroughputConfig};
 use crate::modes::TopologyRef;
 
@@ -24,6 +25,9 @@ pub enum Command {
     /// Dispatch jobs against a backend for a fixed duration and report
     /// throughput.
     Throughput(ThroughputArgs),
+    /// Run every cell of a `--param-grid` Cartesian product against the
+    /// identical set of drawn problems.
+    Sweep(SweepArgs),
 }
 
 /// Options common to every mode: which backend and topology to use, how
@@ -146,6 +150,62 @@ impl ThroughputArgs {
     }
 }
 
+/// `isingmark sweep` arguments.
+#[derive(Debug, Args)]
+pub struct SweepArgs {
+    #[command(flatten)]
+    pub common: CommonArgs,
+    /// Parameter grid to sweep, e.g.
+    /// `'{"num_reads":[64,128],"num_sweeps":[100,500]}'`. Which fields
+    /// apply depends on `--backend`'s execution model: `num_reads` +
+    /// `num_sweeps` for a sweeping backend (cpu-sa, cpu-gibbs, cuda,
+    /// metal), or `num_reads` + `anneal_time_us` for an annealing one
+    /// (dwave). `--hardness` (from `CommonArgs`) is not used by this mode
+    /// — cell parameters come entirely from this grid instead of a
+    /// hardness curve.
+    #[arg(long, value_parser = parse_param_grid_arg)]
+    pub param_grid: ParamGrid,
+    /// Jobs drawn per cell. Every cell draws the identical sequence (same
+    /// seed, same count) — see `modes::sweep`'s module docs for why.
+    #[arg(long, default_value_t = 20)]
+    pub num_jobs: u32,
+}
+
+impl SweepArgs {
+    /// Build a [`SweepConfig`] from parsed arguments.
+    ///
+    /// # Errors
+    ///
+    /// Same conditions as [`ThroughputArgs::into_config`]: an unresolved
+    /// mutually exclusive topology group, or `--config` (not implemented
+    /// yet).
+    pub fn into_config(self) -> Result<SweepConfig, String> {
+        if self.common.config.is_some() {
+            return Err(
+                "--config is not implemented yet; YAML config loading lands in a later task \
+                 (drop the flag and pass every option on the command line for now)"
+                    .to_string(),
+            );
+        }
+        let topology = self.common.topology_source.to_ref()?;
+        Ok(SweepConfig {
+            backend: self.common.backend,
+            topology,
+            grid: self.param_grid,
+            num_jobs: self.num_jobs,
+            seed: self.common.seed,
+            output_dir: self.common.output_dir,
+            backend_bin_override: None,
+            backend_args_override: None,
+        })
+    }
+}
+
+/// `--param-grid` value parser, delegating to `sweep::parse_param_grid`.
+fn parse_param_grid_arg(s: &str) -> Result<ParamGrid, String> {
+    sweep::parse_param_grid(s).map_err(|e| e.to_string())
+}
+
 /// `--backend` value parser, checked against the live built-in registry so
 /// an unknown name produces an error listing the exact valid names rather
 /// than a generic "invalid value" message.
@@ -198,12 +258,31 @@ fn parse_duration_arg(s: &str) -> Result<f64, String> {
 mod tests {
     use clap::Parser as _;
 
-    use super::{Cli, Command};
+    use super::{Cli, Command, SweepArgs, ThroughputArgs};
 
     fn parse(extra_args: &[&str]) -> Result<Cli, clap::Error> {
         let mut full_argv = vec!["isingmark"];
         full_argv.extend_from_slice(extra_args);
         Cli::try_parse_from(full_argv)
+    }
+
+    /// Extract the `Throughput` variant, for tests that parsed a throughput
+    /// invocation. `Command` has more than one variant (as of `sweep`), so
+    /// `let Command::Throughput(args) = cli.command;` is no longer an
+    /// irrefutable pattern and cannot be used directly.
+    fn throughput_args(cli: Cli) -> ThroughputArgs {
+        match cli.command {
+            Command::Throughput(args) => args,
+            Command::Sweep(_) => unreachable!("test only ever parses a throughput invocation"),
+        }
+    }
+
+    /// Extract the `Sweep` variant. See [`throughput_args`].
+    fn sweep_args(cli: Cli) -> SweepArgs {
+        match cli.command {
+            Command::Sweep(args) => args,
+            Command::Throughput(_) => unreachable!("test only ever parses a sweep invocation"),
+        }
     }
 
     #[test]
@@ -224,7 +303,7 @@ mod tests {
             "./out",
         ])
         .expect("valid invocation parses");
-        let Command::Throughput(args) = cli.command;
+        let args = throughput_args(cli);
         assert_eq!(args.common.backend, "cpu-sa");
         assert_eq!(
             args.common.topology_source.topology_preset.as_deref(),
@@ -341,7 +420,7 @@ mod tests {
             "/tmp/isingmark-out",
         ])
         .expect("valid invocation parses");
-        let Command::Throughput(args) = cli.command;
+        let args = throughput_args(cli);
         let cfg = args.into_config().expect("topology group resolves");
         assert_eq!(cfg.backend, "cpu-sa");
         assert_eq!(
@@ -377,7 +456,109 @@ mod tests {
             "bench.yaml",
         ])
         .expect("clap itself accepts --config; rejection happens in into_config");
-        let Command::Throughput(args) = cli.command;
+        let args = throughput_args(cli);
+        let err = args
+            .into_config()
+            .expect_err("--config must be rejected until it is implemented");
+        assert!(err.contains("--config"));
+        assert!(err.contains("not implemented"));
+    }
+
+    #[test]
+    fn a_full_valid_sweep_invocation_parses() {
+        let cli = parse(&[
+            "sweep",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--param-grid",
+            r#"{"num_reads":[64,128],"num_sweeps":[100,500]}"#,
+            "--num-jobs",
+            "10",
+            "--seed",
+            "42",
+            "--output-dir",
+            "./out",
+        ])
+        .expect("valid invocation parses");
+        let args = sweep_args(cli);
+        assert_eq!(args.common.backend, "cpu-sa");
+        assert_eq!(args.param_grid.num_reads, vec![64, 128]);
+        assert_eq!(args.param_grid.num_sweeps, vec![100, 500]);
+        assert_eq!(args.num_jobs, 10);
+        assert_eq!(args.common.seed, 42);
+    }
+
+    /// A malformed `--param-grid` (here, a `0` value) must be rejected at
+    /// parse time, not deferred to `into_config`/`run_sweep`.
+    #[test]
+    fn sweep_param_grid_zero_value_is_rejected_at_parse_time() {
+        let err = parse(&[
+            "sweep",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--param-grid",
+            r#"{"num_reads":[0,64]}"#,
+        ])
+        .expect_err("a 0 grid value must be rejected at parse time");
+        assert!(err.to_string().contains('0'));
+    }
+
+    #[test]
+    fn sweep_into_config_carries_every_field_through() {
+        let cli = parse(&[
+            "sweep",
+            "--backend",
+            "cpu-sa",
+            "--topology-file",
+            "fixtures/smoke.spec.json",
+            "--param-grid",
+            r#"{"num_reads":[8,16],"num_sweeps":[50]}"#,
+            "--num-jobs",
+            "5",
+            "--seed",
+            "7",
+            "--output-dir",
+            "/tmp/isingmark-sweep-out",
+        ])
+        .expect("valid invocation parses");
+        let args = sweep_args(cli);
+        let cfg = args.into_config().expect("topology group resolves");
+        assert_eq!(cfg.backend, "cpu-sa");
+        assert_eq!(
+            cfg.topology,
+            crate::modes::TopologyRef::File(std::path::PathBuf::from("fixtures/smoke.spec.json"))
+        );
+        assert_eq!(cfg.grid.num_reads, vec![8, 16]);
+        assert_eq!(cfg.grid.num_sweeps, vec![50]);
+        assert_eq!(cfg.num_jobs, 5);
+        assert_eq!(cfg.seed, 7);
+        assert_eq!(
+            cfg.output_dir,
+            std::path::PathBuf::from("/tmp/isingmark-sweep-out")
+        );
+        assert_eq!(cfg.backend_bin_override, None);
+        assert_eq!(cfg.backend_args_override, None);
+    }
+
+    #[test]
+    fn sweep_config_flag_is_rejected_until_config_loading_is_implemented() {
+        let cli = parse(&[
+            "sweep",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--param-grid",
+            r#"{"num_reads":[64]}"#,
+            "--config",
+            "bench.yaml",
+        ])
+        .expect("clap itself accepts --config; rejection happens in into_config");
+        let args = sweep_args(cli);
         let err = args
             .into_config()
             .expect_err("--config must be rejected until it is implemented");

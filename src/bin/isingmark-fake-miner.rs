@@ -215,6 +215,17 @@ fn resolve_edges(ising: &IsingProblem, topo: Option<&FakeTopo>) -> Vec<(usize, u
 /// `i` flips the first `i` node spins negative, capped at the node count),
 /// each with `energy_lie_milli` added on top of its true recomputed energy.
 /// `num_solutions <= 1` reproduces the original trivial all-`+1` behavior.
+///
+/// `SamplerMeta.reads`/`sweeps` echo the job's own `IsingProblem.num_reads`/
+/// `num_sweeps` wire fields when the coordinator set them (nonzero), rather
+/// than always reporting `num_solutions`/`0`: `isingmark::modes::sweep`
+/// drives per-job parameters through exactly these fields (never a
+/// session-level `SetTarget`), and a hermetic test asserting they reached
+/// the wire needs a miner that actually reflects what it received instead
+/// of a fixed value the harness never gets to see through. Falls back to
+/// the prior `num_solutions`/`0` behavior when the job leaves them `0`
+/// ("unset" — `problem::ProblemSource::next_job` always does this outside
+/// of sweep mode), so every other test driving this binary is unaffected.
 fn solve(
     job: &Job,
     topo: Option<&FakeTopo>,
@@ -243,12 +254,18 @@ fn solve(
         })
         .collect();
 
+    let reads = if ising.num_reads == 0 {
+        count
+    } else {
+        ising.num_reads
+    };
+
     JobResult {
         job_id: job.job_id.clone(),
         solutions,
         meta: Some(SamplerMeta {
-            reads: count,
-            sweeps: 0,
+            reads,
+            sweeps: ising.num_sweeps,
             device_access_time_us: 0,
             ..Default::default()
         }),

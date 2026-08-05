@@ -7,6 +7,7 @@ use std::process::ExitCode;
 use clap::Parser as _;
 use isingmark::backend::RunReport;
 use isingmark::cli::{Cli, Command};
+use isingmark::modes::sweep::{self, SweepConfig};
 use isingmark::modes::throughput::{self, ThroughputConfig};
 use isingmark::report::format_summary_table;
 
@@ -16,6 +17,10 @@ async fn main() -> ExitCode {
     match cli.command {
         Command::Throughput(args) => match args.into_config() {
             Ok(cfg) => run_throughput(&cfg).await,
+            Err(message) => fail(&message),
+        },
+        Command::Sweep(args) => match args.into_config() {
+            Ok(cfg) => run_sweep(&cfg).await,
             Err(message) => fail(&message),
         },
     }
@@ -44,6 +49,28 @@ async fn run_throughput(cfg: &ThroughputConfig) -> ExitCode {
                 records_path.display(),
                 summary_path.display(),
             );
+            succeed(&message)
+        }
+        Err(e) => fail(&e.to_string()),
+    }
+}
+
+/// Run sweep mode and report the outcome. Mirrors [`run_throughput`]'s
+/// exit-code convention: `ExitCode::SUCCESS` even when some cell's miner
+/// failed partway through (a benchmark result, not a tool failure); each
+/// affected cell gets its own warning line via [`truncated_run_warning`],
+/// prefixed with that cell's own directory name so a multi-cell warning
+/// list is attributable to the cell it came from.
+async fn run_sweep(cfg: &SweepConfig) -> ExitCode {
+    match sweep::run_sweep(cfg).await {
+        Ok(report) => {
+            let mut message = format_summary_table(&report.summary);
+            for cell in &report.cells {
+                if let Some(warning) = truncated_run_warning(&cell.report) {
+                    let _ = writeln!(message, "[{}] {warning}", cell.dir_name);
+                }
+            }
+            let _ = writeln!(message, "output: {}", cfg.output_dir.display());
             succeed(&message)
         }
         Err(e) => fail(&e.to_string()),

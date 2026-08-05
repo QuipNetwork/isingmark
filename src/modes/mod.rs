@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use crate::backend::SessionError;
 use crate::topology::{self, TopologyError, TopologySpec};
 
+pub mod sweep;
 pub mod throughput;
 
 /// A topology to benchmark against: a bundled fixture name, or a JSON file
@@ -66,6 +67,17 @@ pub enum ModeError {
     /// `--output-dir` (the normal case, since it defaults to a fixed
     /// path).
     RecordsFileExists(PathBuf),
+    /// `sweep::ParamGrid`'s applicable dimensions (which ones apply depends
+    /// on the resolved backend's `params::BackendKind`) produced zero
+    /// cells: at least one of them was an empty `[]`.
+    EmptyGrid,
+    /// A `sweep::ParamGrid` dimension was set that does not apply to the
+    /// resolved backend's `params::BackendKind` (`anneal_time_us` for a
+    /// `Sweeping` backend, or `num_sweeps` for an `Annealing` one).
+    /// Rejected rather than silently ignored: a dropped sweep axis with no
+    /// error would make part of the requested grid vanish with no signal,
+    /// which this crate's parameter handling has repeatedly ruled against.
+    InapplicableGridDimension(String),
 }
 
 impl fmt::Display for ModeError {
@@ -84,6 +96,14 @@ impl fmt::Display for ModeError {
                  choose a different --output-dir or remove the file first",
                 path.display()
             ),
+            Self::EmptyGrid => write!(
+                f,
+                "--param-grid produced zero cells: every dimension it applies to \
+                 (given the resolved backend's execution model) must be a nonempty list"
+            ),
+            Self::InapplicableGridDimension(message) => {
+                write!(f, "invalid --param-grid: {message}")
+            }
         }
     }
 }
@@ -92,7 +112,10 @@ impl std::error::Error for ModeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Topology(e) => Some(e),
-            Self::UnknownBackend(_) | Self::RecordsFileExists(_) => None,
+            Self::UnknownBackend(_)
+            | Self::RecordsFileExists(_)
+            | Self::EmptyGrid
+            | Self::InapplicableGridDimension(_) => None,
             Self::Session(e) => Some(e),
             Self::Io(e) => Some(e),
         }
