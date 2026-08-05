@@ -118,7 +118,16 @@ cargo test --all-targets
 
 Tests that need real miner binaries (`quip-cpu-sa` and related names from the registry) **fail** when those binaries are absent. They do not skip.
 
-To opt out on a machine without miners:
+To download released miner binaries into `miners/` (and verify each one runs on this host):
+
+```bash
+./tools/fetch-miners.sh
+export PATH="$(pwd)/miners:${PATH}"
+```
+
+The script pins the upstream fetcher to the same `quip-miner` rev as this crate, passes through `MINERS_TAG`, `MINER_SET`, and `DRY_RUN`, and defaults `MINERS_TAG` to `v0.3.0-rc1`. The cpu miners are Linux binaries even for `arm64` assets; on macOS they download but do not execute. Metal miners are Mach-O and do run on Darwin. On macOS the `quip_cpu_sa_conformance` test still needs the opt-out variable below.
+
+To opt out on a machine without a usable `quip-cpu-sa`:
 
 ```bash
 ISINGMARK_ALLOW_MISSING_MINERS=1 cargo test --all-targets
