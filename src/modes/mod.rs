@@ -11,6 +11,8 @@ use crate::backend::SessionError;
 use crate::topology::{self, TopologyError, TopologySpec};
 
 pub mod comparative;
+pub mod reproducibility;
+pub mod scaling;
 pub mod sweep;
 pub mod throughput;
 pub mod ttt;
@@ -110,6 +112,40 @@ pub enum ModeError {
     /// `NaN`/out-of-range hardness into a summary that looks like every
     /// other, valid one.
     InvalidComputedHardness(f64),
+    /// `scaling::ScalingConfig::sizes` was empty.
+    EmptySizes,
+    /// A `scaling::ScalingConfig::sizes` entry cannot support a 3-regular
+    /// graph: every node needs 3 distinct neighbours, which is impossible
+    /// for an odd node count or fewer than 4 nodes. Rejected at both parse
+    /// time (`cli::parse_one_scaling_size`) and here, for a caller that
+    /// constructs a `ScalingConfig` directly.
+    InvalidSize(usize),
+    /// `scaling::ScalingConfig::sizes` contained the same node count more
+    /// than once. Rejected rather than silently deduplicated: a duplicate
+    /// would resolve to the same `scaling::size_dir_name`, and the second
+    /// size's `File::create` call would silently truncate the first size's
+    /// just-written records.
+    DuplicateSize(usize),
+    /// `scaling::generate_topology`'s configuration-model random-graph
+    /// generator did not find a valid (no self-loop, no duplicate edge)
+    /// pairing within its bounded attempt budget for the given node count.
+    /// Exceedingly unlikely for any size this crate's own tests or a
+    /// realistic `--sizes` value would ever use, but checked rather than
+    /// looping forever or returning a graph that is not actually
+    /// 3-regular.
+    GraphGenerationFailed(usize),
+    /// `reproducibility::run_reproducibility`'s two runs produced a batch
+    /// of `passed` energies that `stats::ks_distance`/`stats::ks_two_sample_p`
+    /// cannot compare (empty, or containing a non-finite value -- see those
+    /// functions' own documented `None` cases). Reported as an error rather
+    /// than fabricating a `p_value` (e.g. defaulting to `1.0`, which would
+    /// silently claim "the two runs are identical" for a run that produced
+    /// no usable data at all).
+    EmptyReproBatch {
+        /// Which run(s) produced no usable batch: `"run_a"`, `"run_b"`, or
+        /// `"run_a and run_b"`.
+        which: &'static str,
+    },
 }
 
 impl fmt::Display for ModeError {
@@ -160,6 +196,26 @@ impl fmt::Display for ModeError {
                 "comparative search produced an invalid hardness ({value}); this indicates a bug \
                  in the search's own bracket arithmetic, not a user input mistake"
             ),
+            Self::EmptySizes => write!(f, "--sizes must not be empty"),
+            Self::InvalidSize(n) => write!(
+                f,
+                "--sizes contains {n}, which cannot support a 3-regular graph (every node needs \
+                 3 distinct neighbours, so a size must be even and at least 4)"
+            ),
+            Self::DuplicateSize(n) => write!(
+                f,
+                "--sizes contains the same node count twice ({n}); each size must resolve to \
+                 its own output subdirectory"
+            ),
+            Self::GraphGenerationFailed(n) => write!(
+                f,
+                "failed to generate a random 3-regular graph on {n} nodes within the attempt \
+                 budget; this indicates a bug in the generator, not a user input mistake"
+            ),
+            Self::EmptyReproBatch { which } => write!(
+                f,
+                "{which} produced no usable (passed) records to compare distributions against"
+            ),
         }
     }
 }
@@ -176,7 +232,12 @@ impl std::error::Error for ModeError {
             | Self::DuplicateTarget(_)
             | Self::InvalidMaxIterations
             | Self::EmptyTargetFile(_)
-            | Self::InvalidComputedHardness(_) => None,
+            | Self::InvalidComputedHardness(_)
+            | Self::EmptySizes
+            | Self::InvalidSize(_)
+            | Self::DuplicateSize(_)
+            | Self::GraphGenerationFailed(_)
+            | Self::EmptyReproBatch { .. } => None,
             Self::Session(e) => Some(e),
             Self::Io(e) | Self::TargetFileUnreadable(_, e) => Some(e),
         }

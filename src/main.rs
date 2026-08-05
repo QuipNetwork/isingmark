@@ -8,6 +8,8 @@ use clap::Parser as _;
 use isingmark::backend::RunReport;
 use isingmark::cli::{Cli, Command};
 use isingmark::modes::comparative::{self, ComparativeConfig};
+use isingmark::modes::reproducibility::{self, ReproConfig};
+use isingmark::modes::scaling::{self, ScalingConfig};
 use isingmark::modes::sweep::{self, SweepConfig};
 use isingmark::modes::throughput::{self, ThroughputConfig};
 use isingmark::modes::ttt::{self, TttConfig};
@@ -31,6 +33,14 @@ async fn main() -> ExitCode {
         },
         Command::Comparative(args) => match args.into_config() {
             Ok(cfg) => run_comparative(&cfg).await,
+            Err(message) => fail(&message),
+        },
+        Command::Scaling(args) => match args.into_config() {
+            Ok(cfg) => run_scaling(&cfg).await,
+            Err(message) => fail(&message),
+        },
+        Command::Reproducibility(args) => match args.into_config() {
+            Ok(cfg) => run_reproducibility(&cfg).await,
             Err(message) => fail(&message),
         },
     }
@@ -129,6 +139,47 @@ async fn run_comparative(cfg: &ComparativeConfig) -> ExitCode {
             let mut message = format!("matched hardness: {hardness:.4}\n");
             let _ = writeln!(message, "ks_distance: {}", format_ks_distance(ks_distance));
             let _ = writeln!(message, "records: {}", records.len());
+            let _ = writeln!(message, "summary: {}", summary_path.display());
+            succeed(&message)
+        }
+        Err(e) => fail(&e.to_string()),
+    }
+}
+
+/// Run scaling mode and report the outcome. Mirrors [`run_sweep`]'s
+/// exit-code convention: `ExitCode::SUCCESS` even when a size's miner
+/// failed partway through (a benchmark result, not a tool failure); each
+/// affected size gets its own warning line via [`truncated_run_warning`],
+/// prefixed with that size's own directory name.
+async fn run_scaling(cfg: &ScalingConfig) -> ExitCode {
+    match scaling::run_scaling(cfg).await {
+        Ok(report) => {
+            let mut message = format_summary_table(&report.summary);
+            for size in &report.sizes {
+                if let Some(warning) = truncated_run_warning(&size.report) {
+                    let _ = writeln!(message, "[{}] {warning}", size.dir_name);
+                }
+            }
+            let _ = writeln!(message, "output: {}", cfg.output_dir.display());
+            succeed(&message)
+        }
+        Err(e) => fail(&e.to_string()),
+    }
+}
+
+/// Run reproducibility mode and report the outcome. Same exit-code
+/// convention as the other modes: `ExitCode::SUCCESS` even when the two
+/// runs' distributions differ (a benchmark result, not a tool failure);
+/// only a `ModeError` (a run could not be dispatched, or produced no usable
+/// data to compare at all — see `reproducibility`'s own module doc on
+/// `ModeError::EmptyReproBatch`) is a non-zero exit.
+async fn run_reproducibility(cfg: &ReproConfig) -> ExitCode {
+    match reproducibility::run_reproducibility(cfg).await {
+        Ok(report) => {
+            let summary_path = cfg.output_dir.join(reproducibility::SUMMARY_FILENAME);
+            let mut message = format!("ks_statistic: {:.4}\n", report.ks_statistic);
+            let _ = writeln!(message, "p_value: {:.4}", report.p_value);
+            let _ = writeln!(message, "differs: {}", report.differs);
             let _ = writeln!(message, "summary: {}", summary_path.display());
             succeed(&message)
         }

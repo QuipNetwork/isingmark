@@ -8,6 +8,8 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::backend::builtin_registry;
 use crate::modes::comparative::ComparativeConfig;
+use crate::modes::reproducibility::ReproConfig;
+use crate::modes::scaling::{self, ScalingConfig};
 use crate::modes::sweep::{self, ParamGrid, SweepConfig};
 use crate::modes::throughput::{self, ThroughputConfig};
 use crate::modes::ttt::{self, TttConfig};
@@ -36,6 +38,13 @@ pub enum Command {
     /// Search hardness in `[0.0, 1.0]` for the best-energy distribution
     /// that best matches a reference `--target-file`'s own distribution.
     Comparative(ComparativeArgs),
+    /// Benchmark a fixed hardness against a random 3-regular topology at
+    /// each of several requested node counts.
+    Scaling(ScalingArgs),
+    /// Run two batches of jobs against the identical problem sequence and
+    /// report whether their best-energy distributions are statistically
+    /// distinguishable.
+    Reproducibility(ReproducibilityArgs),
 }
 
 /// Options common to every mode: which backend and topology to use, how
@@ -338,6 +347,143 @@ impl ComparativeArgs {
     }
 }
 
+/// `isingmark scaling` arguments. Does not flatten [`CommonArgs`]: unlike
+/// every other mode, scaling generates its own topology per requested node
+/// count (see `modes::scaling`'s module doc) rather than accepting one via
+/// `--topology-preset`/`--topology-file`, so `CommonArgs::topology_source`'s
+/// required mutually exclusive group does not apply here. Every other
+/// `CommonArgs` field this mode does use (`--backend`, `--hardness`,
+/// `--seed`, `--output-dir`, `--config`, `--verbose`) is repeated directly
+/// below instead, with the identical value parsers.
+#[derive(Debug, Args)]
+pub struct ScalingArgs {
+    /// Backend to benchmark. See `backend::builtin_registry` for the fixed
+    /// set of names this maps to.
+    #[arg(long, value_parser = parse_backend)]
+    pub backend: String,
+    /// Node counts to generate a random 3-regular topology for,
+    /// comma-separated (e.g. `"8,16,32"`). Each must be even and at least 4
+    /// (a 3-regular graph is impossible otherwise — every node needs 3
+    /// distinct neighbours), and the list must not repeat a value (two
+    /// identical sizes would collide on one output subdirectory).
+    #[arg(
+        long,
+        required = true,
+        value_delimiter = ',',
+        value_parser = parse_one_scaling_size_arg
+    )]
+    pub sizes: Vec<usize>,
+    /// Difficulty in `[0.0, 1.0]`, held fixed across every size.
+    #[arg(long, value_parser = parse_hardness, default_value_t = 0.5)]
+    pub hardness: f64,
+    /// Jobs drawn per size.
+    #[arg(long, value_parser = parse_num_jobs, default_value_t = 20)]
+    pub num_jobs: u32,
+    /// Seed for deterministic problem generation and deterministic
+    /// topology generation (see `modes::scaling`'s module doc).
+    #[arg(long, default_value_t = 0)]
+    pub seed: u64,
+    /// Directory to write JSONL records and the run summary to. Created if
+    /// it does not already exist.
+    #[arg(long, default_value = "./out")]
+    pub output_dir: PathBuf,
+    /// YAML config file. See `CommonArgs::config`'s doc: not implemented
+    /// yet.
+    #[arg(long)]
+    pub config: Option<PathBuf>,
+    /// Increase output verbosity. Repeatable. Accepted for forward
+    /// compatibility; not yet wired to any logging behavior.
+    #[arg(short = 'v', long = "verbose", action = clap::ArgAction::Count)]
+    pub verbosity: u8,
+}
+
+impl ScalingArgs {
+    /// Build a [`ScalingConfig`] from parsed arguments.
+    ///
+    /// # Errors
+    ///
+    /// Returns a message if `--config` was given (see `CommonArgs::config`'s
+    /// doc comment: config loading is not implemented yet).
+    pub fn into_config(self) -> Result<ScalingConfig, String> {
+        if self.config.is_some() {
+            return Err(
+                "--config is not implemented yet; YAML config loading lands in a later task \
+                 (drop the flag and pass every option on the command line for now)"
+                    .to_string(),
+            );
+        }
+        Ok(ScalingConfig {
+            backend: self.backend,
+            sizes: self.sizes,
+            hardness: self.hardness,
+            num_jobs: self.num_jobs,
+            seed: self.seed,
+            output_dir: self.output_dir,
+            backend_bin_override: None,
+            backend_args_override: None,
+        })
+    }
+}
+
+/// `isingmark reproducibility` arguments.
+#[derive(Debug, Args)]
+pub struct ReproducibilityArgs {
+    #[command(flatten)]
+    pub common: CommonArgs,
+    /// Jobs drawn per run. Both runs draw the identical sequence (same
+    /// seed, same count) against the same topology — see
+    /// `modes::reproducibility`'s module doc for why.
+    #[arg(long, value_parser = parse_num_jobs, default_value_t = 20)]
+    pub num_problems: u32,
+    /// Difficulty in `[0.0, 1.0]` for the second run. Defaults to
+    /// `--hardness` (the ordinary "is this backend reproducible at a fixed
+    /// effort" use case — see `modes::reproducibility`'s module doc); set
+    /// this to a different value only to intentionally compare two
+    /// different sampling efforts against the same problems.
+    #[arg(long, value_parser = parse_hardness)]
+    pub hardness_b: Option<f64>,
+}
+
+impl ReproducibilityArgs {
+    /// Build a [`ReproConfig`] from parsed arguments.
+    ///
+    /// # Errors
+    ///
+    /// Same conditions as [`ThroughputArgs::into_config`]: an unresolved
+    /// mutually exclusive topology group, or `--config` (not implemented
+    /// yet).
+    pub fn into_config(self) -> Result<ReproConfig, String> {
+        if self.common.config.is_some() {
+            return Err(
+                "--config is not implemented yet; YAML config loading lands in a later task \
+                 (drop the flag and pass every option on the command line for now)"
+                    .to_string(),
+            );
+        }
+        let topology = self.common.topology_source.to_ref()?;
+        let hardness_a = self.common.hardness;
+        let hardness_b = self.hardness_b.unwrap_or(hardness_a);
+        Ok(ReproConfig {
+            backend: self.common.backend,
+            topology,
+            num_problems: self.num_problems,
+            hardness_a,
+            hardness_b,
+            seed: self.common.seed,
+            output_dir: self.common.output_dir,
+            backend_bin_override: None,
+            backend_args_override: None,
+        })
+    }
+}
+
+/// `--sizes` per-token value parser (see `ScalingArgs::sizes`'s comment for
+/// why this is per-token, not whole-string), delegating to
+/// `scaling::parse_one_scaling_size`.
+fn parse_one_scaling_size_arg(s: &str) -> Result<usize, String> {
+    scaling::parse_one_scaling_size(s).map_err(|e| e.to_string())
+}
+
 /// `--max-iterations` value parser. `0` would silently produce a
 /// comparative run that reports hardness `0.0` — a plausible-looking,
 /// in-range value indistinguishable from a real finding — having run zero
@@ -485,7 +631,10 @@ fn parse_duration_arg(s: &str) -> Result<f64, String> {
 mod tests {
     use clap::Parser as _;
 
-    use super::{Cli, Command, ComparativeArgs, SweepArgs, ThroughputArgs, TttArgs};
+    use super::{
+        Cli, Command, ComparativeArgs, ReproducibilityArgs, ScalingArgs, SweepArgs, ThroughputArgs,
+        TttArgs,
+    };
 
     fn parse(extra_args: &[&str]) -> Result<Cli, clap::Error> {
         let mut full_argv = vec!["isingmark"];
@@ -495,13 +644,17 @@ mod tests {
 
     /// Extract the `Throughput` variant, for tests that parsed a throughput
     /// invocation. `Command` has more than one variant (as of
-    /// `sweep`/`ttt`/`comparative`), so `let Command::Throughput(args) =
-    /// cli.command;` is no longer an irrefutable pattern and cannot be used
-    /// directly.
+    /// `sweep`/`ttt`/`comparative`/`scaling`/`reproducibility`), so `let
+    /// Command::Throughput(args) = cli.command;` is no longer an irrefutable
+    /// pattern and cannot be used directly.
     fn throughput_args(cli: Cli) -> ThroughputArgs {
         match cli.command {
             Command::Throughput(args) => args,
-            Command::Sweep(_) | Command::Ttt(_) | Command::Comparative(_) => {
+            Command::Sweep(_)
+            | Command::Ttt(_)
+            | Command::Comparative(_)
+            | Command::Scaling(_)
+            | Command::Reproducibility(_) => {
                 unreachable!("test only ever parses a throughput invocation")
             }
         }
@@ -511,7 +664,11 @@ mod tests {
     fn sweep_args(cli: Cli) -> SweepArgs {
         match cli.command {
             Command::Sweep(args) => args,
-            Command::Throughput(_) | Command::Ttt(_) | Command::Comparative(_) => {
+            Command::Throughput(_)
+            | Command::Ttt(_)
+            | Command::Comparative(_)
+            | Command::Scaling(_)
+            | Command::Reproducibility(_) => {
                 unreachable!("test only ever parses a sweep invocation")
             }
         }
@@ -521,7 +678,11 @@ mod tests {
     fn ttt_args(cli: Cli) -> TttArgs {
         match cli.command {
             Command::Ttt(args) => args,
-            Command::Throughput(_) | Command::Sweep(_) | Command::Comparative(_) => {
+            Command::Throughput(_)
+            | Command::Sweep(_)
+            | Command::Comparative(_)
+            | Command::Scaling(_)
+            | Command::Reproducibility(_) => {
                 unreachable!("test only ever parses a ttt invocation")
             }
         }
@@ -531,8 +692,40 @@ mod tests {
     fn comparative_args(cli: Cli) -> ComparativeArgs {
         match cli.command {
             Command::Comparative(args) => args,
-            Command::Throughput(_) | Command::Sweep(_) | Command::Ttt(_) => {
+            Command::Throughput(_)
+            | Command::Sweep(_)
+            | Command::Ttt(_)
+            | Command::Scaling(_)
+            | Command::Reproducibility(_) => {
                 unreachable!("test only ever parses a comparative invocation")
+            }
+        }
+    }
+
+    /// Extract the `Scaling` variant. See [`throughput_args`].
+    fn scaling_args(cli: Cli) -> ScalingArgs {
+        match cli.command {
+            Command::Scaling(args) => args,
+            Command::Throughput(_)
+            | Command::Sweep(_)
+            | Command::Ttt(_)
+            | Command::Comparative(_)
+            | Command::Reproducibility(_) => {
+                unreachable!("test only ever parses a scaling invocation")
+            }
+        }
+    }
+
+    /// Extract the `Reproducibility` variant. See [`throughput_args`].
+    fn reproducibility_args(cli: Cli) -> ReproducibilityArgs {
+        match cli.command {
+            Command::Reproducibility(args) => args,
+            Command::Throughput(_)
+            | Command::Sweep(_)
+            | Command::Ttt(_)
+            | Command::Comparative(_)
+            | Command::Scaling(_) => {
+                unreachable!("test only ever parses a reproducibility invocation")
             }
         }
     }
@@ -1161,6 +1354,246 @@ mod tests {
         ])
         .expect("clap itself accepts --config; rejection happens in into_config");
         let args = comparative_args(cli);
+        let err = args
+            .into_config()
+            .expect_err("--config must be rejected until it is implemented");
+        assert!(err.contains("--config"));
+        assert!(err.contains("not implemented"));
+    }
+
+    #[test]
+    fn a_full_valid_scaling_invocation_parses() {
+        let cli = parse(&[
+            "scaling",
+            "--backend",
+            "cpu-sa",
+            "--sizes",
+            "8,16,32",
+            "--hardness",
+            "0.5",
+            "--num-jobs",
+            "10",
+            "--seed",
+            "42",
+            "--output-dir",
+            "./out",
+        ])
+        .expect("valid invocation parses");
+        let args = scaling_args(cli);
+        assert_eq!(args.backend, "cpu-sa");
+        assert_eq!(args.sizes, vec![8, 16, 32]);
+        assert!((args.hardness - 0.5).abs() < f64::EPSILON);
+        assert_eq!(args.num_jobs, 10);
+        assert_eq!(args.seed, 42);
+    }
+
+    /// Scaling does not take a topology source at all — unlike every other
+    /// mode, it generates its own per requested size (see
+    /// `modes::scaling`'s module doc). Confirms `--topology-preset` is not
+    /// even a recognized flag for this subcommand.
+    #[test]
+    fn scaling_does_not_accept_a_topology_source() {
+        parse(&[
+            "scaling",
+            "--backend",
+            "cpu-sa",
+            "--sizes",
+            "8",
+            "--topology-preset",
+            "smoke",
+        ])
+        .expect_err("--topology-preset must not be a recognized flag for scaling");
+    }
+
+    /// An odd size, or a size below 4, must be rejected at parse time,
+    /// naming the offending value.
+    #[test]
+    fn scaling_invalid_sizes_are_rejected_at_parse_time_naming_the_value() {
+        let err = parse(&["scaling", "--backend", "cpu-sa", "--sizes", "8,7"])
+            .expect_err("an odd size must be rejected at parse time");
+        assert!(err.to_string().contains('7'));
+
+        let err = parse(&["scaling", "--backend", "cpu-sa", "--sizes", "3"])
+            .expect_err("a size below 4 must be rejected at parse time");
+        assert!(err.to_string().contains('3'));
+    }
+
+    #[test]
+    fn scaling_sizes_is_required() {
+        parse(&["scaling", "--backend", "cpu-sa"]).expect_err("--sizes is required");
+    }
+
+    #[test]
+    fn scaling_into_config_carries_every_field_through() {
+        let cli = parse(&[
+            "scaling",
+            "--backend",
+            "cpu-sa",
+            "--sizes",
+            "8,16",
+            "--hardness",
+            "0.75",
+            "--num-jobs",
+            "5",
+            "--seed",
+            "9",
+            "--output-dir",
+            "/tmp/isingmark-scaling-out",
+        ])
+        .expect("valid invocation parses");
+        let args = scaling_args(cli);
+        let cfg = args.into_config().expect("config builds");
+        assert_eq!(cfg.backend, "cpu-sa");
+        assert_eq!(cfg.sizes, vec![8, 16]);
+        assert!((cfg.hardness - 0.75).abs() < f64::EPSILON);
+        assert_eq!(cfg.num_jobs, 5);
+        assert_eq!(cfg.seed, 9);
+        assert_eq!(
+            cfg.output_dir,
+            std::path::PathBuf::from("/tmp/isingmark-scaling-out")
+        );
+        assert_eq!(cfg.backend_bin_override, None);
+        assert_eq!(cfg.backend_args_override, None);
+    }
+
+    #[test]
+    fn scaling_config_flag_is_rejected_until_config_loading_is_implemented() {
+        let cli = parse(&[
+            "scaling",
+            "--backend",
+            "cpu-sa",
+            "--sizes",
+            "8",
+            "--config",
+            "bench.yaml",
+        ])
+        .expect("clap itself accepts --config; rejection happens in into_config");
+        let args = scaling_args(cli);
+        let err = args
+            .into_config()
+            .expect_err("--config must be rejected until it is implemented");
+        assert!(err.contains("--config"));
+        assert!(err.contains("not implemented"));
+    }
+
+    #[test]
+    fn a_full_valid_reproducibility_invocation_parses() {
+        let cli = parse(&[
+            "reproducibility",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--num-problems",
+            "15",
+            "--hardness",
+            "0.4",
+            "--seed",
+            "42",
+            "--output-dir",
+            "./out",
+        ])
+        .expect("valid invocation parses");
+        let args = reproducibility_args(cli);
+        assert_eq!(args.common.backend, "cpu-sa");
+        assert_eq!(args.num_problems, 15);
+        assert!((args.common.hardness - 0.4).abs() < f64::EPSILON);
+        assert_eq!(args.hardness_b, None);
+    }
+
+    /// `--hardness-b` defaults to `None` (resolved to `--hardness` in
+    /// `into_config`) but can be set independently.
+    #[test]
+    fn reproducibility_hardness_b_can_be_set_independently() {
+        let cli = parse(&[
+            "reproducibility",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--hardness",
+            "0.0",
+            "--hardness-b",
+            "1.0",
+        ])
+        .expect("valid invocation parses");
+        let args = reproducibility_args(cli);
+        assert_eq!(args.hardness_b, Some(1.0));
+    }
+
+    #[test]
+    fn reproducibility_into_config_defaults_hardness_b_to_hardness() {
+        let cli = parse(&[
+            "reproducibility",
+            "--backend",
+            "cpu-sa",
+            "--topology-file",
+            "fixtures/smoke.spec.json",
+            "--hardness",
+            "0.6",
+            "--num-problems",
+            "7",
+            "--seed",
+            "9",
+            "--output-dir",
+            "/tmp/isingmark-repro-out",
+        ])
+        .expect("valid invocation parses");
+        let args = reproducibility_args(cli);
+        let cfg = args.into_config().expect("topology group resolves");
+        assert_eq!(cfg.backend, "cpu-sa");
+        assert_eq!(
+            cfg.topology,
+            crate::modes::TopologyRef::File(std::path::PathBuf::from("fixtures/smoke.spec.json"))
+        );
+        assert_eq!(cfg.num_problems, 7);
+        assert!((cfg.hardness_a - 0.6).abs() < f64::EPSILON);
+        assert!(
+            (cfg.hardness_b - 0.6).abs() < f64::EPSILON,
+            "hardness_b must default to hardness_a (--hardness) when --hardness-b is not given"
+        );
+        assert_eq!(cfg.seed, 9);
+        assert_eq!(
+            cfg.output_dir,
+            std::path::PathBuf::from("/tmp/isingmark-repro-out")
+        );
+        assert_eq!(cfg.backend_bin_override, None);
+        assert_eq!(cfg.backend_args_override, None);
+    }
+
+    #[test]
+    fn reproducibility_into_config_carries_an_explicit_hardness_b_through() {
+        let cli = parse(&[
+            "reproducibility",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--hardness",
+            "0.0",
+            "--hardness-b",
+            "1.0",
+        ])
+        .expect("valid invocation parses");
+        let args = reproducibility_args(cli);
+        let cfg = args.into_config().expect("topology group resolves");
+        assert!((cfg.hardness_a - 0.0).abs() < f64::EPSILON);
+        assert!((cfg.hardness_b - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn reproducibility_config_flag_is_rejected_until_config_loading_is_implemented() {
+        let cli = parse(&[
+            "reproducibility",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--config",
+            "bench.yaml",
+        ])
+        .expect("clap itself accepts --config; rejection happens in into_config");
+        let args = reproducibility_args(cli);
         let err = args
             .into_config()
             .expect_err("--config must be rejected until it is implemented");
