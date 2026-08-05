@@ -57,10 +57,9 @@ const NO_DEADLINE_MS: u64 = 0;
 
 /// Default hardness-to-parameter curve. Every bound is nonzero, per
 /// `ParamCurve`'s own documented "0 means unset" contract. Placeholder
-/// until `--config`'s `ParamCurve` section (a later task) lets an operator
-/// override it; not exposed as a `ThroughputConfig` field because nothing
-/// in this task's brief specifies where that override should live.
-const DEFAULT_PARAM_CURVE: ParamCurve = ParamCurve {
+/// Default hardness-to-parameter curve when neither CLI nor file supplies
+/// one. Every bound is nonzero, per `ParamCurve`'s "0 means unset" contract.
+pub const DEFAULT_PARAM_CURVE: ParamCurve = ParamCurve {
     min_reads: 8,
     max_reads: 64,
     min_sweeps: 100,
@@ -77,11 +76,15 @@ pub struct ThroughputConfig {
     /// Topology to draw jobs against.
     pub topology: TopologyRef,
     /// Difficulty in `[0.0, 1.0]`, resolved into concrete sample parameters
-    /// via [`DEFAULT_PARAM_CURVE`]. Callers driving this outside the CLI
+    /// via [`Self::param_curve`]. Callers driving this outside the CLI
     /// are responsible for rejecting non-finite/out-of-range values
     /// themselves; `params::ParamCurve::resolve` is total and silently
     /// treats `NaN` as `0.0`.
     pub hardness: f64,
+    /// Hardness-to-parameter curve used to resolve [`Self::hardness`].
+    /// CLI/`--config` merge supplies this (file value, else
+    /// [`DEFAULT_PARAM_CURVE`]).
+    pub param_curve: ParamCurve,
     /// How long to keep dispatching jobs, in seconds.
     pub duration_s: f64,
     /// Seed for deterministic problem generation.
@@ -157,7 +160,7 @@ pub async fn run_throughput_with_summary(
     let summary_path = cfg.output_dir.join(SUMMARY_FILENAME);
     prepare_records_file(&records_path)?;
 
-    let params = DEFAULT_PARAM_CURVE.resolve(backend.kind, cfg.hardness);
+    let params = cfg.param_curve.resolve(backend.kind, cfg.hardness);
     let target = SetTarget {
         num_reads: params.num_reads,
         num_sweeps: params.num_sweeps,

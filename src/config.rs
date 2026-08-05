@@ -120,8 +120,9 @@ pub struct FileConfig {
     /// Directory for JSONL records and the run summary.
     pub output_dir: Option<PathBuf>,
     /// Hardness-to-parameter curve bounds. Validated on load (see
-    /// [`load_config`]); modes that still hardcode their own
-    /// `DEFAULT_PARAM_CURVE` do not yet consume this override at runtime.
+    /// [`load_config`]); merged into throughput/comparative/scaling/
+    /// reproducibility mode configs (file value, else each mode's
+    /// `DEFAULT_PARAM_CURVE`). Sweep and ttt do not use a hardness curve.
     pub param_curve: Option<FileParamCurve>,
     /// Throughput wall-clock duration, e.g. `"30s"`, `"5m"`, `"2h"`.
     pub duration: Option<String>,
@@ -453,18 +454,71 @@ mod tests {
 
     #[test]
     fn load_config_rejects_non_finite_hardness() {
+        // Assert "finite" specifically (not merely "hardness"): after deleting
+        // only the finiteness check, range rejection still fails NaN/Inf and
+        // the message still contains "hardness", so an OR with "hardness"
+        // would let that mutation survive.
         for bad in [".nan", ".inf", "-.inf"] {
             let (_dir, path) = write_temp(&format!("hardness: {bad}\n"));
             let err = load_config(&path).expect_err("non-finite hardness must be rejected");
             assert!(
                 matches!(
                     &err,
-                    ConfigError::Invalid { message, .. }
-                        if message.contains("finite") || message.contains("hardness")
+                    ConfigError::Invalid { message, .. } if message.contains("finite")
                 ),
-                "expected Invalid with hardness/finite mention for {bad}, got: {err}"
+                "expected Invalid naming finiteness for {bad}, got: {err}"
             );
         }
+    }
+
+    #[test]
+    fn load_config_rejects_param_curve_anneal_min_greater_than_max() {
+        // I2: the anneal pair alone, so deleting only that check is killed.
+        let yaml = r"
+param_curve:
+  min_reads: 8
+  max_reads: 64
+  min_sweeps: 100
+  max_sweeps: 1000
+  min_anneal_us: 200
+  max_anneal_us: 5
+";
+        let (_dir, path) = write_temp(yaml);
+        let err = load_config(&path).expect_err("min_anneal_us > max_anneal_us must be rejected");
+        assert!(
+            matches!(
+                &err,
+                ConfigError::Invalid { message, .. }
+                    if message.contains("anneal") && message.contains("greater")
+            ),
+            "error must name the anneal pair and say min > max, got: {err}"
+        );
+    }
+
+    #[test]
+    fn load_config_rejects_unknown_key_under_param_curve() {
+        // I5: deny_unknown_fields on FileParamCurve, not only top-level FileConfig.
+        // Key deliberately not a substring/prefix of a real field name: if
+        // deny is dropped, the error becomes "missing field `min_reads`"
+        // (which would still match a naive `min_read` substring check).
+        let yaml = r"
+param_curve:
+  min_reed: 8
+  max_reads: 64
+  min_sweeps: 100
+  max_sweeps: 1000
+  min_anneal_us: 5
+  max_anneal_us: 200
+";
+        let (_dir, path) = write_temp(yaml);
+        let err = load_config(&path).expect_err("typo key under param_curve must be rejected");
+        assert!(
+            matches!(
+                &err,
+                ConfigError::Invalid { message, .. } if message.contains("min_reed")
+            ),
+            "error must name the offending nested key, got: {err}"
+        );
     }
 
     #[test]

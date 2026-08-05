@@ -155,12 +155,10 @@ const MINER_ACCOUNT: [u8; 32] = [0u8; 32];
 /// need the miner to expire jobs on its own clock.
 const NO_DEADLINE_MS: u64 = 0;
 
-/// Default hardness-to-parameter curve, shared by both runs (each resolved
-/// at its own `hardness_a`/`hardness_b`). A separate copy from
-/// `comparative::DEFAULT_PARAM_CURVE`/`scaling`'s own copy, per this crate's
-/// per-mode-module convention; placeholder until `--config`'s `ParamCurve`
-/// section (a later task) lets an operator override it.
-const DEFAULT_PARAM_CURVE: ParamCurve = ParamCurve {
+/// Default hardness-to-parameter curve, shared by both runs when neither
+/// CLI nor file supplies one (each resolved at its own
+/// `hardness_a`/`hardness_b`).
+pub const DEFAULT_PARAM_CURVE: ParamCurve = ParamCurve {
     min_reads: 8,
     max_reads: 64,
     min_sweeps: 100,
@@ -195,6 +193,9 @@ pub struct ReproConfig {
     /// either run's [`RECORDS_FILENAME`] already contains data from an
     /// earlier run — checked for both before either runs.
     pub output_dir: PathBuf,
+    /// Hardness-to-parameter curve for both runs. CLI/`--config` merge
+    /// supplies this (file value, else [`DEFAULT_PARAM_CURVE`]).
+    pub param_curve: ParamCurve,
     /// Explicit backend binary path, bypassing `$PATH` resolution. See
     /// `throughput::ThroughputConfig::backend_bin_override`.
     pub backend_bin_override: Option<PathBuf>,
@@ -259,8 +260,8 @@ pub async fn run_reproducibility(cfg: &ReproConfig) -> Result<ReproReport, ModeE
         }
     }
 
-    let params_a = DEFAULT_PARAM_CURVE.resolve(backend.kind, cfg.hardness_a);
-    let params_b = DEFAULT_PARAM_CURVE.resolve(backend.kind, cfg.hardness_b);
+    let params_a = cfg.param_curve.resolve(backend.kind, cfg.hardness_a);
+    let params_b = cfg.param_curve.resolve(backend.kind, cfg.hardness_b);
 
     let report_a = run_one_batch(
         &backend,

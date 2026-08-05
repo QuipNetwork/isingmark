@@ -11,7 +11,9 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use isingmark::modes::scaling::{run_scaling, ScalingConfig, RECORDS_FILENAME, SUMMARY_FILENAME};
+use isingmark::modes::scaling::{
+    run_scaling, ScalingConfig, DEFAULT_PARAM_CURVE, RECORDS_FILENAME, SUMMARY_FILENAME,
+};
 use isingmark::modes::ModeError;
 use isingmark::record::read_jsonl;
 
@@ -30,6 +32,7 @@ fn base_config(output_dir: PathBuf) -> ScalingConfig {
         num_jobs: 3,
         seed: 42,
         output_dir,
+        param_curve: DEFAULT_PARAM_CURVE,
         backend_bin_override: Some(fake_miner_bin()),
         backend_args_override: None,
     }

@@ -47,6 +47,7 @@ fn base_config(output_dir: PathBuf, target_file: PathBuf) -> ComparativeConfig {
         max_iterations: 7,
         seed: 42,
         output_dir,
+        param_curve: DEFAULT_PARAM_CURVE,
         backend_bin_override: Some(fake_miner_bin()),
         backend_args_override: None,
     }

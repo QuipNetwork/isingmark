@@ -150,9 +150,8 @@ const NO_DEADLINE_MS: u64 = 0;
 /// needs the exact same curve this module resolves hardness against, and
 /// duplicating these six numbers a second time (in that caller, or in this
 /// module's own tests) would risk the two copies silently drifting apart.
-/// Placeholder until `--config`'s `ParamCurve` section (a later task) lets
-/// an operator override it, matching `throughput::DEFAULT_PARAM_CURVE`'s
-/// own placeholder status.
+/// Default when neither CLI nor file supplies a curve. Operators override
+/// via `--config` `param_curve`; see [`ComparativeConfig::param_curve`].
 pub const DEFAULT_PARAM_CURVE: ParamCurve = ParamCurve {
     min_reads: 8,
     max_reads: 64,
@@ -205,6 +204,9 @@ pub struct ComparativeConfig {
     /// earlier run — checked for every possible iteration (`0` through
     /// `max_iterations - 1`) before any of them run.
     pub output_dir: PathBuf,
+    /// Hardness-to-parameter curve for every evaluation. CLI/`--config`
+    /// merge supplies this (file value, else [`DEFAULT_PARAM_CURVE`]).
+    pub param_curve: ParamCurve,
     /// Explicit backend binary path, bypassing `$PATH` resolution. See
     /// `throughput::ThroughputConfig::backend_bin_override`.
     pub backend_bin_override: Option<PathBuf>,
@@ -295,7 +297,7 @@ pub async fn run_comparative(cfg: &ComparativeConfig) -> Result<(Vec<JobRecord>,
         std::fs::create_dir_all(dir).map_err(ModeError::Io)?;
         std::fs::File::create(records_path).map_err(ModeError::Io)?;
 
-        let params = DEFAULT_PARAM_CURVE.resolve(backend.kind, mid);
+        let params = cfg.param_curve.resolve(backend.kind, mid);
         let jobs = draw_jobs(&spec, cfg.seed, cfg.num_jobs, &params);
 
         let sock_path = unique_sock_path();

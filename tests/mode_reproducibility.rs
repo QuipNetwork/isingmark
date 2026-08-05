@@ -28,7 +28,8 @@
 use std::path::{Path, PathBuf};
 
 use isingmark::modes::reproducibility::{
-    run_reproducibility, ReproConfig, RECORDS_FILENAME, RUN_A_DIR, RUN_B_DIR, SUMMARY_FILENAME,
+    run_reproducibility, ReproConfig, DEFAULT_PARAM_CURVE, RECORDS_FILENAME, RUN_A_DIR, RUN_B_DIR,
+    SUMMARY_FILENAME,
 };
 use isingmark::modes::{ModeError, TopologyRef};
 use isingmark::record::read_jsonl;
@@ -50,6 +51,7 @@ fn base_config(output_dir: PathBuf) -> ReproConfig {
         hardness_b: 0.5,
         seed: 42,
         output_dir,
+        param_curve: DEFAULT_PARAM_CURVE,
         backend_bin_override: Some(fake_miner_bin()),
         backend_args_override: None,
     }

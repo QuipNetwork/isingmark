@@ -321,7 +321,7 @@ mod tests {
         truncated_run_warning,
     };
     use isingmark::backend::RunReport;
-    use isingmark::modes::reproducibility::{ReproConfig, ReproReport};
+    use isingmark::modes::reproducibility::{ReproConfig, ReproReport, DEFAULT_PARAM_CURVE};
     use isingmark::modes::TopologyRef;
 
     /// A `RunReport` with every field at its "everything went fine" value,
@@ -449,6 +449,7 @@ mod tests {
             hardness_b,
             seed: 0,
             output_dir: std::path::PathBuf::from("./out"),
+            param_curve: DEFAULT_PARAM_CURVE,
             backend_bin_override: None,
             backend_args_override: None,
         }

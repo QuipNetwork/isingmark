@@ -8,16 +8,22 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::backend::builtin_registry;
 use crate::config::{
-    self, merge, FileConfig, DEFAULT_HARDNESS, DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_TIME_S,
-    DEFAULT_NUM_JOBS, DEFAULT_NUM_PROBLEMS, DEFAULT_NUM_TRIALS, DEFAULT_OUTPUT_DIR, DEFAULT_SEED,
+    self, merge, FileConfig, FileParamCurve, DEFAULT_HARDNESS, DEFAULT_MAX_ITERATIONS,
+    DEFAULT_MAX_TIME_S, DEFAULT_NUM_JOBS, DEFAULT_NUM_PROBLEMS, DEFAULT_NUM_TRIALS,
+    DEFAULT_OUTPUT_DIR, DEFAULT_SEED,
 };
-use crate::modes::comparative::ComparativeConfig;
-use crate::modes::reproducibility::ReproConfig;
-use crate::modes::scaling::{self, ScalingConfig};
+use crate::modes::comparative::{
+    ComparativeConfig, DEFAULT_PARAM_CURVE as COMPARATIVE_DEFAULT_CURVE,
+};
+use crate::modes::reproducibility::{ReproConfig, DEFAULT_PARAM_CURVE as REPRO_DEFAULT_CURVE};
+use crate::modes::scaling::{self, ScalingConfig, DEFAULT_PARAM_CURVE as SCALING_DEFAULT_CURVE};
 use crate::modes::sweep::{self, ParamGrid, SweepConfig};
-use crate::modes::throughput::{self, ThroughputConfig};
+use crate::modes::throughput::{
+    self, ThroughputConfig, DEFAULT_PARAM_CURVE as THROUGHPUT_DEFAULT_CURVE,
+};
 use crate::modes::ttt::{self, TttConfig};
 use crate::modes::TopologyRef;
+use crate::params::ParamCurve;
 
 /// `isingmark`: an annealer-agnostic Ising model benchmarking tool.
 #[derive(Debug, Parser)]
@@ -175,6 +181,14 @@ fn resolve_backend(
     }
 }
 
+/// File `param_curve` when present, else the mode's built-in default.
+/// No CLI flag exists for this field.
+fn merge_param_curve(file: &FileConfig, default: ParamCurve) -> ParamCurve {
+    file.param_curve
+        .as_ref()
+        .map_or(default, FileParamCurve::to_param_curve)
+}
+
 /// Resolve topology: flag beats file; error if neither supplied. Flag
 /// mutual exclusion is clap's job; file mutual exclusion is checked here.
 fn resolve_topology(
@@ -255,10 +269,12 @@ impl ThroughputArgs {
                 return Err(missing_required("duration", "--duration", config_path));
             }
         };
+        let param_curve = merge_param_curve(&file, THROUGHPUT_DEFAULT_CURVE);
         Ok(ThroughputConfig {
             backend,
             topology,
             hardness,
+            param_curve,
             duration_s,
             seed,
             output_dir,
@@ -484,6 +500,7 @@ impl ComparativeArgs {
             file.max_iterations,
             DEFAULT_MAX_ITERATIONS,
         );
+        let param_curve = merge_param_curve(&file, COMPARATIVE_DEFAULT_CURVE);
         Ok(ComparativeConfig {
             backend,
             topology,
@@ -492,6 +509,7 @@ impl ComparativeArgs {
             max_iterations,
             seed,
             output_dir,
+            param_curve,
             backend_bin_override: None,
             backend_args_override: None,
         })
@@ -586,6 +604,7 @@ impl ScalingArgs {
         } else {
             self.sizes
         };
+        let param_curve = merge_param_curve(&file, SCALING_DEFAULT_CURVE);
         Ok(ScalingConfig {
             backend,
             sizes,
@@ -593,6 +612,7 @@ impl ScalingArgs {
             num_jobs,
             seed,
             output_dir,
+            param_curve,
             backend_bin_override: None,
             backend_args_override: None,
         })
@@ -641,6 +661,7 @@ impl ReproducibilityArgs {
             PathBuf::from(DEFAULT_OUTPUT_DIR),
         );
         let num_problems = merge(self.num_problems, file.num_problems, DEFAULT_NUM_PROBLEMS);
+        let param_curve = merge_param_curve(&file, REPRO_DEFAULT_CURVE);
         Ok(ReproConfig {
             backend,
             topology,
@@ -649,6 +670,7 @@ impl ReproducibilityArgs {
             hardness_b,
             seed,
             output_dir,
+            param_curve,
             backend_bin_override: None,
             backend_args_override: None,
         })
@@ -1112,6 +1134,11 @@ mod tests {
         );
         assert_eq!(cfg.backend_bin_override, None);
         assert_eq!(cfg.backend_args_override, None);
+        assert_eq!(
+            cfg.param_curve,
+            crate::modes::throughput::DEFAULT_PARAM_CURVE,
+            "no file/flag curve must fall through to DEFAULT_PARAM_CURVE"
+        );
     }
 
     /// End-to-end: a real config file supplies hardness when the flag is
@@ -1167,6 +1194,32 @@ mod tests {
             (cfg.hardness - 0.9).abs() < f64::EPSILON,
             "flag 0.9 must beat file 0.7, got {}",
             cfg.hardness
+        );
+    }
+
+    /// Flag `--backend` beats a distinct file `backend` (I3).
+    #[test]
+    fn throughput_explicit_flag_overrides_config_file_backend() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("backend.yaml");
+        std::fs::write(
+            &path,
+            "backend: dwave\ntopology_preset: smoke\nduration: 30s\n",
+        )
+        .expect("write");
+        let cli = parse(&[
+            "throughput",
+            "--config",
+            path.to_str().expect("utf8 path"),
+            "--backend",
+            "cpu-sa",
+        ])
+        .expect("parse");
+        let cfg = throughput_args(cli).into_config().expect("merge");
+        assert_eq!(
+            cfg.backend, "cpu-sa",
+            "flag --backend must beat file backend: dwave, got {}",
+            cfg.backend
         );
     }
 

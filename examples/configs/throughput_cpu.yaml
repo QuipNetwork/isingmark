@@ -1,16 +1,18 @@
 # Complete throughput config: runnable as
 #   isingmark throughput --config examples/configs/throughput_cpu.yaml
 # with no other flags.
+# hardness and param_curve deliberately differ from the built-in defaults
+# (0.5 and 8/64, 100/1000, 5/200) so a run with this file exercises file values.
 backend: cpu-sa
 topology_preset: smoke
-hardness: 0.5
+hardness: 0.7
 seed: 0
 output_dir: ./out
 duration: 30s
 param_curve:
-  min_reads: 8
-  max_reads: 64
-  min_sweeps: 100
-  max_sweeps: 1000
-  min_anneal_us: 5
-  max_anneal_us: 200
+  min_reads: 16
+  max_reads: 128
+  min_sweeps: 200
+  max_sweeps: 2000
+  min_anneal_us: 10
+  max_anneal_us: 400

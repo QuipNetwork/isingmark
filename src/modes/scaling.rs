@@ -140,12 +140,8 @@ const GENERATED_ALLOWED_SPIN_MILLI: [i32; 2] = [-1000, 1000];
 const MAX_GENERATION_ATTEMPTS: u32 = 2_000;
 
 /// Default hardness-to-parameter curve, held fixed across every requested
-/// size. A separate copy from `comparative::DEFAULT_PARAM_CURVE`/
-/// `throughput::DEFAULT_PARAM_CURVE`, per this crate's per-mode-module
-/// convention of not sharing small constants like this one across modules;
-/// placeholder until `--config`'s `ParamCurve` section (a later task) lets
-/// an operator override it.
-const DEFAULT_PARAM_CURVE: ParamCurve = ParamCurve {
+/// size when neither CLI nor file supplies one.
+pub const DEFAULT_PARAM_CURVE: ParamCurve = ParamCurve {
     min_reads: 8,
     max_reads: 64,
     min_sweeps: 100,
@@ -181,6 +177,10 @@ pub struct ScalingConfig {
     /// [`RECORDS_FILENAME`] already contains data from an earlier run —
     /// checked for every size before any of them run.
     pub output_dir: PathBuf,
+    /// Hardness-to-parameter curve, held fixed across every size.
+    /// CLI/`--config` merge supplies this (file value, else
+    /// [`DEFAULT_PARAM_CURVE`]).
+    pub param_curve: ParamCurve,
     /// Explicit backend binary path, bypassing `$PATH` resolution. See
     /// `throughput::ThroughputConfig::backend_bin_override`.
     pub backend_bin_override: Option<PathBuf>,
@@ -273,7 +273,7 @@ pub async fn run_scaling(cfg: &ScalingConfig) -> Result<ScalingReport, ModeError
         }
     }
 
-    let params = DEFAULT_PARAM_CURVE.resolve(backend.kind, cfg.hardness);
+    let params = cfg.param_curve.resolve(backend.kind, cfg.hardness);
     let mut outcomes = Vec::with_capacity(size_paths.len());
 
     for (nodes, dir, records_path, dir_name) in &size_paths {

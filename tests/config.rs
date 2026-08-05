@@ -178,6 +178,8 @@ fn unknown_key_error_contains_the_key() {
 
 #[test]
 fn non_finite_hardness_rejected_by_variant() {
+    // Pin the finiteness check: range rejection of NaN still mentions
+    // "hardness", so asserting only "hardness" would miss a deleted finite branch.
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("nan.yaml");
     fs::write(&path, "hardness: .nan\n").expect("write");
@@ -185,10 +187,167 @@ fn non_finite_hardness_rejected_by_variant() {
     assert!(
         matches!(
             &err,
-            ConfigError::Invalid { message, .. }
-                if message.contains("finite") || message.contains("hardness")
+            ConfigError::Invalid { message, .. } if message.contains("finite")
         ),
         "got: {err}"
+    );
+}
+
+#[test]
+fn param_curve_anneal_min_gt_max_rejected_naming_anneal() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("anneal_curve.yaml");
+    fs::write(
+        &path,
+        "param_curve:\n  min_reads: 8\n  max_reads: 64\n  min_sweeps: 100\n  max_sweeps: 1000\n  \
+         min_anneal_us: 200\n  max_anneal_us: 5\n",
+    )
+    .expect("write");
+    let err = load_config(&path).expect_err("min_anneal_us > max_anneal_us");
+    assert!(
+        matches!(
+            &err,
+            ConfigError::Invalid { message, .. }
+                if message.contains("anneal") && message.contains("greater")
+        ),
+        "got: {err}"
+    );
+}
+
+#[test]
+fn param_curve_unknown_nested_key_rejected_naming_the_key() {
+    // Typo is not a prefix of a real field (`min_reads`), so a missing-field
+    // fallback after dropping deny_unknown_fields cannot satisfy the assert.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("curve_typo.yaml");
+    fs::write(
+        &path,
+        "param_curve:\n  min_reed: 8\n  max_reads: 64\n  min_sweeps: 100\n  max_sweeps: 1000\n  \
+         min_anneal_us: 5\n  max_anneal_us: 200\n",
+    )
+    .expect("write");
+    let err = load_config(&path).expect_err("unknown nested key");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("min_reed"),
+        "error must name the offending nested key, got: {msg}"
+    );
+}
+
+/// C1: a non-default `param_curve` in YAML must reach resolved job params,
+/// not merely be copied onto the mode config. The shipped example curves
+/// used to match `DEFAULT_PARAM_CURVE`, so a happy-path run could never show
+/// the ignore bug — this curve deliberately differs.
+#[test]
+fn cli_path_file_param_curve_reaches_resolved_job_params() {
+    use isingmark::modes::throughput::DEFAULT_PARAM_CURVE;
+    use isingmark::params::BackendKind;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("curve.yaml");
+    // min_reads 16..128 at hardness 0.5 → 72; default curve is 8..64 → 36.
+    // Raw string: `\` line continuation strips leading whitespace on the next
+    // line, which would un-indent nested `param_curve` keys to top level.
+    fs::write(
+        &path,
+        r"backend: cpu-sa
+topology_preset: smoke
+hardness: 0.5
+duration: 10s
+param_curve:
+  min_reads: 16
+  max_reads: 128
+  min_sweeps: 200
+  max_sweeps: 2000
+  min_anneal_us: 10
+  max_anneal_us: 400
+",
+    )
+    .expect("write");
+
+    let cli = Cli::try_parse_from([
+        "isingmark",
+        "throughput",
+        "--config",
+        path.to_str().expect("utf8"),
+    ])
+    .expect("parse");
+    let cfg = throughput_from(cli).into_config().expect("into_config");
+
+    assert_ne!(
+        cfg.param_curve, DEFAULT_PARAM_CURVE,
+        "file curve must differ from DEFAULT_PARAM_CURVE so this test can detect ignore"
+    );
+    let resolved = cfg.param_curve.resolve(BackendKind::Sweeping, cfg.hardness);
+    assert_eq!(
+        resolved.num_reads, 72,
+        "file curve at hardness 0.5 must resolve to 72 reads (default would be 36)"
+    );
+    assert_eq!(
+        resolved.num_sweeps, 1100,
+        "file curve at hardness 0.5 must resolve to 1100 sweeps (default would be 550)"
+    );
+
+    // Sanity: if into_config ignored the file curve, resolve would be default.
+    let default_resolved = DEFAULT_PARAM_CURVE.resolve(BackendKind::Sweeping, 0.5);
+    assert_eq!(default_resolved.num_reads, 36);
+    assert_ne!(resolved.num_reads, default_resolved.num_reads);
+}
+
+/// I3: `--backend` must beat a distinct file `backend`.
+#[test]
+fn cli_path_flag_backend_beats_file_backend() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("backend_over.yaml");
+    fs::write(
+        &path,
+        "backend: dwave\ntopology_preset: smoke\nduration: 10s\n",
+    )
+    .expect("write");
+
+    let cli = Cli::try_parse_from([
+        "isingmark",
+        "throughput",
+        "--config",
+        path.to_str().expect("utf8"),
+        "--backend",
+        "cpu-sa",
+    ])
+    .expect("parse");
+    let cfg = throughput_from(cli).into_config().expect("into_config");
+    assert_eq!(
+        cfg.backend, "cpu-sa",
+        "flag --backend cpu-sa must beat file backend: dwave, got {}",
+        cfg.backend
+    );
+}
+
+/// Topology flag must beat a distinct file topology (same precedence class
+/// as backend; only add if not already covered — was not).
+#[test]
+fn cli_path_flag_topology_beats_file_topology() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("topo_over.yaml");
+    fs::write(
+        &path,
+        "backend: cpu-sa\ntopology_preset: smoke\nduration: 10s\n",
+    )
+    .expect("write");
+
+    let cli = Cli::try_parse_from([
+        "isingmark",
+        "throughput",
+        "--config",
+        path.to_str().expect("utf8"),
+        "--topology-file",
+        "fixtures/smoke.spec.json",
+    ])
+    .expect("parse");
+    let cfg = throughput_from(cli).into_config().expect("into_config");
+    assert_eq!(
+        cfg.topology,
+        isingmark::modes::TopologyRef::File(PathBuf::from("fixtures/smoke.spec.json")),
+        "flag --topology-file must beat file topology_preset: smoke"
     );
 }
 

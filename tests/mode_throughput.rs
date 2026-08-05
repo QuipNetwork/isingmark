@@ -16,7 +16,7 @@ use std::path::PathBuf;
 
 use isingmark::backend::builtin_registry;
 use isingmark::modes::throughput::{
-    run_throughput, ThroughputConfig, RECORDS_FILENAME, SUMMARY_FILENAME,
+    run_throughput, ThroughputConfig, DEFAULT_PARAM_CURVE, RECORDS_FILENAME, SUMMARY_FILENAME,
 };
 use isingmark::modes::TopologyRef;
 use isingmark::record::{read_jsonl, Summary};
@@ -33,6 +33,7 @@ fn base_config(output_dir: PathBuf) -> ThroughputConfig {
         backend: "cpu-sa".to_string(),
         topology: TopologyRef::Preset("smoke".to_string()),
         hardness: 0.5,
+        param_curve: DEFAULT_PARAM_CURVE,
         duration_s: 1.2,
         seed: 42,
         output_dir,
