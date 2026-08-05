@@ -4,7 +4,15 @@ Annealer-agnostic Ising benchmark CLI. It spawns a quip miner binary and feeds i
 
 ## Install and build
 
-Requires Rust 1.97.1 (`rust-toolchain.toml`).
+Requires Rust 1.97.1 (`rust-toolchain.toml`) and `protoc`, the protobuf
+compiler. The `quip-proto` dependency generates its gRPC bindings at build
+time with prost-build, which shells out to `protoc`. Without it the build
+fails at `quip-proto` with `Could not find `protoc``.
+
+```bash
+brew install protobuf              # macOS
+apt-get install protobuf-compiler  # Debian and Ubuntu
+```
 
 ```bash
 cargo build --release
