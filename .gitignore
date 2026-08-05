@@ -9,3 +9,26 @@
 
 # Default --output-dir for every mode
 out/
+
+# Agent tool configuration and per-tool instruction files.
+#
+# AGENTS.md is the cross-tool standard and stays tracked: it is the single
+# authoritative description of how to build, test and extend this crate.
+# Every tool-specific equivalent is local to one contributor's setup, so it
+# is ignored rather than committed. Put project instructions in AGENTS.md.
+CLAUDE.md
+GEMINI.md
+.claude/
+.codex/
+.mcp.json
+.cursor/
+.cursorrules
+.windsurfrules
+.clinerules
+.aider*
+.github/copilot-instructions.md
+
+# Implementation plans are working scratch, not project documentation.
+# Specs under docs/superpowers/specs/ stay tracked; plans do not.
+docs/superpowers/plans/
+.plans/
