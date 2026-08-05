@@ -244,4 +244,65 @@ mod tests {
     fn ks_two_sample_p_rejects_non_finite_values() {
         assert_eq!(ks_two_sample_p(&[1.0, f64::NAN], &[2.0, 3.0]), None);
     }
+
+    /// Production call sites feed completion-order energy lists into
+    /// `ks_distance`. The unit fixtures above are already sorted, so a
+    /// mutation that drops either sort stays green until a deliberately
+    /// shuffled sample is asserted equal to its sorted counterpart.
+    ///
+    /// Both directions matter: sorting only `a` (or only `b`) is the more
+    /// likely partial regression, and a one-sided shuffle would miss it.
+    #[test]
+    fn ks_distance_is_invariant_under_permutation() {
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let b = [2.0, 3.0, 4.0, 5.0, 6.0];
+        // Two independent permutations so a one-sided sort cannot pass by
+        // leaving the unshuffled side in ascending order.
+        let a_shuffled = [5.0, 1.0, 4.0, 2.0, 3.0];
+        let b_shuffled = [6.0, 2.0, 5.0, 3.0, 4.0];
+        let baseline = ks_distance(&a, &b).expect("non-empty finite inputs");
+        assert_eq!(
+            ks_distance(&a_shuffled, &b),
+            Some(baseline),
+            "shuffling only a must leave the KS distance unchanged"
+        );
+        assert_eq!(
+            ks_distance(&a, &b_shuffled),
+            Some(baseline),
+            "shuffling only b must leave the KS distance unchanged"
+        );
+        assert_eq!(
+            ks_distance(&a_shuffled, &b_shuffled),
+            Some(baseline),
+            "shuffling both samples must leave the KS distance unchanged"
+        );
+    }
+
+    /// `ks_two_sample_p` is a pure function of `ks_distance` and the sample
+    /// lengths, so it inherits the same sort requirement. Pin it separately
+    /// so a future rewrite that reimplements the distance path cannot drop
+    /// the invariant without failing here.
+    #[test]
+    fn ks_two_sample_p_is_invariant_under_permutation() {
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let b = [2.0, 3.0, 4.0, 5.0, 6.0];
+        let a_shuffled = [5.0, 1.0, 4.0, 2.0, 3.0];
+        let b_shuffled = [6.0, 2.0, 5.0, 3.0, 4.0];
+        let baseline = ks_two_sample_p(&a, &b).expect("non-empty finite inputs");
+        assert_eq!(
+            ks_two_sample_p(&a_shuffled, &b),
+            Some(baseline),
+            "shuffling only a must leave the KS p-value unchanged"
+        );
+        assert_eq!(
+            ks_two_sample_p(&a, &b_shuffled),
+            Some(baseline),
+            "shuffling only b must leave the KS p-value unchanged"
+        );
+        assert_eq!(
+            ks_two_sample_p(&a_shuffled, &b_shuffled),
+            Some(baseline),
+            "shuffling both samples must leave the KS p-value unchanged"
+        );
+    }
 }

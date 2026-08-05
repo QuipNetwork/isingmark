@@ -38,6 +38,36 @@ fn rejects_empty_nodes() {
 }
 
 #[test]
+fn rejects_empty_allowed_h() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("empty-h.spec.json");
+    std::fs::write(
+        &path,
+        r#"{"nodes":[0],"edges":[],"allowed_h_milli":[],"allowed_j_milli":[1]}"#,
+    )
+    .expect("write fixture");
+    assert_eq!(
+        load_topology(&path).expect_err("empty allowed_h_milli must be rejected"),
+        TopologyError::EmptyAllowedH
+    );
+}
+
+#[test]
+fn rejects_empty_allowed_j() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("empty-j.spec.json");
+    std::fs::write(
+        &path,
+        r#"{"nodes":[0],"edges":[],"allowed_h_milli":[1],"allowed_j_milli":[]}"#,
+    )
+    .expect("write fixture");
+    assert_eq!(
+        load_topology(&path).expect_err("empty allowed_j_milli must be rejected"),
+        TopologyError::EmptyAllowedJ
+    );
+}
+
+#[test]
 fn rejects_edge_with_unknown_node_id() {
     let dir = tempfile::tempdir().expect("create temp dir");
     let path = dir.path().join("bad-edge.spec.json");

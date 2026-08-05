@@ -192,6 +192,23 @@ mod tests {
         assert_ne!(id_a, id_b);
     }
 
+    /// A job's id is its problem nonce, and the nonce is the sole entropy
+    /// for the drawn couplings. If generation ignored the index, every
+    /// problem in a run would be identical. The `salt_for` golden already
+    /// encodes index mixing; this pins the user-facing consequence
+    /// directly on consecutive `next_job` calls under a fixed seed.
+    #[test]
+    fn consecutive_jobs_under_fixed_seed_have_distinct_job_ids() {
+        let spec = spec();
+        let mut src = ProblemSource::new(&spec, [1u8; 32], 42, 3, 9_999_999);
+        let id0 = src.next_job().expect("job 0").job_id;
+        let id1 = src.next_job().expect("job 1").job_id;
+        let id2 = src.next_job().expect("job 2").job_id;
+        assert_ne!(id0, id1, "jobs 0 and 1 must differ under a fixed seed");
+        assert_ne!(id1, id2, "jobs 1 and 2 must differ under a fixed seed");
+        assert_ne!(id0, id2, "jobs 0 and 2 must differ under a fixed seed");
+    }
+
     #[test]
     fn h_and_j_are_drawn_from_the_allowed_sets_at_the_right_lengths() {
         let spec = asymmetric_spec();
