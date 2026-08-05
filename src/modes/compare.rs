@@ -26,10 +26,12 @@
 //! path returns [`ModeError::CompareFileUnreadable`]; a file that parses
 //! but yields no `passed` records (or for which `describe`/`ks_distance`/
 //! `ks_two_sample_p` returns `None`) returns
-//! [`ModeError::EmptyCompareFile`]. Fabricating a default `p_value` (e.g.
-//! `1.0`) would silently claim "the two files are identical" for data that
-//! was never compared — the failure mode
-//! [`ModeError::EmptyReproBatch`] already documents and refuses.
+//! [`ModeError::EmptyCompareFile`]; a file that yields no usable energies
+//! because every non-blank line failed to parse as a `JobRecord` returns
+//! [`ModeError::CompareFileUnparseable`] (typically a schema mismatch).
+//! Fabricating a default `p_value` (e.g. `1.0`) would silently claim "the
+//! two files are identical" for data that was never compared — the failure
+//! mode [`ModeError::EmptyReproBatch`] already documents and refuses.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -77,11 +79,14 @@ pub struct CompareReport {
 /// # Errors
 ///
 /// Returns [`ModeError::CompareFileUnreadable`] if either path cannot be
-/// opened or read, and [`ModeError::EmptyCompareFile`] if either file
-/// yields no usable (`passed`) energies or if `stats::describe`/
-/// `stats::ks_distance`/`stats::ks_two_sample_p` returns `None` for that
-/// side (see this module's own doc on why that is an error rather than a
-/// fabricated report).
+/// opened or read, [`ModeError::CompareFileUnparseable`] if either file
+/// yields no usable (`passed`) energies and had unparseable lines (likely
+/// a schema mismatch), and [`ModeError::EmptyCompareFile`] if either file
+/// yields no usable energies with every line parseable (all `passed:
+/// false`, or empty) or if `stats::describe`/`stats::ks_distance`/
+/// `stats::ks_two_sample_p` returns `None` for that side (see this
+/// module's own doc on why that is an error rather than a fabricated
+/// report).
 pub fn run_compare(file_a: &Path, file_b: &Path) -> Result<CompareReport, ModeError> {
     let jsonl_a = read_jsonl(file_a)
         .map_err(|e| ModeError::CompareFileUnreadable(file_a.to_path_buf(), e))?;
@@ -93,10 +98,24 @@ pub fn run_compare(file_a: &Path, file_b: &Path) -> Result<CompareReport, ModeEr
 
     // Emptiness first: a bare `Stats` cannot represent "no samples," and
     // defaulting `p_value` would invent a comparison that never ran.
+    // Distinguish "all lines failed to parse" (schema mismatch) from
+    // "parseable but no passed records" so the user sees the right cause.
     if energies_a.is_empty() {
+        if jsonl_a.skipped_lines > 0 {
+            return Err(ModeError::CompareFileUnparseable(
+                file_a.to_path_buf(),
+                jsonl_a.skipped_lines,
+            ));
+        }
         return Err(ModeError::EmptyCompareFile(file_a.to_path_buf()));
     }
     if energies_b.is_empty() {
+        if jsonl_b.skipped_lines > 0 {
+            return Err(ModeError::CompareFileUnparseable(
+                file_b.to_path_buf(),
+                jsonl_b.skipped_lines,
+            ));
+        }
         return Err(ModeError::EmptyCompareFile(file_b.to_path_buf()));
     }
 

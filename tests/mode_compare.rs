@@ -615,3 +615,142 @@ fn compare_cli_maps_file_a_and_file_b_to_the_correct_table_sides() {
         "--file-b mean must appear under file B (not swapped):\n{table}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Schema-mismatch vs empty-passed distinction (compare-schema-error)
+// ---------------------------------------------------------------------------
+
+/// Pre-provenance field names (`reads`/`sweeps`/`anneal_time_us`) with a
+/// type that the current [`JobRecord`] cannot accept, so every line is
+/// skipped by `read_jsonl`. `n` lines → `skipped_lines == n`.
+fn write_unparseable_schema_lines(path: &Path, n: usize) {
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)
+        .expect("create unparseable fixture");
+    for i in 0..n {
+        // `requested_reads` as a string is not `Option<u32>`; serde fails
+        // the whole object. Old field names are present for the motivating
+        // schema-mismatch case.
+        writeln!(
+            file,
+            "{{\"job_id\":\"old{i}\",\"backend\":\"cpu-sa\",\"n_solutions\":1,\
+             \"best_energy_milli\":-1000,\"diversity_milli\":0,\"passed\":true,\
+             \"rejected\":false,\"reject_reason\":null,\"device_access_time_us\":0,\
+             \"wall_ms\":0,\"reads\":1,\"sweeps\":0,\"anneal_time_us\":0,\
+             \"requested_reads\":\"legacy\"}}"
+        )
+        .expect("write unparseable line");
+    }
+}
+
+/// Regression: a file whose every line fails to parse must not be reported
+/// as `EmptyCompareFile` ("no usable passed records"). The skip count must
+/// reach the user, with schema mismatch named as the likely cause.
+#[test]
+fn all_unparseable_lines_return_compare_file_unparseable_with_count() {
+    let dir = tempfile::tempdir().expect("temp");
+    let bad = dir.path().join("old_schema.jsonl");
+    let good = dir.path().join("good.jsonl");
+    write_unparseable_schema_lines(&bad, 3);
+    append_jsonl(&good, &record("ok", 0, true)).expect("write good");
+
+    let err = run_compare(&bad, &good).expect_err("all-unparseable A must err");
+    assert!(
+        matches!(
+            &err,
+            ModeError::CompareFileUnparseable(path, n) if path == &bad && *n == 3
+        ),
+        "expected CompareFileUnparseable(A, 3), got: {err}"
+    );
+    let msg = err.to_string();
+    assert!(
+        msg.contains('3') && msg.contains("parse"),
+        "Display must state unparseable count; got: {msg}"
+    );
+    assert!(
+        msg.to_lowercase().contains("schema"),
+        "Display must point at schema mismatch as likely cause; got: {msg}"
+    );
+
+    let err = run_compare(&good, &bad).expect_err("all-unparseable B must err");
+    assert!(
+        matches!(
+            &err,
+            ModeError::CompareFileUnparseable(path, n) if path == &bad && *n == 3
+        ),
+        "expected CompareFileUnparseable(B, 3), got: {err}"
+    );
+}
+
+/// Well-formed records that all have `passed: false` remain `EmptyCompareFile`.
+/// Guards the two causes (schema skip vs all-failed run) from collapsing into
+/// one error after the unparseable branch is added.
+#[test]
+fn all_failed_passed_false_still_empty_compare_file_not_unparseable() {
+    let dir = tempfile::tempdir().expect("temp");
+    let all_failed = dir.path().join("all_failed.jsonl");
+    let good = dir.path().join("good.jsonl");
+    append_jsonl(&all_failed, &record("fail0", -5_000, false)).expect("write");
+    append_jsonl(&all_failed, &record("fail1", 5_000, false)).expect("write");
+    append_jsonl(&good, &record("ok", 0, true)).expect("write");
+
+    let err = run_compare(&all_failed, &good).expect_err("all-failed A must err");
+    assert!(
+        matches!(err, ModeError::EmptyCompareFile(ref p) if p == &all_failed),
+        "passed:false with zero skips must stay EmptyCompareFile, got: {err}"
+    );
+    let msg = err.to_string();
+    assert!(
+        msg.contains("no usable (passed) records to compare"),
+        "EmptyCompareFile Display text must stay unchanged; got: {msg}"
+    );
+    assert!(
+        !msg.to_lowercase().contains("schema") && !msg.contains("parse"),
+        "must not look like the unparseable/schema error; got: {msg}"
+    );
+
+    let err = run_compare(&good, &all_failed).expect_err("all-failed B must err");
+    assert!(
+        matches!(err, ModeError::EmptyCompareFile(ref p) if p == &all_failed),
+        "passed:false B must stay EmptyCompareFile, got: {err}"
+    );
+}
+
+/// Mixed valid records + unparseable lines still succeed; skipped_* reports
+/// the unparseable count. Existing behaviour must not regress into an error.
+#[test]
+fn mixed_valid_and_unparseable_still_succeeds_with_skipped_count() {
+    let dir = tempfile::tempdir().expect("temp");
+    let path_a = dir.path().join("a.jsonl");
+    let path_b = dir.path().join("b.jsonl");
+
+    append_jsonl(&path_a, &record("a0", -1_000, true)).expect("write");
+    append_jsonl(&path_a, &record("a1", -2_000, true)).expect("write");
+    // Two unparseable lines interleaved.
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&path_a)
+        .expect("open A");
+    writeln!(file, "{{not-valid-jobrecord").expect("corrupt");
+    writeln!(
+        file,
+        r#"{{"job_id":"x","backend":"cpu-sa","n_solutions":1,"best_energy_milli":0,"diversity_milli":0,"passed":true,"rejected":false,"device_access_time_us":0,"wall_ms":0,"requested_reads":"legacy"}}"#
+    )
+    .expect("schema-bad line");
+    drop(file);
+
+    append_jsonl(&path_b, &record("b0", 1_000, true)).expect("write");
+    append_jsonl(&path_b, &record("b1", 2_000, true)).expect("write");
+
+    let report = run_compare(&path_a, &path_b).expect("mixed file must still succeed");
+    assert_eq!(report.n_a, 2, "valid passed records still compared");
+    assert_eq!(report.n_b, 2);
+    assert_eq!(
+        report.skipped_a, 2,
+        "unparseable lines must reach skipped_a"
+    );
+    assert_eq!(report.skipped_b, 0);
+}
