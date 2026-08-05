@@ -179,7 +179,7 @@ fn passed_energies(records: &[JobRecord]) -> Vec<f64> {
     records
         .iter()
         .filter(|r| r.passed)
-        .map(|r| milli_to_f64(r.best_energy_milli))
+        .filter_map(|r| r.best_energy_milli.map(milli_to_f64))
         .collect()
 }
 

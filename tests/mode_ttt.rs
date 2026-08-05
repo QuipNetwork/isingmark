@@ -171,7 +171,9 @@ async fn hermetic_ttt_uses_less_than_or_equal_not_greater_than_or_equal() {
         &target_dir(probe_dir.path(), EASILY_REACHABLE_TARGET_MILLI).join(RECORDS_FILENAME),
     )
     .expect("probe records.jsonl is readable");
-    let actual_energy_milli = probe_jsonl.records[0].best_energy_milli;
+    let actual_energy_milli = probe_jsonl.records[0]
+        .best_energy_milli
+        .expect("probe trial must return a recomputed energy");
 
     let dir = tempfile::tempdir().expect("create temp dir");
     let cfg = TttConfig {

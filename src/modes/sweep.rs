@@ -62,17 +62,19 @@
 //!
 //! # A known gap: `anneal_time_us` cannot be verified from a `JobRecord`
 //!
-//! `backend::session::build_result_record` sets `JobRecord::anneal_time_us`
-//! from the session-level `SetTarget` it was given, not from any wire echo
-//! of the job's own requested value (`SamplerMeta` carries no such field).
-//! This mode passes `target: None` to every session, so every record's
-//! `anneal_time_us` reads `0` regardless of what an `Annealing` cell
-//! requested on the job itself. `reads`/`sweeps` do not have this problem:
-//! they come from the miner's own `SamplerMeta.reads`/`sweeps`, which (for
-//! a well-behaved backend) echoes what it was actually driven at. So a test
-//! or an operator can verify a `Sweeping`-backend sweep's `reads`/`sweeps`
-//! per cell from its output directly; verifying an `Annealing`-backend
-//! sweep's `anneal_time_us` per cell cannot be done the same way.
+//! `backend::session::build_result_record` sets
+//! `JobRecord::requested_anneal_time_us` from the session-level `SetTarget`
+//! it was given, not from any wire echo of the job's own requested value
+//! (`SamplerMeta` carries no such field). This mode passes `target: None`
+//! to every session, so every record's `requested_*` fields are `None`
+//! regardless of what an `Annealing` cell put on the job itself. Measured
+//! `reads`/`sweeps` do not have this problem: they come from the miner's
+//! own `SamplerMeta.reads`/`sweeps`, which (for a well-behaved backend)
+//! echoes what it was actually driven at. So a test or an operator can
+//! verify a `Sweeping`-backend sweep's measured `reads`/`sweeps` per cell
+//! from its output directly; verifying an `Annealing`-backend sweep's
+//! `anneal_time_us` per cell cannot be done the same way (there is no
+//! measured anneal-time field).
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -495,11 +497,11 @@ fn build_summary(cfg: &SweepConfig, spec: &TopologySpec, outcomes: &[CellOutcome
                 .records
                 .iter()
                 .filter(|r| r.passed)
-                .map(|r| milli_to_f64(r.best_energy_milli))
+                .filter_map(|r| r.best_energy_milli.map(milli_to_f64))
                 .collect();
             // Every record's own dispatch-to-result wall time, regardless of
-            // pass/fail/reject: unlike `best_energy_milli` (meaningless for
-            // a job that never produced a solution), `JobRecord::wall_ms` is
+            // pass/fail/reject: unlike `best_energy_milli` (None when a job
+            // never produced a solution), `JobRecord::wall_ms` is
             // well-defined for every terminal record.
             let wall_mss: Vec<f64> = o
                 .report

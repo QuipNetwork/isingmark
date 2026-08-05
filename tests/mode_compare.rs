@@ -43,7 +43,8 @@ fn record(job_id: &str, best_energy_milli: i64, passed: bool) -> JobRecord {
         job_id: job_id.to_string(),
         backend: "cpu-sa".to_string(),
         n_solutions: 1,
-        best_energy_milli,
+        best_energy_milli: Some(best_energy_milli),
+        best_spins_hex: None,
         diversity_milli: 0,
         passed,
         rejected: !passed,
@@ -54,9 +55,11 @@ fn record(job_id: &str, best_energy_milli: i64, passed: bool) -> JobRecord {
         },
         device_access_time_us: 0,
         wall_ms: 0,
-        reads: 1,
-        sweeps: 0,
-        anneal_time_us: 0,
+        requested_reads: Some(1),
+        requested_sweeps: Some(0),
+        requested_anneal_time_us: Some(0),
+        measured_reads: Some(1),
+        measured_sweeps: Some(0),
     }
 }
 

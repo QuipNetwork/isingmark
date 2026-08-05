@@ -67,15 +67,16 @@
 //! per this task's fixed interface. `stats::ks_distance`/
 //! `stats::ks_two_sample_p` return `None` if either input batch is empty or
 //! contains a non-finite value; in practice only the "empty" case can occur
-//! here (`JobRecord::best_energy_milli` is an `i64`, and dividing any `i64`
-//! by `1000.0` always yields a finite `f64` — `contains_non_finite` cannot
-//! fire), but this module treats both documented `None` causes the same
-//! way. Rather than defaulting `p_value` to `1.0` (which would silently
-//! report "the two runs are identical" for a run that produced no usable
-//! data at all — exactly the failure mode this crate's own conventions
-//! exist to prevent) or fabricating `0.0`/some other placeholder,
-//! [`run_reproducibility`] returns [`ModeError::EmptyReproBatch`], naming
-//! which run(s) had no `passed` records to compare.
+//! here (`JobRecord::best_energy_milli` is an `Option<i64>`; when present,
+//! dividing the inner `i64` by `1000.0` always yields a finite `f64` —
+//! `contains_non_finite` cannot fire), but this module treats both
+//! documented `None` causes the same way. Rather than defaulting `p_value`
+//! to `1.0` (which would silently report "the two runs are identical" for a
+//! run that produced no usable data at all — exactly the failure mode this
+//! crate's own conventions exist to prevent) or fabricating `0.0`/some other
+//! placeholder, [`run_reproducibility`] returns
+//! [`ModeError::EmptyReproBatch`], naming which run(s) had no `passed`
+//! records with a present energy to compare.
 //!
 //! # Statistical caveat: the KS test assumes independent samples, but this
 //! module's design is paired
@@ -392,7 +393,7 @@ fn passed_energies(report: &RunReport) -> Vec<f64> {
         .records
         .iter()
         .filter(|r| r.passed)
-        .map(|r| milli_to_f64(r.best_energy_milli))
+        .filter_map(|r| r.best_energy_milli.map(milli_to_f64))
         .collect()
 }
 

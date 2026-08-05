@@ -1048,11 +1048,11 @@ fn decode_milli_f64(bytes: &[u8]) -> Vec<f64> {
 /// `passed` (the miner's reported value is never persisted, only used for
 /// this comparison — `JobRecord` has no field for it).
 ///
-/// `reads`/`sweeps`/`device_access_time_us` come from the miner's own
-/// `SamplerMeta` (what it actually ran), since those field names map
-/// directly onto `JobRecord`'s. `anneal_time_us` instead comes from the
-/// requested `SetTarget` (there is no wire field for actual anneal time,
-/// only `qpu_access_us`, which this schema does not carry).
+/// `measured_reads`/`measured_sweeps`/`device_access_time_us` come from the
+/// miner's own `SamplerMeta` when present (`None` measured fields when the
+/// miner sent none). Requested params come from `SetTarget` (`None` when no
+/// target was sent). There is no measured anneal time on the wire (only
+/// `qpu_access_us`, which this schema does not carry).
 fn build_result_record(
     backend: &str,
     job: &Job,
@@ -1079,34 +1079,46 @@ fn build_result_record(
     }
 
     let n_solutions = result.solutions.len();
-    let best_energy_milli = recomputed.into_iter().min().unwrap_or(0);
+    // Index of the minimum energy (first on ties), so energy and spins come
+    // from the same solution and cannot disagree.
+    let best = recomputed
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, &e)| e)
+        .map(|(i, &e)| (i, e));
+    let best_energy_milli = best.map(|(_, e)| e);
+    let best_spins_hex = best.map(|(i, _)| hex_encode(&result.solutions[i].spins_bytes));
     let diversity_milli = milli_round(set_diversity(&spins_by_solution));
-    let (reads, sweeps, device_access_time_us) = result
-        .meta
-        .as_ref()
-        .map_or((0, 0, 0), |m| (m.reads, m.sweeps, m.device_access_time_us));
+    let (measured_reads, measured_sweeps, device_access_time_us) =
+        result.meta.as_ref().map_or((None, None, 0), |m| {
+            (Some(m.reads), Some(m.sweeps), m.device_access_time_us)
+        });
 
     JobRecord {
         job_id: hex_encode(&job.job_id),
         backend: backend.to_string(),
         n_solutions,
         best_energy_milli,
+        best_spins_hex,
         diversity_milli,
         passed: n_solutions > 0 && !mismatched,
         rejected: false,
         reject_reason: None,
         device_access_time_us,
         wall_ms: duration_ms(wall),
-        reads,
-        sweeps,
-        anneal_time_us: target.map_or(0, |t| t.anneal_time_us),
+        requested_reads: target.map(|t| t.num_reads),
+        requested_sweeps: target.map(|t| t.num_sweeps),
+        requested_anneal_time_us: target.map(|t| t.anneal_time_us),
+        measured_reads,
+        measured_sweeps,
     }
 }
 
 /// Build the [`JobRecord`] for an explicit `Reject`. There is no
-/// `SamplerMeta` on a reject (the miner never ran the job), so
-/// `reads`/`sweeps`/`anneal_time_us` fall back to what was requested via
-/// `SetTarget` rather than what was actually used.
+/// `SamplerMeta` on a reject (the miner never ran the job), so measured
+/// fields are `None` and requested params come from `SetTarget` (`None`
+/// when no target was sent). Energy and spins are `None` — a reject
+/// produced no solutions.
 fn build_reject_record(
     backend: &str,
     reject: &Reject,
@@ -1117,23 +1129,27 @@ fn build_reject_record(
         job_id: hex_encode(&reject.job_id),
         backend: backend.to_string(),
         n_solutions: 0,
-        best_energy_milli: 0,
+        best_energy_milli: None,
+        best_spins_hex: None,
         diversity_milli: 0,
         passed: false,
         rejected: true,
         reject_reason: Some(reject_reason_text(reject.reason)),
         device_access_time_us: 0,
         wall_ms: duration_ms(wall),
-        reads: target.map_or(0, |t| t.num_reads),
-        sweeps: target.map_or(0, |t| t.num_sweeps),
-        anneal_time_us: target.map_or(0, |t| t.anneal_time_us),
+        requested_reads: target.map(|t| t.num_reads),
+        requested_sweeps: target.map(|t| t.num_sweeps),
+        requested_anneal_time_us: target.map(|t| t.anneal_time_us),
+        measured_reads: None,
+        measured_sweeps: None,
     }
 }
 
 /// Build the [`JobRecord`] for a job abandoned in flight — the miner sent
 /// `Fatal`, or the session ended (stream closed/errored) before it answered.
 /// Same "no `SamplerMeta`" reasoning as [`build_reject_record`] applies: the
-/// job never completed, so requested values stand in.
+/// job never completed, so measured fields stay `None` and requested values
+/// stand in (`None` when no `SetTarget` was sent).
 fn build_abandoned_record(
     backend: &str,
     job: &Job,
@@ -1145,16 +1161,19 @@ fn build_abandoned_record(
         job_id: hex_encode(&job.job_id),
         backend: backend.to_string(),
         n_solutions: 0,
-        best_energy_milli: 0,
+        best_energy_milli: None,
+        best_spins_hex: None,
         diversity_milli: 0,
         passed: false,
         rejected: true,
         reject_reason: Some(reason.to_string()),
         device_access_time_us: 0,
         wall_ms: duration_ms(wall),
-        reads: target.map_or(0, |t| t.num_reads),
-        sweeps: target.map_or(0, |t| t.num_sweeps),
-        anneal_time_us: target.map_or(0, |t| t.anneal_time_us),
+        requested_reads: target.map(|t| t.num_reads),
+        requested_sweeps: target.map(|t| t.num_sweeps),
+        requested_anneal_time_us: target.map(|t| t.anneal_time_us),
+        measured_reads: None,
+        measured_sweeps: None,
     }
 }
 
@@ -1223,16 +1242,19 @@ mod tests {
             job_id: "aa".to_string(),
             backend: "fake".to_string(),
             n_solutions: 1,
-            best_energy_milli: 0,
+            best_energy_milli: Some(0),
+            best_spins_hex: None,
             diversity_milli: 0,
             passed: true,
             rejected: false,
             reject_reason: None,
             device_access_time_us: 0,
             wall_ms: 0,
-            reads: 0,
-            sweeps: 0,
-            anneal_time_us: 0,
+            requested_reads: None,
+            requested_sweeps: None,
+            requested_anneal_time_us: None,
+            measured_reads: None,
+            measured_sweeps: None,
         }
     }
 
