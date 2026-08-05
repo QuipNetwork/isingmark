@@ -161,6 +161,14 @@ pub enum ModeError {
     /// [`Self::EmptyTargetFile`] and [`Self::EmptyReproBatch`] refuse to
     /// invent a default `p_value`.
     EmptyCompareFile(PathBuf),
+    /// `compare::run_compare`'s input file yielded no usable (`passed`)
+    /// energies and at least one non-blank line failed to parse as a
+    /// [`crate::record::JobRecord`]. Distinct from [`Self::EmptyCompareFile`]:
+    /// an all-failed run has parseable records with `passed: false`, while
+    /// this case means every candidate line was discarded (typically a
+    /// `JobRecord` schema mismatch with this build). The `usize` is the
+    /// `read_jsonl` skip count.
+    CompareFileUnparseable(PathBuf, usize),
 }
 
 impl fmt::Display for ModeError {
@@ -243,6 +251,12 @@ impl fmt::Display for ModeError {
                 "compare input file {} contains no usable (passed) records to compare",
                 path.display()
             ),
+            Self::CompareFileUnparseable(path, n) => write!(
+                f,
+                "compare input file {} has no usable (passed) records: {n} lines failed to parse \
+                 (likely a JobRecord schema mismatch)",
+                path.display()
+            ),
         }
     }
 }
@@ -265,7 +279,8 @@ impl std::error::Error for ModeError {
             | Self::DuplicateSize(_)
             | Self::GraphGenerationFailed(_)
             | Self::EmptyReproBatch { .. }
-            | Self::EmptyCompareFile(_) => None,
+            | Self::EmptyCompareFile(_)
+            | Self::CompareFileUnparseable(_, _) => None,
             Self::Session(e) => Some(e),
             Self::Io(e) | Self::TargetFileUnreadable(_, e) | Self::CompareFileUnreadable(_, e) => {
                 Some(e)
