@@ -40,7 +40,7 @@ ISINGMARK_ALLOW_MISSING_MINERS=1 cargo test --all-targets --features plot
 
 Without `ISINGMARK_ALLOW_MISSING_MINERS=1`, a missing `quip-cpu-sa` (and related miners) makes those tests fail rather than skip. Set the variable only when you intend to opt out of real-binary coverage.
 
-`tools/fetch-miners.sh` wraps the upstream fetcher at the crate-pinned rev and checks that each binary can run on this host. Cpu package assets are Linux ELFs (arch in the name only); on macOS they are not executable, so `quip_cpu_sa_conformance` still needs `ISINGMARK_ALLOW_MISSING_MINERS=1`. Metal miners are usable on Darwin. Pass through `MINERS_TAG` (default `v0.3.0-rc1`), `MINER_SET`, and `DRY_RUN`.
+`tools/fetch-miners.sh` wraps the upstream fetcher at the crate-pinned rev and checks that each binary can run on this host. Binaries that fail the host probe are moved to `miners/unusable/` so `miners/` on `PATH` only contains runners that work here. Cpu package assets are Linux ELFs (arch in the name only); on macOS they land in `unusable/`, so `quip_cpu_sa_conformance` still needs `ISINGMARK_ALLOW_MISSING_MINERS=1`. Metal miners are usable on Darwin. Pass through `MINERS_TAG` (default `v0.3.0-rc1`; exported because upstream defaults to `v0.3.0`), `MINER_SET`, and `DRY_RUN`.
 
 ## Lint and format
 

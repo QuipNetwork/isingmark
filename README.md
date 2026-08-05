@@ -125,7 +125,7 @@ To download released miner binaries into `miners/` (and verify each one runs on 
 export PATH="$(pwd)/miners:${PATH}"
 ```
 
-The script pins the upstream fetcher to the same `quip-miner` rev as this crate, passes through `MINERS_TAG`, `MINER_SET`, and `DRY_RUN`, and defaults `MINERS_TAG` to `v0.3.0-rc1`. The cpu miners are Linux binaries even for `arm64` assets; on macOS they download but do not execute. Metal miners are Mach-O and do run on Darwin. On macOS the `quip_cpu_sa_conformance` test still needs the opt-out variable below.
+The script pins the upstream fetcher to the same `quip-miner` rev as this crate, passes through `MINERS_TAG`, `MINER_SET`, and `DRY_RUN`, and defaults `MINERS_TAG` to `v0.3.0-rc1` (exported because the upstream script at the pinned rev defaults to `v0.3.0`). After download it probes each binary; failures move to `miners/unusable/` so `miners/` on `PATH` only has binaries that run on this host. The cpu miners are Linux binaries even for `arm64` assets; on macOS they land in `unusable/`. Metal miners are Mach-O and stay in `miners/`. On macOS the `quip_cpu_sa_conformance` test still needs the opt-out variable below.
 
 To opt out on a machine without a usable `quip-cpu-sa`:
 

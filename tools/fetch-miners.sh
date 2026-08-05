@@ -17,6 +17,8 @@ set -euo pipefail
 #
 # Asset names encode arch only, not OS. The cpu miners published for arm64 are
 # Linux ELFs; on macOS they download but cannot execute. Metal miners are Mach-O.
+# Binaries that fail the host probe are moved to DEST/unusable/ so DEST itself
+# is safe to put on PATH (only binaries that actually run remain there).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -37,7 +39,9 @@ if [[ -z "${QUIP_MINER_REV}" ]]; then
   exit 1
 fi
 
-# CI pins MINERS_TAG=v0.3.0; this wrapper defaults to v0.3.0-rc1. Override with
+# CI pins MINERS_TAG=v0.3.0; this wrapper defaults to v0.3.0-rc1. The upstream
+# script at the pinned rev also defaults to v0.3.0, so we export MINERS_TAG
+# explicitly rather than relying on that upstream default. Override with
 # MINERS_TAG=... when you need a different package-registry tag.
 export MINERS_TAG="${MINERS_TAG:-v0.3.0-rc1}"
 
@@ -103,6 +107,18 @@ echo
 usable=0
 cpu_sa_usable=0
 found_any=0
+unusable_dir="${DEST}/unusable"
+moved_unusable=0
+
+move_unusable() {
+  local name="$1"
+  local bin="$2"
+  mkdir -p "${unusable_dir}"
+  # Overwrite any prior copy of the same name (idempotent reruns).
+  mv -f "${bin}" "${unusable_dir}/${name}"
+  moved_unusable=$((moved_unusable + 1))
+  echo "  -> moved to ${unusable_dir}/${name} (kept for inspection; not on PATH)"
+}
 
 for name in "${miner_names[@]}"; do
   bin="${DEST}/${name}"
@@ -114,6 +130,7 @@ for name in "${miner_names[@]}"; do
 
   if [[ ! -x "${bin}" ]]; then
     echo "${name}: NOT usable (not executable; file: ${ftype})"
+    move_unusable "${name}" "${bin}"
     continue
   fi
 
@@ -139,6 +156,7 @@ for name in "${miner_names[@]}"; do
       reason="$(printf '%s' "${probe_out}" | tr '\n' ' ' | sed 's/[[:space:]]\{1,\}/ /g')"
     fi
     echo "${name}: NOT usable (${reason}; file: ${ftype})"
+    move_unusable "${name}" "${bin}"
   fi
 done
 
@@ -150,6 +168,12 @@ fi
 echo
 echo "Next steps:"
 echo "  export PATH=\"${DEST}:\${PATH}\""
+echo
+echo "${DEST} contains only binaries that probe successfully on this host."
+if [[ "${moved_unusable}" -gt 0 ]]; then
+  echo "Unusable binaries (${moved_unusable}) were moved to ${unusable_dir}/"
+  echo "(kept for inspection or use in a container; not on PATH)."
+fi
 echo
 
 if [[ "${usable}" -eq 0 ]]; then
