@@ -17,13 +17,17 @@ variables:
   # Pinned toolchain (must match rust-toolchain.toml channel).
   RUST_VERSION: "1.97.1"
   # Crate deps pin this git rev (see Cargo.toml / Cargo.lock).
-  QUIP_MINER_REV: "623af0700d36359687b1e69d866ae782d932a0e9"
+  QUIP_MINER_REV: "e667365bef7efbf91ff0d4c988fcfc648e6cc9b6"
   QUIP_MINER_REPO: "https://gitlab.com/quip.network/quip-miner.git"
   # Package-registry tag used by fetch-miners.sh. Default in the script at
-  # QUIP_MINER_REV is v0.3.0; set explicitly here so the coupling to the
+  # QUIP_MINER_REV is v0.3.0-rc2; set explicitly here so the coupling to the
   # crate rev is visible. Keep this in sync when bumping QUIP_MINER_REV /
   # the pinned quip-miner crates — do not change one without checking the other.
-  MINERS_TAG: "v0.3.0"
+  #
+  # The tag and the rev must move together. At this rev the script names assets
+  # NAME-OS-ARCH, and only v0.3.0-rc2 and later publish that form. Pointing this
+  # rev at an earlier tag gives a 404 on every asset.
+  MINERS_TAG: "v0.3.0-rc2"
   MINERS_DIR: "${CI_PROJECT_DIR}/miners"
 
 default:
