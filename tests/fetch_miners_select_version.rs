@@ -87,3 +87,47 @@ fn select_version_minor_is_numeric_not_lexical() {
 fn select_version_release_outranks_prerelease_on_same_core() {
     assert_selects("1", &["v0.4.0-rc2", "v0.4.0"], "v0.4.0");
 }
+
+// A prerelease on a higher core version outranks a lower stable version; a
+// stable-first implementation (all stables above all prereleases) gets this wrong.
+#[test]
+fn select_version_higher_core_prerelease_beats_lower_stable() {
+    assert_selects("1", &["v0.3.1-rc1", "v0.3.0"], "v0.3.1-rc1");
+}
+
+#[test]
+fn select_version_higher_core_prerelease_beats_lower_stable_arg_order() {
+    // Same pair as above, reversed arguments: catches first-or-last-wins bugs.
+    assert_selects("1", &["v0.3.0", "v0.3.1-rc1"], "v0.3.1-rc1");
+}
+
+#[test]
+fn select_version_stable_only_excludes_prerelease_not_demotes() {
+    // MINERS_ALLOW_PRERELEASE=0 removes prereleases from candidacy; it does not
+    // keep them ranked below stables. Here only v0.3.0 qualifies.
+    assert_selects("0", &["v0.3.1-rc1", "v0.3.0"], "v0.3.0");
+}
+
+#[test]
+fn select_version_same_core_stable_still_beats_prerelease_when_allowed() {
+    assert_selects("1", &["v0.3.1-rc1", "v0.3.1"], "v0.3.1");
+}
+
+#[test]
+fn select_version_major_prerelease_beats_older_stable() {
+    assert_selects("1", &["v1.0.0-rc1", "v0.9.9"], "v1.0.0-rc1");
+}
+
+#[test]
+fn select_version_prerelease_suffix_numeric_across_double_digits() {
+    assert_selects("1", &["v0.3.0-rc2", "v0.3.0-rc10"], "v0.3.0-rc10");
+}
+
+#[test]
+fn select_version_mixed_set_picks_highest_core_prerelease() {
+    assert_selects(
+        "1",
+        &["v0.3.0-rc1", "v0.3.0", "v0.3.1-rc1", "v0.2.9"],
+        "v0.3.1-rc1",
+    );
+}
