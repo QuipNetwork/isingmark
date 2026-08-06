@@ -26,6 +26,29 @@ Optional PNG plots:
 cargo build --release --features plot
 ```
 
+## Built-in backends
+
+| Name | Binary | Kind |
+|---|---|---|
+| `cpu-sa` | `quip-cpu-sa` | Sweeping (`num_reads` + `num_sweeps`) |
+| `cpu-gibbs` | `quip-cpu-gibbs` | Sweeping |
+| `cuda` | `quip-cuda-sa` | Sweeping |
+| `metal` | `quip-metal-sa` | Sweeping |
+| `dwave` | `quip-dwave-qa` | Annealing (`num_reads` + `anneal_time_us`) |
+| `beit` | `quip-beit-sa` | Sweeping |
+| `cuopt` | `quip-cuopt-milp` | Annealing (`num_reads` + `anneal_time_us`) |
+
+`beit` is cloud-only. AWS bills each job. The BEIT sampler caps a problem at
+5,000 non-zero coefficients, so `beit` cannot run `advantage2-system1`. Use
+the `chimera-c8-16-4` or `zephyr-460` topology fixtures instead. Wall-clock
+for `beit` includes the network round-trip, so compare `beit` to local
+backends on solution quality only, not on timing.
+
+`cuopt` needs a self-hosted cuOpt server reachable at its URL. It has no
+coefficient cap, so it does run `advantage2-system1`. cuOpt reports a dual
+bound (`mip_gap`, `solution_bound`), but the session protocol `Result` has no
+field for it, so that bound is stderr-only today.
+
 ## Subcommands
 
 Examples assume `quip-cpu-sa` (or another registered miner) is on `$PATH`.

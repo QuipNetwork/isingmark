@@ -22,6 +22,107 @@ fn loads_advantage2_system1_fixture() {
     assert_eq!(spec.edges.len(), 41515);
 }
 
+/// BEIT coefficient cap: worst-case non-zero count is `edges + nodes` (every
+/// `J` non-zero, every `h` non-zero). Fixtures for BEIT must stay under 5000.
+const BEIT_MAX_NONZERO_COEFFICIENTS: usize = 5000;
+
+/// Decode Chimera `C(8,16,4)` linear qubit index
+/// `q = 8 * (16 * i + j) + 4 * u + k` into cell row/col, partition, offset.
+fn chimera_decode(qubit: u32) -> (u32, u32, u32, u32) {
+    let cell = qubit / 8;
+    let rem = qubit % 8;
+    let row = cell / 16;
+    let col = cell % 16;
+    let partition = rem / 4;
+    let offset = rem % 4;
+    (row, col, partition, offset)
+}
+
+/// True when `(left, right)` is an internal, vertical, or horizontal Chimera
+/// `C(8,16,4)` edge under the three adjacency rules.
+fn is_chimera_c8_16_4_edge(left: u32, right: u32) -> bool {
+    let (row0, col0, part0, off0) = chimera_decode(left);
+    let (row1, col1, part1, off1) = chimera_decode(right);
+    // Internal: same cell, opposite partitions, any offsets.
+    if row0 == row1 && col0 == col1 && part0 != part1 {
+        return true;
+    }
+    // Vertical: same column, both partition 0, same offset, adjacent rows.
+    if col0 == col1 && part0 == 0 && part1 == 0 && off0 == off1 && row0.abs_diff(row1) == 1 {
+        return true;
+    }
+    // Horizontal: same row, both partition 1, same offset, adjacent columns.
+    if row0 == row1 && part0 == 1 && part1 == 1 && off0 == off1 && col0.abs_diff(col1) == 1 {
+        return true;
+    }
+    false
+}
+
+#[test]
+fn chimera_c8_16_4_fixture_structure_and_beit_cap() {
+    let spec = load_fixture("chimera-c8-16-4").expect("chimera-c8-16-4 fixture parses");
+    assert_eq!(spec.nodes.len(), 1024);
+    assert_eq!(spec.edges.len(), 2976);
+    assert!(
+        spec.edges.len() + spec.nodes.len() <= BEIT_MAX_NONZERO_COEFFICIENTS,
+        "edges + nodes = {} exceeds BEIT cap {BEIT_MAX_NONZERO_COEFFICIENTS}",
+        spec.edges.len() + spec.nodes.len()
+    );
+    for &(u, v) in &spec.edges {
+        assert!(
+            is_chimera_c8_16_4_edge(u, v),
+            "edge ({u}, {v}) is not a Chimera C(8,16,4) adjacency"
+        );
+    }
+}
+
+#[test]
+fn zephyr_460_fixture_is_induced_advantage2_subgraph_under_beit_cap() {
+    let parent = load_fixture("advantage2-system1").expect("advantage2-system1 fixture parses");
+    let sub = load_fixture("zephyr-460").expect("zephyr-460 fixture parses");
+
+    assert!(
+        sub.edges.len() + sub.nodes.len() <= BEIT_MAX_NONZERO_COEFFICIENTS,
+        "edges + nodes = {} exceeds BEIT cap {BEIT_MAX_NONZERO_COEFFICIENTS}",
+        sub.edges.len() + sub.nodes.len()
+    );
+
+    let parent_nodes: std::collections::HashSet<u32> = parent.nodes.iter().copied().collect();
+    let parent_edges: std::collections::HashSet<(u32, u32)> =
+        parent.edges.iter().copied().collect();
+    let sub_nodes: std::collections::HashSet<u32> = sub.nodes.iter().copied().collect();
+
+    for &n in &sub.nodes {
+        assert!(
+            parent_nodes.contains(&n),
+            "zephyr-460 node {n} is absent from advantage2-system1"
+        );
+    }
+    for &(u, v) in &sub.edges {
+        assert!(
+            parent_edges.contains(&(u, v)),
+            "zephyr-460 edge ({u}, {v}) is absent from advantage2-system1"
+        );
+        assert!(
+            sub_nodes.contains(&u) && sub_nodes.contains(&v),
+            "zephyr-460 edge ({u}, {v}) endpoints must both be selected nodes"
+        );
+    }
+
+    // Induced edge set: every parent edge with both ends selected is present.
+    let expected_induced: std::collections::HashSet<(u32, u32)> = parent
+        .edges
+        .iter()
+        .copied()
+        .filter(|&(u, v)| sub_nodes.contains(&u) && sub_nodes.contains(&v))
+        .collect();
+    let actual_edges: std::collections::HashSet<(u32, u32)> = sub.edges.iter().copied().collect();
+    assert_eq!(
+        actual_edges, expected_induced,
+        "zephyr-460 edge set must equal the induced subgraph of the selected nodes"
+    );
+}
+
 #[test]
 fn rejects_empty_nodes() {
     let dir = tempfile::tempdir().expect("create temp dir");

@@ -40,13 +40,24 @@ fn missing_binary_probe_returns_not_found_and_never_panics() {
     assert!(matches!(check_err, ProbeError::NotFound(_)));
 }
 
-/// The built-in registry produces exactly the five documented backends, in
+/// The built-in registry produces exactly the seven documented backends, in
 /// order — no more, no fewer, and none renamed.
 #[test]
-fn builtin_registry_contains_exactly_the_five_documented_backends_in_order() {
+fn builtin_registry_contains_exactly_the_seven_documented_backends_in_order() {
     let registry = builtin_registry();
     let names: Vec<&str> = registry.iter().map(|spec| spec.name.as_str()).collect();
-    assert_eq!(names, vec!["cpu-sa", "cpu-gibbs", "cuda", "metal", "dwave"]);
+    assert_eq!(
+        names,
+        vec![
+            "cpu-sa",
+            "cpu-gibbs",
+            "cuda",
+            "metal",
+            "dwave",
+            "beit",
+            "cuopt",
+        ]
+    );
 }
 
 /// Environment variable that opts out of the real-binary requirement below.

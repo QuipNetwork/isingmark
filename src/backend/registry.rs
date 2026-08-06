@@ -98,10 +98,23 @@ const BUILTINS: &[BuiltinEntry] = &[
         bin_name: "quip-dwave-qa",
         kind: BackendKind::Annealing,
     },
+    BuiltinEntry {
+        name: "beit",
+        bin_name: "quip-beit-sa",
+        kind: BackendKind::Sweeping,
+    },
+    // cuOpt is Annealing because BackendKind only splits "reads + sweeps"
+    // from "reads + a time budget". cuOpt's MILP time limit rides on the
+    // protocol's anneal_time_us field — the only time-valued knob on the wire.
+    BuiltinEntry {
+        name: "cuopt",
+        bin_name: "quip-cuopt-milp",
+        kind: BackendKind::Annealing,
+    },
 ];
 
 /// Build the registry of built-in backends (`cpu-sa`, `cpu-gibbs`, `cuda`,
-/// `metal`, `dwave`), resolving each binary from `$PATH`.
+/// `metal`, `dwave`, `beit`, `cuopt`), resolving each binary from `$PATH`.
 ///
 /// A backend whose binary is not on `$PATH` still gets an entry: `bin` falls
 /// back to the bare binary name, so [`probe_capabilities`]/[`probe_check`]
@@ -225,7 +238,7 @@ mod tests {
     /// `Sweeping`) fails a specific assertion rather than being masked by a
     /// coincidental match.
     #[test]
-    fn builtin_registry_has_the_five_expected_entries_in_order() {
+    fn builtin_registry_has_the_seven_expected_entries_in_order() {
         let registry = builtin_registry();
         let actual: Vec<(&str, &str, BackendKind)> = registry
             .iter()
@@ -245,6 +258,8 @@ mod tests {
                 ("cuda", "quip-cuda-sa", BackendKind::Sweeping),
                 ("metal", "quip-metal-sa", BackendKind::Sweeping),
                 ("dwave", "quip-dwave-qa", BackendKind::Annealing),
+                ("beit", "quip-beit-sa", BackendKind::Sweeping),
+                ("cuopt", "quip-cuopt-milp", BackendKind::Annealing),
             ]
         );
     }

@@ -70,6 +70,23 @@ Backends are miner binaries invoked with `--quip-coordinator unix://...` and `--
 | `cuda` | `quip-cuda-sa` | Sweeping |
 | `metal` | `quip-metal-sa` | Sweeping |
 | `dwave` | `quip-dwave-qa` | Annealing (`num_reads` + `anneal_time_us`) |
+| `beit` | `quip-beit-sa` | Sweeping |
+| `cuopt` | `quip-cuopt-milp` | Annealing (`num_reads` + `anneal_time_us`) |
+
+`beit` is cloud-only. AWS bills each job. The BEIT sampler caps a problem at
+5,000 non-zero coefficients, so `beit` cannot run `advantage2-system1`. Use
+`chimera-c8-16-4` or `zephyr-460` instead. Wall-clock for `beit` includes the
+network round-trip, so compare `beit` to local backends on solution quality
+only, not on timing.
+
+`cuopt` needs a self-hosted cuOpt server at its configured URL. It has no
+coefficient cap, so it does run `advantage2-system1`. cuOpt reports a dual
+bound (`mip_gap`, `solution_bound`), but the session protocol `Result` has no
+field for it, so that bound is stderr-only today.
+
+`cuopt` is `Annealing` because `BackendKind` splits "reads + sweeps" from
+"reads + a time budget". The cuOpt MILP time limit rides on the protocol
+`anneal_time_us` field, the only time-valued knob on the wire.
 
 ## Benchmark modes
 
@@ -165,7 +182,7 @@ Modes that refuse to overwrite refuse a non-empty existing `records.jsonl` befor
 
 ## Topology format
 
-JSON `TopologySpec`: nodes, edges, allowed h/J/spin milli ranges, optional gates. Bundled fixtures live under `fixtures/` (`smoke.spec.json`, `advantage2-system1.spec.json`). Load with `--topology-preset NAME` or `--topology-file PATH`.
+JSON `TopologySpec`: nodes, edges, allowed h/J/spin milli ranges, optional gates. Bundled fixtures live under `fixtures/` (`smoke.spec.json`, `advantage2-system1.spec.json`, `chimera-c8-16-4.spec.json`, `zephyr-460.spec.json`). The two smaller graphs stay under the BEIT 5,000 non-zero coefficient cap (`edges + nodes`). Load with `--topology-preset NAME` or `--topology-file PATH`.
 
 ## Problem generation
 
