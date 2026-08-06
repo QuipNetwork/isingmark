@@ -29,6 +29,31 @@ pub struct BackendSpec {
     pub args: Vec<String>,
     /// Execution model: which job parameters this backend is driven by.
     pub kind: BackendKind,
+    /// CLI flag this backend's binary accepts to size its kernel state for a
+    /// topology, if it has one (`--max-nodes` on the CUDA miners). `None`
+    /// means the binary does not know such a flag, and passing one would make
+    /// it exit on an argument error instead of running.
+    pub node_capacity_flag: Option<String>,
+}
+
+impl BackendSpec {
+    /// Append this backend's node-capacity flag for a `nodes`-node topology.
+    ///
+    /// A backend without a flag is returned unchanged. An `args` list that
+    /// already names the flag is left alone, so an explicit override from a
+    /// config file wins over the derived value.
+    #[must_use]
+    pub fn with_node_capacity(mut self, nodes: usize) -> Self {
+        let Some(flag) = self.node_capacity_flag.clone() else {
+            return self;
+        };
+        if self.args.iter().any(|a| a == &flag) {
+            return self;
+        }
+        self.args.push(flag);
+        self.args.push(nodes.to_string());
+        self
+    }
 }
 
 /// Errors probing a [`BackendSpec`].
@@ -68,6 +93,8 @@ struct BuiltinEntry {
     name: &'static str,
     bin_name: &'static str,
     kind: BackendKind,
+    /// See [`BackendSpec::node_capacity_flag`].
+    node_capacity_flag: Option<&'static str>,
 }
 
 /// Fixed built-in backend list. Order matches display order; `builtin_registry`
@@ -77,31 +104,37 @@ const BUILTINS: &[BuiltinEntry] = &[
         name: "cpu-sa",
         bin_name: "quip-cpu-sa",
         kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
     },
     BuiltinEntry {
         name: "cpu-gibbs",
         bin_name: "quip-cpu-gibbs",
         kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
     },
     BuiltinEntry {
         name: "cuda",
         bin_name: "quip-cuda-sa",
         kind: BackendKind::Sweeping,
+        node_capacity_flag: Some("--max-nodes"),
     },
     BuiltinEntry {
         name: "metal",
         bin_name: "quip-metal-sa",
         kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
     },
     BuiltinEntry {
         name: "dwave",
         bin_name: "quip-dwave-qa",
         kind: BackendKind::Annealing,
+        node_capacity_flag: None,
     },
     BuiltinEntry {
         name: "beit",
         bin_name: "quip-beit-sa",
         kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
     },
     // cuOpt solves each job as a MILP under a time budget carried on the
     // wire as `anneal_time_us`, with the same per-job/`SetTarget`/built-in
@@ -113,6 +146,7 @@ const BUILTINS: &[BuiltinEntry] = &[
         name: "cuopt",
         bin_name: "quip-cuopt-milp",
         kind: BackendKind::Annealing,
+        node_capacity_flag: None,
     },
 ];
 
@@ -147,6 +181,7 @@ fn builtin_registry_from(path_var: &OsStr) -> Vec<BackendSpec> {
                 .unwrap_or_else(|| PathBuf::from(entry.bin_name)),
             args: Vec::new(),
             kind: entry.kind,
+            node_capacity_flag: entry.node_capacity_flag.map(str::to_string),
         })
         .collect()
 }
@@ -264,6 +299,70 @@ mod tests {
                 ("beit", "quip-beit-sa", BackendKind::Sweeping),
                 ("cuopt", "quip-cuopt-milp", BackendKind::Annealing),
             ]
+        );
+    }
+
+    /// Only backends whose binary accepts a node-capacity flag carry one.
+    /// Passing `--max-nodes` to a miner that does not know the flag would
+    /// make it exit on an argument error instead of running.
+    #[test]
+    fn only_cuda_declares_a_node_capacity_flag() {
+        let registry = builtin_registry();
+        for spec in &registry {
+            let expected = if spec.name == "cuda" {
+                Some("--max-nodes")
+            } else {
+                None
+            };
+            assert_eq!(
+                spec.node_capacity_flag.as_deref(),
+                expected,
+                "backend {} has the wrong node-capacity flag",
+                spec.name
+            );
+        }
+    }
+
+    /// A backend that declares the flag gets it appended with the topology's
+    /// node count, so the miner compiles a kernel big enough for the run.
+    #[test]
+    fn with_node_capacity_appends_the_flag_for_cuda() {
+        let cuda = builtin_registry()
+            .into_iter()
+            .find(|b| b.name == "cuda")
+            .expect("registry always has cuda");
+        let sized = cuda.with_node_capacity(5640);
+        assert_eq!(
+            sized.args,
+            vec!["--max-nodes".to_string(), "5640".to_string()]
+        );
+    }
+
+    /// A backend without the flag must be left exactly as it was.
+    #[test]
+    fn with_node_capacity_is_a_no_op_without_a_flag() {
+        let cpu = builtin_registry()
+            .into_iter()
+            .find(|b| b.name == "cpu-sa")
+            .expect("registry always has cpu-sa");
+        let sized = cpu.clone().with_node_capacity(5640);
+        assert_eq!(sized.args, cpu.args);
+        assert!(sized.args.is_empty());
+    }
+
+    /// An explicit args override wins: a caller that set the flag by hand
+    /// must not get a second, conflicting copy appended.
+    #[test]
+    fn with_node_capacity_leaves_an_explicit_flag_alone() {
+        let mut cuda = builtin_registry()
+            .into_iter()
+            .find(|b| b.name == "cuda")
+            .expect("registry always has cuda");
+        cuda.args = vec!["--max-nodes".to_string(), "9000".to_string()];
+        let sized = cuda.with_node_capacity(5640);
+        assert_eq!(
+            sized.args,
+            vec!["--max-nodes".to_string(), "9000".to_string()]
         );
     }
 

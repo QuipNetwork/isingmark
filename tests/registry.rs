@@ -30,6 +30,7 @@ fn missing_binary_probe_returns_not_found_and_never_panics() {
         bin: dir.path().join("this-binary-does-not-exist-anywhere"),
         args: Vec::new(),
         kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
     };
 
     let capabilities_err =
@@ -208,6 +209,7 @@ mod fake_miner {
             bin,
             args: Vec::new(),
             kind: BackendKind::Sweeping,
+            node_capacity_flag: None,
         }
     }
 
@@ -341,6 +343,7 @@ mod fake_miner {
             bin: path,
             args: vec!["--extra".to_string()],
             kind: BackendKind::Sweeping,
+            node_capacity_flag: None,
         };
 
         probe_capabilities(&spec).expect("--extra forwarded before --capabilities");

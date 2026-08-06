@@ -100,6 +100,7 @@ fn fake_miner_backend(args: Vec<String>) -> BackendSpec {
         bin: PathBuf::from(env!("CARGO_BIN_EXE_isingmark-fake-miner")),
         args,
         kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
     }
 }
 

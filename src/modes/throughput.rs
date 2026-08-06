@@ -153,7 +153,10 @@ pub async fn run_throughput_with_summary(
     cfg: &ThroughputConfig,
 ) -> Result<(RunReport, Summary), ModeError> {
     let spec = cfg.topology.load()?;
-    let backend = resolve_backend(cfg)?;
+    // The miner opens its device before any job arrives, so the kernel
+    // capacity must be on its argv, derived from the topology we are about
+    // to run.
+    let backend = resolve_backend(cfg)?.with_node_capacity(spec.nodes.len());
 
     std::fs::create_dir_all(&cfg.output_dir).map_err(ModeError::Io)?;
     let records_path = cfg.output_dir.join(RECORDS_FILENAME);

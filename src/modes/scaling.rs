@@ -283,9 +283,14 @@ pub async fn run_scaling(cfg: &ScalingConfig) -> Result<ScalingReport, ModeError
         let spec = generate_topology(cfg.seed, *nodes)?;
         let jobs = draw_jobs(&spec, cfg.seed, cfg.num_jobs, &params);
 
+        // Each size gets its own session, so each gets its own kernel
+        // capacity. Sizing once outside the loop would compile for the first
+        // size and reject every larger one.
+        let sized_backend = backend.clone().with_node_capacity(spec.nodes.len());
+
         let sock_path = unique_sock_path();
         let report = run_session(RunParams {
-            backend: &backend,
+            backend: &sized_backend,
             spec: &spec,
             jobs,
             sock_path: &sock_path,
