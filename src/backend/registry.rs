@@ -112,9 +112,21 @@ const BUILTINS: &[BuiltinEntry] = &[
         kind: BackendKind::Sweeping,
         node_capacity_flag: None,
     },
+    // `cuda` keeps its historical name rather than becoming `cuda-sa`:
+    // renaming it would break every existing config and command line for no
+    // functional gain.
     BuiltinEntry {
         name: "cuda",
         bin_name: "quip-cuda-sa",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: Some("--max-nodes"),
+    },
+    // Gibbs holds its spin state in shared memory rather than per-thread
+    // local memory, so it reaches far larger topologies than `cuda`: measured
+    // flat cost per node to 48000 on an A4000, against an SA ceiling of 8192.
+    BuiltinEntry {
+        name: "cuda-gibbs",
+        bin_name: "quip-cuda-gibbs",
         kind: BackendKind::Sweeping,
         node_capacity_flag: Some("--max-nodes"),
     },
@@ -151,7 +163,8 @@ const BUILTINS: &[BuiltinEntry] = &[
 ];
 
 /// Build the registry of built-in backends (`cpu-sa`, `cpu-gibbs`, `cuda`,
-/// `metal`, `dwave`, `beit`, `cuopt`), resolving each binary from `$PATH`.
+/// `cuda-gibbs`, `metal`, `dwave`, `beit`, `cuopt`), resolving each binary
+/// from `$PATH`.
 ///
 /// A backend whose binary is not on `$PATH` still gets an entry: `bin` falls
 /// back to the bare binary name, so [`probe_capabilities`]/[`probe_check`]
@@ -276,7 +289,7 @@ mod tests {
     /// `Sweeping`) fails a specific assertion rather than being masked by a
     /// coincidental match.
     #[test]
-    fn builtin_registry_has_the_seven_expected_entries_in_order() {
+    fn builtin_registry_has_the_eight_expected_entries_in_order() {
         let registry = builtin_registry();
         let actual: Vec<(&str, &str, BackendKind)> = registry
             .iter()
@@ -294,6 +307,7 @@ mod tests {
                 ("cpu-sa", "quip-cpu-sa", BackendKind::Sweeping),
                 ("cpu-gibbs", "quip-cpu-gibbs", BackendKind::Sweeping),
                 ("cuda", "quip-cuda-sa", BackendKind::Sweeping),
+                ("cuda-gibbs", "quip-cuda-gibbs", BackendKind::Sweeping),
                 ("metal", "quip-metal-sa", BackendKind::Sweeping),
                 ("dwave", "quip-dwave-qa", BackendKind::Annealing),
                 ("beit", "quip-beit-sa", BackendKind::Sweeping),
@@ -304,12 +318,13 @@ mod tests {
 
     /// Only backends whose binary accepts a node-capacity flag carry one.
     /// Passing `--max-nodes` to a miner that does not know the flag would
-    /// make it exit on an argument error instead of running.
+    /// make it exit on an argument error instead of running. Both CUDA
+    /// miners take it; nothing else does.
     #[test]
-    fn only_cuda_declares_a_node_capacity_flag() {
+    fn only_the_cuda_backends_declare_a_node_capacity_flag() {
         let registry = builtin_registry();
         for spec in &registry {
-            let expected = if spec.name == "cuda" {
+            let expected = if spec.name == "cuda" || spec.name == "cuda-gibbs" {
                 Some("--max-nodes")
             } else {
                 None
