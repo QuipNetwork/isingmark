@@ -314,8 +314,8 @@ pub struct SweepArgs {
     /// `'{"num_reads":[64,128],"num_sweeps":[100,500]}'`. Which fields
     /// apply depends on `--backend`'s execution model: `num_reads` +
     /// `num_sweeps` for a sweeping backend (cpu-sa, cpu-gibbs, cuda,
-    /// metal), or `num_reads` + `anneal_time_us` for an annealing one
-    /// (dwave). `--hardness` (from `CommonArgs`) is not used by this mode
+    /// metal, beit), or `num_reads` + `anneal_time_us` for an annealing one
+    /// (dwave, cuopt). `--hardness` (from `CommonArgs`) is not used by this mode
     /// — cell parameters come entirely from this grid instead of a
     /// hardness curve. Required from `--param-grid` or `--config`.
     #[arg(long, value_parser = parse_param_grid_arg)]

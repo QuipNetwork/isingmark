@@ -8,14 +8,14 @@
 //! bounds. `hardness = 0.0` lands exactly on the curve minimum and
 //! `hardness = 1.0` lands exactly on the curve maximum.
 
-/// Backend execution model. `Sweeping` backends (CPU SA/Gibbs, CUDA, Metal)
-/// are driven by `num_reads`/`num_sweeps`; `Annealing` backends (D-Wave) are
-/// driven by `num_reads`/`anneal_time_us`.
+/// Backend execution model. `Sweeping` backends (CPU SA/Gibbs, CUDA, Metal,
+/// BEIT) are driven by `num_reads`/`num_sweeps`; `Annealing` backends (D-Wave,
+/// cuOpt) are driven by `num_reads`/`anneal_time_us`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {
-    /// CPU SA/Gibbs, CUDA, Metal: reads + sweeps.
+    /// CPU SA/Gibbs, CUDA, Metal, BEIT: reads + sweeps.
     Sweeping,
-    /// D-Wave: reads + anneal time.
+    /// D-Wave, cuOpt: reads + anneal time.
     Annealing,
 }
 

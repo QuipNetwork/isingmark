@@ -127,7 +127,9 @@ Prefer deleting `.cargo/config.toml` when you are not co-developing upstream.
 | `reproducibility` | Two-sample KS on two identical-problem batches |
 | `compare` | Post-hoc KS on two JSONL result files (no miner spawn) |
 
-Built-in backends: `cpu-sa`, `cpu-gibbs`, `cuda`, `metal`, `dwave`.
+Built-in backends: `cpu-sa`, `cpu-gibbs`, `cuda`, `metal`, `dwave`, `beit`, `cuopt`.
+
+`beit` (`quip-beit-sa`) and `cuopt` (`quip-cuopt-milp`) are not published as release assets, so `tools/fetch-miners.sh` cannot supply them. Build them from `quip.network/ising-solver-beit` (Rust) and `quip.network/ising-solver-nvidia` (Python), then put the binaries on `PATH`. Both need an external resource to run jobs: `beit` needs `BEIT_CUSTOMER_KEY` and bills per sample, `cuopt` needs a self-hosted cuOpt server.
 
 ## License
 
