@@ -188,7 +188,10 @@ pub struct TttReport {
 /// output directory or any file cannot be written.
 pub async fn run_ttt(cfg: &TttConfig) -> Result<TttReport, ModeError> {
     let spec = cfg.topology.load()?;
-    let backend = resolve_backend(cfg)?;
+    // The miner opens its device before any job arrives, so the kernel
+    // capacity must be on its argv, derived from the topology we are about
+    // to run.
+    let backend = resolve_backend(cfg)?.with_node_capacity(spec.nodes.len());
     validate_targets(&cfg.energy_targets_milli)?;
 
     std::fs::create_dir_all(&cfg.output_dir).map_err(ModeError::Io)?;

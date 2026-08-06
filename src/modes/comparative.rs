@@ -246,7 +246,10 @@ pub async fn run_comparative(cfg: &ComparativeConfig) -> Result<(Vec<JobRecord>,
         return Err(ModeError::InvalidMaxIterations);
     }
     let spec = cfg.topology.load()?;
-    let backend = resolve_backend(cfg)?;
+    // The miner opens its device before any job arrives, so the kernel
+    // capacity must be on its argv, derived from the topology we are about
+    // to run.
+    let backend = resolve_backend(cfg)?.with_node_capacity(spec.nodes.len());
 
     let jsonl = read_jsonl(&cfg.target_file)
         .map_err(|e| ModeError::TargetFileUnreadable(cfg.target_file.clone(), e))?;

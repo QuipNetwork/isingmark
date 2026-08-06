@@ -238,7 +238,10 @@ pub struct SweepReport {
 /// cannot be written.
 pub async fn run_sweep(cfg: &SweepConfig) -> Result<SweepReport, ModeError> {
     let spec = cfg.topology.load()?;
-    let backend = resolve_backend(cfg)?;
+    // The miner opens its device before any job arrives, so the kernel
+    // capacity must be on its argv, derived from the topology we are about
+    // to run.
+    let backend = resolve_backend(cfg)?.with_node_capacity(spec.nodes.len());
     let cells = build_cells(&cfg.grid, backend.kind, &cfg.backend)?;
 
     std::fs::create_dir_all(&cfg.output_dir).map_err(ModeError::Io)?;
