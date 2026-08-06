@@ -98,10 +98,26 @@ const BUILTINS: &[BuiltinEntry] = &[
         bin_name: "quip-dwave-qa",
         kind: BackendKind::Annealing,
     },
+    BuiltinEntry {
+        name: "beit",
+        bin_name: "quip-beit-sa",
+        kind: BackendKind::Sweeping,
+    },
+    // cuOpt solves each job as a MILP under a time budget carried on the
+    // wire as `anneal_time_us`, with the same per-job/`SetTarget`/built-in
+    // default precedence as `quip-dwave-qa`. It accepts `num_reads` only for
+    // protocol parity — there is no MILP batch mode, so one solve returns one
+    // incumbent — which makes `Annealing` (reads + anneal time) the execution
+    // model that drives it, despite the solver itself being deterministic.
+    BuiltinEntry {
+        name: "cuopt",
+        bin_name: "quip-cuopt-milp",
+        kind: BackendKind::Annealing,
+    },
 ];
 
 /// Build the registry of built-in backends (`cpu-sa`, `cpu-gibbs`, `cuda`,
-/// `metal`, `dwave`), resolving each binary from `$PATH`.
+/// `metal`, `dwave`, `beit`, `cuopt`), resolving each binary from `$PATH`.
 ///
 /// A backend whose binary is not on `$PATH` still gets an entry: `bin` falls
 /// back to the bare binary name, so [`probe_capabilities`]/[`probe_check`]
@@ -225,7 +241,7 @@ mod tests {
     /// `Sweeping`) fails a specific assertion rather than being masked by a
     /// coincidental match.
     #[test]
-    fn builtin_registry_has_the_five_expected_entries_in_order() {
+    fn builtin_registry_has_the_seven_expected_entries_in_order() {
         let registry = builtin_registry();
         let actual: Vec<(&str, &str, BackendKind)> = registry
             .iter()
@@ -245,6 +261,8 @@ mod tests {
                 ("cuda", "quip-cuda-sa", BackendKind::Sweeping),
                 ("metal", "quip-metal-sa", BackendKind::Sweeping),
                 ("dwave", "quip-dwave-qa", BackendKind::Annealing),
+                ("beit", "quip-beit-sa", BackendKind::Sweeping),
+                ("cuopt", "quip-cuopt-milp", BackendKind::Annealing),
             ]
         );
     }

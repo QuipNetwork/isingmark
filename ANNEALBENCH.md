@@ -70,6 +70,8 @@ Backends are miner binaries invoked with `--quip-coordinator unix://...` and `--
 | `cuda` | `quip-cuda-sa` | Sweeping |
 | `metal` | `quip-metal-sa` | Sweeping |
 | `dwave` | `quip-dwave-qa` | Annealing (`num_reads` + `anneal_time_us`) |
+| `beit` | `quip-beit-sa` | Sweeping |
+| `cuopt` | `quip-cuopt-milp` | Annealing |
 
 ## Benchmark modes
 
