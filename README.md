@@ -40,7 +40,7 @@ cargo build --release --features plot
 
 `beit` is cloud-only. AWS bills each job. The BEIT sampler caps a problem at
 5,000 non-zero coefficients, so `beit` cannot run `advantage2-system1`. Use
-the `chimera-c8-16-4` or `zephyr-460` topology fixtures instead. Wall-clock
+the `chimera-c8-16-4` or `zephyr-538` topology fixtures instead. Wall-clock
 for `beit` includes the network round-trip, so compare `beit` to local
 backends on solution quality only, not on timing.
 

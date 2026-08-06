@@ -77,9 +77,9 @@ fn chimera_c8_16_4_fixture_structure_and_beit_cap() {
 }
 
 #[test]
-fn zephyr_460_fixture_is_induced_advantage2_subgraph_under_beit_cap() {
+fn zephyr_538_fixture_is_induced_advantage2_subgraph_under_beit_cap() {
     let parent = load_fixture("advantage2-system1").expect("advantage2-system1 fixture parses");
-    let sub = load_fixture("zephyr-460").expect("zephyr-460 fixture parses");
+    let sub = load_fixture("zephyr-538").expect("zephyr-538 fixture parses");
 
     assert!(
         sub.edges.len() + sub.nodes.len() <= BEIT_MAX_NONZERO_COEFFICIENTS,
@@ -95,17 +95,17 @@ fn zephyr_460_fixture_is_induced_advantage2_subgraph_under_beit_cap() {
     for &n in &sub.nodes {
         assert!(
             parent_nodes.contains(&n),
-            "zephyr-460 node {n} is absent from advantage2-system1"
+            "zephyr-538 node {n} is absent from advantage2-system1"
         );
     }
     for &(u, v) in &sub.edges {
         assert!(
             parent_edges.contains(&(u, v)),
-            "zephyr-460 edge ({u}, {v}) is absent from advantage2-system1"
+            "zephyr-538 edge ({u}, {v}) is absent from advantage2-system1"
         );
         assert!(
             sub_nodes.contains(&u) && sub_nodes.contains(&v),
-            "zephyr-460 edge ({u}, {v}) endpoints must both be selected nodes"
+            "zephyr-538 edge ({u}, {v}) endpoints must both be selected nodes"
         );
     }
 
@@ -119,7 +119,7 @@ fn zephyr_460_fixture_is_induced_advantage2_subgraph_under_beit_cap() {
     let actual_edges: std::collections::HashSet<(u32, u32)> = sub.edges.iter().copied().collect();
     assert_eq!(
         actual_edges, expected_induced,
-        "zephyr-460 edge set must equal the induced subgraph of the selected nodes"
+        "zephyr-538 edge set must equal the induced subgraph of the selected nodes"
     );
 }
 

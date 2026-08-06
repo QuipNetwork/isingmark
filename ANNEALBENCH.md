@@ -75,7 +75,7 @@ Backends are miner binaries invoked with `--quip-coordinator unix://...` and `--
 
 `beit` is cloud-only. AWS bills each job. The BEIT sampler caps a problem at
 5,000 non-zero coefficients, so `beit` cannot run `advantage2-system1`. Use
-`chimera-c8-16-4` or `zephyr-460` instead. Wall-clock for `beit` includes the
+`chimera-c8-16-4` or `zephyr-538` instead. Wall-clock for `beit` includes the
 network round-trip, so compare `beit` to local backends on solution quality
 only, not on timing.
 
@@ -182,7 +182,7 @@ Modes that refuse to overwrite refuse a non-empty existing `records.jsonl` befor
 
 ## Topology format
 
-JSON `TopologySpec`: nodes, edges, allowed h/J/spin milli ranges, optional gates. Bundled fixtures live under `fixtures/` (`smoke.spec.json`, `advantage2-system1.spec.json`, `chimera-c8-16-4.spec.json`, `zephyr-460.spec.json`). The two smaller graphs stay under the BEIT 5,000 non-zero coefficient cap (`edges + nodes`). Load with `--topology-preset NAME` or `--topology-file PATH`.
+JSON `TopologySpec`: nodes, edges, allowed h/J/spin milli ranges, optional gates. Bundled fixtures live under `fixtures/` (`smoke.spec.json`, `advantage2-system1.spec.json`, `chimera-c8-16-4.spec.json`, `zephyr-538.spec.json`). The two smaller graphs stay under the BEIT 5,000 non-zero coefficient cap (`edges + nodes`). Load with `--topology-preset NAME` or `--topology-file PATH`.
 
 ## Problem generation
 
