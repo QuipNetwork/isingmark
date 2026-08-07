@@ -1,5 +1,13 @@
 # Backend notes
 
+What each registered backend does in practice, including limits its own
+`--capabilities` output does not report. The registry in
+`src/backend/registry.rs` lists what isingmark can drive.
+
+Every measured number here was re-taken on 2026-08-07 unless the text says
+otherwise. `beit` is the exception: it has never run, because it needs a paid
+key and cannot accept a chain-scale problem anyway.
+
 ## Topology fixtures
 
 `--topology-preset <name>` loads `fixtures/<name>.spec.json`.
@@ -159,12 +167,84 @@ with Client.from_config(token=...) as c:
     print(s.properties["h_range"], s.properties["per_group_coupling_range"])
 ```
 
-`quip-cuda-sa` caps at 5000 nodes and cannot run `pegasus-p16`.
+`quip-cuda-sa` defaults to 5000 nodes, but isingmark passes the topology's own
+node count through `--max-nodes`, so the default is not a ceiling. Both
+`pegasus-p16` (5640 nodes) and `advantage-system6` (5612) ran on `cuda` in the
+2026-08-07 round. The real limit is the card's memory, and the miner reports
+an error rather than failing quietly when a problem does not fit.
 
-Measured behaviour of each registered backend. The registry in
-`src/backend/registry.rs` lists what isingmark can drive. This file records
-what each backend does in practice, including limits that the backend's own
-`--capabilities` output does not report.
+## Measured throughput
+
+Measured 2026-08-07. Read "Measurement conditions" below before comparing any
+of these numbers to anything measured elsewhere.
+
+### h0 against fields, on one graph
+
+`chain-h0` and `advantage2-system1` are the same 4577-node Advantage2 working
+graph. One draws `h` from `{0}`, the other from `{-1, 0, +1}`. Nothing else
+differs. Throughput mode, 60 s, hardness 0.5, which resolves to `num_reads`
+36 and `num_sweeps` 550.
+
+| Backend | h0 jobs/min | h0 median energy | fields jobs/min | fields median energy |
+|---|---|---|---|---|
+| `cuda-gibbs` | 184.0 | -14274000 | 181.6 | -14741000 |
+| `cpu-sa` | 91.6 | -14268000 | 75.8 | -14728000 |
+| `cuda` | 72.7 | -14267000 | 70.9 | -14730000 |
+| `cpu-gibbs` | 44.3 | -14272000 | 38.1 | -14734500 |
+
+Adding fields moves the median energy about 460000 milli lower, near 3.2
+percent, for every backend. Throughput barely moves. The field regime is
+easier, not faster: the solver gains 2998 field terms it can satisfy
+greedily, and reaches deeper energy on a problem that is not harder to
+compute.
+
+That is the practical reason to benchmark at h0, and it also sizes the hazard
+in replaying an h0 corpus against a fields topology. Doing so would report
+energies about 3 percent better than the real problem allows.
+
+### Size ladder, h0 regime
+
+Throughput mode, 30 s, hardness 0.5.
+
+| Topology | Nodes | `cpu-sa` jobs/min | `cuda` jobs/min |
+|---|---|---|---|
+| `smoke-h0` | 8 | 2890.6 | 182.2 |
+| `cuopt-small-h0` | 128 | 1771.2 | 185.7 |
+| `common-small-h0` | 548 | 568.5 | 184.0 |
+| `chimera-c8-16-4-h0` | 1024 | 426.7 | 180.2 |
+| `advantage-system6-h0` | 5612 | 79.3 | 64.0 |
+| `pegasus-p16-h0` | 5640 | 67.9 | 55.9 |
+
+**The `cuda` column below 5000 nodes measures the harness, not the GPU.**
+Throughput mode spawns a fresh miner session per 8-job batch. At 8 nodes
+`cuda` reports 209 ms of wall per job against 10 ms of device time, so 95
+percent of that wall is process spawn and kernel setup. The near-constant 180
+jobs per minute across four problem sizes is the batch cadence, not GPU
+throughput. Use `sweep` with a large `--num-jobs` to measure a GPU backend at
+small sizes.
+
+At chain scale the same runs become compute-bound and the comparison means
+something. Device time per job at 4577 nodes: `cuda-gibbs` 1057 ms, `cpu-sa`
+4199 ms, `cuda` 5250 ms, `cpu-gibbs` 8128 ms. `cuda-gibbs` is the fastest
+backend at that size by a factor of four, and `cuda` simulated annealing is
+slower than `cpu-sa` on this host.
+
+### Measurement conditions
+
+The 2026-08-07 round ran on `finney`: 32 cores, 2 NVIDIA RTX A4000, 125.7 GiB
+RAM. **Load average ran between 44 and 92 for the whole round.** Other users'
+long-running jobs held roughly 14 of the 32 cores throughout.
+
+CPU numbers are depressed and noisy in absolute terms. Comparisons
+within the round hold, because every backend saw the same contention. Do not
+compare them against numbers measured on an idle host. The `cpu-sa` figure
+that moved from 55 ms to 254 ms per job between rounds is contention, not a
+regression.
+
+GPU numbers are cleaner. Both cards were idle apart from these runs.
+
+Reproduce with the scripts recorded in `out/rerun-2026-08-07/run.log` and
+`sweep.log`.
 
 ## cuopt (quip-cuopt-milp)
 
@@ -174,40 +254,76 @@ not reflect what the backend delivers.
 
 ### Measured results
 
-Tested on induced subgraphs of `fixtures/advantage2-system1.spec.json`, with
-`num_reads: 36` and cuOpt server 26.06 on an NVIDIA RTX A4000.
+Two measurement rounds, both with `num_reads: 36` and cuOpt server 26.06 on an
+NVIDIA RTX A4000. The 2026-08-06 round used ad-hoc induced subgraphs of the
+Advantage2 graph. The 2026-08-07 round used the committed fixtures and a 10
+second time limit.
 
-| Nodes | Edges | Jobs passed |
-|---|---|---|
-| 8 | 8 | 128 of 128 |
-| 128 | 749 | 3 of 3 |
-| 192 | 1270 | 2 of 2 |
-| 256 | 1710 | 1 of 2 |
-| 320 | 2298 | 2 of 2 |
-| 384 | 2887 | 0 of 2 |
-| 448 | 3345 | 1 of 2 |
-| 548 | 4247 | 0 of 6 |
+| Nodes | Edges | 2026-08-06 | 2026-08-07 |
+|---|---|---|---|
+| 8 | 8 | 128 of 128 | 32 of 32 |
+| 128 | 749 | 3 of 3 | 3 of 3 |
+| 192 | 1270 | 2 of 2 | not retested |
+| 256 | 1710 | 1 of 2 | not retested |
+| 320 | 2298 | 2 of 2 | not retested |
+| 384 | 2887 | 0 of 2 | not retested |
+| 448 | 3345 | 1 of 2 | not retested |
+| 548 | 4247 | **0 of 6** | **5 of 6** |
 
-That table shows no size ceiling. 320 nodes passes cleanly while both 256 and
-384 fail, so the failure is per job rather than per size. The rate
-rises with node count, and 548 failed every try at time limits of 1, 10
-and 60 seconds and at `CUOPT_GIGABYTES_PER_PROC` of both 1 and 10.
+**The 548-node result reversed.** Same size, same parameters, same server
+version, a restarted server process: 0 of 6 became 5 of 6. The one failure was
+`OVERLOADED`, the same code the earlier round saw on every job.
 
-`fixtures/cuopt-small.spec.json` holds the 128-node case, the largest size
-that passed every try.
+That settles the reading of the first table. No size ceiling exists, and no
+size makes the backend reliably fail. Failures are per job,
+they come and go across server restarts, and a small sample at one size says
+almost nothing. The intermediate sizes were ad-hoc subgraphs with no committed
+fixture, so they were not re-measured.
+
+Six jobs is a small sample. Treat 5 of 6 as "sometimes works at 548", not as a
+rate.
+
+`fixtures/cuopt-small.spec.json` holds the 128-node case, which has passed
+every try in both rounds.
 
 ### Quality and speed
 
-At 128 nodes, `cuopt` takes 20.6 s per job. `cpu-sa` takes 55 ms per job on
-the same problems and finds lower energy on all three. `cuopt` is 374 times
-slower and gives worse results, on the size where it is most reliable.
+Measured 2026-08-07 with `num_reads: 36`, a 10 second cuOpt time limit, and
+`num_sweeps: 550` for `cpu-sa`. Both backends saw the same fixtures.
+
+| Nodes | Backend | Wall per job | Passed | Median energy (milli) |
+|---|---|---|---|---|
+| 128 | `cuopt` | 22.99 s | 3 of 3 | -313 |
+| 128 | `cpu-sa` | 0.254 s | 200 of 200 | -323 |
+| 548 | `cuopt` | 27.53 s | 5 of 6 | -803 |
+| 548 | `cpu-sa` | 1.019 s | 200 of 200 | -1618 |
+
+`cuopt` is 90 times slower at 128 nodes and 27 times slower at 548. The
+earlier round reported 374 times at 128 nodes. `cuopt` did not get faster
+between the rounds (20.6 s then, 22.99 s now). `cpu-sa` got slower, from
+55 ms to 254 ms, because the 2026-08-07 round ran on a heavily loaded host.
+See "Measurement conditions" below. Use the ratio as an order of magnitude,
+not a figure.
+
+Quality separates the two sizes. At 128 nodes `cuopt` is close, about 3
+percent above `cpu-sa`'s median. At 548 nodes it reaches -803 against -1618,
+roughly half the depth. The gap widens with problem size, which is what the
+relaxation below predicts.
 
 cuOpt solves a mixed integer linear program. The miner converts the Ising
-problem with a Fortet linearization, which gives a weak relaxation. On the
-548-node problem the root relaxation objective is -4247 milli-units. The best
-known energy from simulated annealing is -1665 milli-units. The bound starts
-about 2.5 times away from the optimum, with 547 integer-infeasible variables.
-The reported gap stays above 600 percent.
+problem with a Fortet linearization, which gives a weak relaxation. Measured
+`mip_gap` and bound:
+
+| Nodes | `mip_gap` | Solution bound | Best known from SA | Bound distance |
+|---|---|---|---|---|
+| 8 | 0.0 | -11 | -13 | solved to optimality |
+| 128 | 1.13 | -618 | -345 | 1.8 times |
+| 548 | 6.09 | -4089 | -1663 | 2.46 times |
+
+At 548 nodes the bound starts about 2.5 times away from the best known energy
+and the gap stays above 600 percent, which both rounds agree on. At 8 nodes
+cuOpt closes the gap completely, so the formulation is correct. It does not
+scale.
 
 cuOpt has no native quadratic or QUBO mode, so the linearization is the only
 available formulation. Mixed integer linear solvers are a poor match for dense
@@ -229,6 +345,12 @@ open defects below.
 The evidence points at a reliability fault in the solver process or in the
 miner's handling of a failed poll, not at a capacity limit. It is not
 diagnosed.
+
+The 2026-08-07 round strengthens that reading. A restarted server passed 5 of
+6 jobs at the same 548 nodes that had failed 6 of 6, and the single failure
+still came back as `OVERLOADED`. Whatever the fault is, it survives across
+sizes and clears across server restarts. Nothing about the problem size
+predicts it.
 
 ### Time budget
 
