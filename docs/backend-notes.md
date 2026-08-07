@@ -7,18 +7,18 @@
 | Preset | Nodes | Edges | Purpose |
 |---|---|---|---|
 | `smoke` | 8 | 8 | Fast checks |
-| `advantage2-system1` | 4577 | 41515 | D-Wave Advantage2 (Zephyr) |
-| `advantage2-sub` | 548 | 4247 | Largest Advantage2 subgraph every backend accepts, including `beit` |
-| `advantage2-sub128` | 128 | 749 | Reproduces the `cuopt` size ceiling below |
+| `cuOpt-ceiling` | 128 | 749 | Reproduces the `cuopt` size ceiling below |
+| `common-small` | 548 | 4247 | Largest Advantage2 subgraph every backend accepts, including `beit` |
 | `chimera-c8-16-4` | 1024 | 2976 | Chimera C(8,16). The only fixture BEIT's exact solver could accept |
+| `advantage2-system1` | 4577 | 41515 | D-Wave Advantage2 (Zephyr) |
 | `pegasus-p16` | 5640 | 40484 | Ideal Pegasus P16 |
 
-`advantage2-sub` and `advantage2-sub128` are connected induced subgraphs of
+`common-small` and `cuOpt-ceiling` are connected induced subgraphs of
 `advantage2-system1`, grown breadth-first from the highest-degree node. They
 keep the original qubit identifiers, so both stay natively embeddable on
 Advantage2 hardware.
 
-`advantage2-sub` is sized to the `beit` limit. At 548 nodes and 4247 edges the
+`common-small` is sized to the `beit` limit. At 548 nodes and 4247 edges the
 worst case is 4795 non-zero coefficients, which leaves 205 spare against the
 5000 cap. The largest subgraph that fits is 579 nodes, which reaches exactly
 5000 and leaves no margin.
