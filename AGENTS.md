@@ -88,6 +88,7 @@ src/
   config.rs           YAML load and merge
   topology.rs         TopologySpec JSON load and topology hash
   problem.rs          seed -> blake3 salt -> derive_nonce -> draw_ising_milli
+  corpus.rs           replay chain-harvested nonces -> draw_ising_milli
   backend/            registry + coordinator session loop over UDS
   params.rs           hardness [0,1] -> JobParams per BackendKind
   record.rs           JobRecord JSONL and Summary JSON
@@ -112,6 +113,7 @@ Prefer deleting `.cargo/config.toml` when you are not co-developing upstream.
 
 - **Backend**: add a registry entry in `src/backend/registry.rs` pointing at a miner binary that speaks the quip session protocol. New annealers are miner binaries, not in-process adapters.
 - **Topology**: ship a JSON `TopologySpec` under `fixtures/` or pass `--topology-file`.
+- **Dataset**: ship a JSONL corpus of chain nonces under `corpora/`. Add it to `corpus::BUNDLED` paired with its fixture. Pin that fixture's `topology_hash` in `tests/topology.rs`. See `docs/datasets.md`.
 - **Mode**: add a module under `src/modes/`, a clap subcommand in `src/cli.rs`, and a branch in `src/main.rs`.
 - **Params**: edit `ParamCurve` defaults or supply `param_curve` in YAML for hardness mapping.
 
@@ -119,7 +121,7 @@ Prefer deleting `.cargo/config.toml` when you are not co-developing upstream.
 
 | Mode | Measures |
 |---|---|
-| `throughput` | Jobs per minute over a fixed duration at fixed hardness |
+| `throughput` | Jobs per minute over a fixed duration at fixed hardness. `--corpus` replays a chain dataset instead of deriving problems from `--seed`; the corpus is finite, so `--duration` becomes an upper bound |
 | `sweep` | Grid over `num_reads` x `num_sweeps` or `anneal_time_us` |
 | `comparative` | Hardness search that matches a reference energy distribution |
 | `ttt` | Time-to-target per energy level |

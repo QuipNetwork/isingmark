@@ -10,8 +10,18 @@
 | `cuopt-small` | 128 | 749 | Largest size `cuopt` passed every attempt |
 | `common-small` | 548 | 4247 | Largest Advantage2 subgraph every backend accepts, including `beit` |
 | `chimera-c8-16-4` | 1024 | 2976 | Chimera C(8,16). The only fixture BEIT's exact solver could accept |
-| `advantage2-system1` | 4577 | 41515 | D-Wave Advantage2 (Zephyr) |
+| `chain-h0` | 4577 | 41515 | Chain h0 bucket. Pairs with the `chain-h0` corpus |
+| `chain-ternary` | 4578 | 41531 | Chain ternary bucket. Pairs with the `chain-ternary` corpus |
+| `advantage2-system1` | 4577 | 41515 | D-Wave Advantage2 (Zephyr), synthetic |
 | `pegasus-p16` | 5640 | 40484 | Ideal Pegasus P16 |
+
+`chain-h0` and `chain-ternary` are the two topologies the chain has actually
+posed problems over. Each one is paired with a corpus of harvested instances
+under `corpora/`. See `docs/datasets.md`.
+
+`advantage2-system1` carries the `chain-h0` graph with the `chain-ternary`
+allowed-h set, so it hashes to neither chain bucket and cannot replay either
+corpus. It stays as a synthetic benchmark topology.
 
 `common-small` and `cuopt-small` are connected induced subgraphs of
 `advantage2-system1`, grown breadth-first from the highest-degree node. They

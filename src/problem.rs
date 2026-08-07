@@ -28,6 +28,7 @@ const BENCHMARK_LAST_PROOF: [u8; 32] = [0u8; 32];
 /// Deterministic source of `count` `PoW` jobs over a topology, keyed by
 /// `seed`: the same `(seed, spec)` pair always yields the same sequence of
 /// jobs, in the same order, across instances and processes.
+#[derive(Debug)]
 pub struct ProblemSource {
     spec: TopologySpec,
     miner_account: [u8; 32],

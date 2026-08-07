@@ -36,6 +36,7 @@ fn base_config(output_dir: PathBuf) -> ThroughputConfig {
         param_curve: DEFAULT_PARAM_CURVE,
         duration_s: 1.2,
         seed: 42,
+        corpus: None,
         output_dir,
         backend_bin_override: Some(fake_miner_bin()),
         backend_args_override: None,
@@ -415,4 +416,170 @@ async fn quip_cpu_sa_throughput_conformance() {
         jobs_per_min > 0.0,
         "jobs_per_min must be positive, got {jobs_per_min}"
     );
+}
+
+/// Two nonces from the bundled `chain-h0` corpus. Used with the `smoke`
+/// topology through a file path, which skips the bundled-name pairing check
+/// so the wiring can be tested without drawing a 4577-node problem per job.
+const CORPUS_NONCE_A: &str = "0cf67b0f85e37ddd3dda2ac11685c7ad857d069eda939ae3f2d6d93e3d5b8864";
+const CORPUS_NONCE_B: &str = "22681ca9153f4f30a0d5af9da319e2b93848c182a7584a541d52db2214a08d54";
+
+fn write_corpus(dir: &std::path::Path, nonces: &[&str]) -> PathBuf {
+    use std::fmt::Write as _;
+
+    let path = dir.join("corpus.jsonl");
+    let text = nonces.iter().fold(String::new(), |mut out, n| {
+        let _ = writeln!(out, "{{\"nonce\":\"{n}\"}}");
+        out
+    });
+    std::fs::write(&path, text).expect("write corpus");
+    path
+}
+
+/// A corpus run must dispatch exactly the instances the corpus names, and
+/// nothing else. The seed is left at its base value to prove it no longer
+/// drives which problems are drawn.
+#[tokio::test]
+async fn hermetic_throughput_corpus_run_dispatches_exactly_the_corpus_instances() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let corpus = write_corpus(dir.path(), &[CORPUS_NONCE_A, CORPUS_NONCE_B]);
+    let cfg = ThroughputConfig {
+        // Far longer than the corpus can fill, so the run can only end by
+        // exhausting the corpus.
+        duration_s: 60.0,
+        corpus: Some(corpus.display().to_string()),
+        ..base_config(dir.path().to_path_buf())
+    };
+
+    let report = run_throughput(&cfg).await.expect("corpus run succeeds");
+
+    assert!(report.handshake_ok);
+    let ids: Vec<&str> = report.records.iter().map(|r| r.job_id.as_str()).collect();
+    assert_eq!(
+        ids,
+        vec![CORPUS_NONCE_A, CORPUS_NONCE_B],
+        "a corpus run must replay its instances once each, in file order"
+    );
+    assert!(
+        report.run_wall_ms < 60_000,
+        "the run must end on corpus exhaustion, not on the 60s duration"
+    );
+}
+
+/// The summary has to say which problems a run saw. Without this, a corpus
+/// run and a seeded run at the same topology are indistinguishable on disk.
+#[tokio::test]
+async fn hermetic_throughput_corpus_run_records_its_source_in_the_summary() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let corpus = write_corpus(dir.path(), &[CORPUS_NONCE_A, CORPUS_NONCE_B]);
+    let cfg = ThroughputConfig {
+        duration_s: 60.0,
+        corpus: Some(corpus.display().to_string()),
+        ..base_config(dir.path().to_path_buf())
+    };
+
+    let _ = run_throughput(&cfg).await.expect("corpus run succeeds");
+
+    let summary = read_summary(dir.path());
+    assert_eq!(
+        summary.config["corpus"].as_str(),
+        Some(corpus.display().to_string().as_str())
+    );
+    assert_eq!(summary.config["corpus_instances"].as_u64(), Some(2));
+}
+
+/// A seeded run must keep reporting a null corpus, so an older summary and a
+/// new one stay comparable.
+#[tokio::test]
+async fn hermetic_throughput_seeded_run_reports_no_corpus() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = base_config(dir.path().to_path_buf());
+
+    let _ = run_throughput(&cfg).await.expect("seeded run succeeds");
+
+    let summary = read_summary(dir.path());
+    assert!(summary.config["corpus"].is_null());
+    assert_eq!(summary.config["job_source"].as_str(), Some("seed:42"));
+    assert!(summary.config["corpus_instances"].is_null());
+}
+
+/// A bundled corpus paired with a topology it was not drawn against must
+/// fail before any job runs. Replaying it would produce valid-looking
+/// energies for problems the chain never posed.
+#[tokio::test]
+async fn hermetic_throughput_rejects_a_bundled_corpus_on_the_wrong_topology() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = ThroughputConfig {
+        corpus: Some("chain-h0".to_string()),
+        ..base_config(dir.path().to_path_buf())
+    };
+
+    let msg = run_throughput(&cfg)
+        .await
+        .err()
+        .map_or_else(String::new, |e| e.to_string());
+    assert!(
+        !msg.is_empty(),
+        "a mismatched corpus pairing must be rejected, but the run succeeded"
+    );
+    assert!(msg.contains("chain-h0"), "{msg}");
+    assert!(msg.contains("--topology-preset"), "{msg}");
+}
+
+/// An unknown corpus name must name the bundled ones rather than failing as
+/// a missing file.
+#[tokio::test]
+async fn hermetic_throughput_unknown_corpus_name_lists_the_bundled_corpora() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = ThroughputConfig {
+        corpus: Some("no-such-corpus".to_string()),
+        ..base_config(dir.path().to_path_buf())
+    };
+
+    let msg = run_throughput(&cfg)
+        .await
+        .err()
+        .map_or_else(String::new, |e| e.to_string());
+    assert!(
+        !msg.is_empty(),
+        "an unknown corpus must be rejected, but the run succeeded"
+    );
+    assert!(
+        msg.contains("chain-h0") && msg.contains("chain-ternary"),
+        "{msg}"
+    );
+}
+
+/// The bundled corpus against the 4577-node topology it is paired with,
+/// through the whole dispatch loop. The other corpus tests use the `smoke`
+/// topology for speed, so this is the only one that proves a real chain
+/// instance draws and dispatches at its real size.
+#[tokio::test]
+async fn hermetic_throughput_replays_the_bundled_chain_h0_corpus() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = ThroughputConfig {
+        topology: TopologyRef::Preset("chain-h0".to_string()),
+        corpus: Some("chain-h0".to_string()),
+        duration_s: 0.001,
+        ..base_config(dir.path().to_path_buf())
+    };
+
+    let report = run_throughput(&cfg).await.expect("corpus run succeeds");
+
+    assert!(report.handshake_ok);
+    assert!(!report.records.is_empty());
+    let summary = read_summary(dir.path());
+    assert_eq!(summary.topology.name, "chain-h0");
+    assert_eq!(summary.topology.num_nodes, 4577);
+    assert_eq!(summary.config["corpus_instances"].as_u64(), Some(4658));
+
+    // Every dispatched job_id must be a real nonce from the corpus file.
+    let corpus = std::fs::read_to_string("corpora/chain-h0.jsonl").expect("corpus is readable");
+    for record in &report.records {
+        assert!(
+            corpus.contains(&record.job_id),
+            "job_id {} is not a nonce in the bundled corpus",
+            record.job_id
+        );
+    }
 }
