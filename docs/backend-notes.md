@@ -10,6 +10,7 @@
 | `advantage2-system1` | 4577 | 41515 | D-Wave Advantage2 (Zephyr) |
 | `advantage2-sub` | 548 | 4247 | Largest Advantage2 subgraph every backend accepts, including `beit` |
 | `advantage2-sub128` | 128 | 749 | Reproduces the `cuopt` size ceiling below |
+| `chimera-c8-16-4` | 1024 | 2976 | Chimera C(8,16). The only fixture BEIT's exact solver could accept |
 | `pegasus-p16` | 5640 | 40484 | Ideal Pegasus P16 |
 
 `advantage2-sub` and `advantage2-sub128` are connected induced subgraphs of
@@ -21,6 +22,16 @@ Advantage2 hardware.
 worst case is 4795 non-zero coefficients, which leaves 205 spare against the
 5000 cap. The largest subgraph that fits is 579 nodes, which reaches exactly
 5000 and leaves no margin.
+
+`chimera-c8-16-4` is a complete Chimera C(8,16) graph: 128 unit cells of
+K(4,4), so 1024 nodes, 2048 intra-cell edges and 928 inter-cell edges. Node
+degree is 6 inside the grid and 5 at the edges. The worst case is 4000
+non-zero coefficients, which leaves 1000 spare against the BEIT cap.
+
+It is the one fixture shaped for BEIT's exact solver, which accepts Chimera
+only and at most 8 by 16 unit cells. `quip-beit-sa` wraps the heuristic
+`BEITUnconstrainedSampler` and not the exact `BEITSolver`, so nothing drives
+that solver today. The fixture is what a comparison against it would need.
 
 `pegasus-p16` comes from `dwave_networkx.pegasus_graph(16)` with node
 identifiers remapped to `0..5639`. It is an ideal graph. A real
