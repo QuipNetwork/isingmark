@@ -23,8 +23,43 @@ The corpora are in `corpora/`, the topologies in `fixtures/`. Both came from
 them by `topology_hash`. Every instance verified against its block.
 
 The two buckets are different graphs, not one graph under two field settings.
-`chain-ternary` has one more node (id 4189) and 16 more edges. The h0 bucket
-carries the alias `chain-default` upstream.
+`chain-ternary` is exactly `chain-h0` plus qubit 4189 and the 16 couplers that
+touch it. The h0 bucket carries the alias `chain-default` upstream.
+
+## `chain-h0` is the machine
+
+`chain-h0` matches the `Advantage2_system1` working graph exactly, as read
+from the live solver on 2026-08-07: 4577 qubits and 41515 couplers, node for
+node and coupler for coupler. Nothing needs embedding to run it.
+
+`advantage2-system1` is the same working graph with ternary fields instead of
+`[0]`. The two are the h0 and non-h0 pair for that machine.
+
+## The ternary corpus has a retired qubit
+
+**Qubit 4189 is no longer in the Advantage2_system1 working set.** It was
+alive when the ternary bucket was harvested and calibration has since retired
+it. `chain-ternary` is not natively embeddable on the machine today.
+
+This blocks a QPU run against the ternary corpus. Both ways out change the
+problem:
+
+- Drop 4189 and its 16 couplers. That is a different graph, so a different
+  `topology_hash`, so the drawn problems no longer match the corpus.
+- Minor-embed 4189 onto a chain of physical qubits. That changes the energy
+  scale and adds chain-break post-processing.
+
+The `chain-h0` corpus is unaffected. Prefer it for any comparison that has to
+run on hardware.
+
+Re-check before a QPU run, because the working set moves with calibration:
+
+```python
+from dwave.cloud import Client
+with Client.from_config(token=...) as c:
+    s = [x for x in c.get_solvers() if x.id.startswith("Advantage2_system1")][0]
+    print(sorted(set(json.load(open("fixtures/chain-ternary.spec.json"))["nodes"]) - set(s.nodes)))
+```
 
 Each corpus is ranked hardest first, by the lowest energy any miner achieved:
 
@@ -83,10 +118,11 @@ or the replayed problems are not the ones the chain recorded
 A corpus loaded from a path declares no pairing, so that check does not apply.
 Pairing it correctly is the caller's job.
 
-`advantage2-system1` is not a chain bucket. It holds the `chain-h0` graph with
-the `chain-ternary` allowed-h set, so it hashes to neither, and it cannot
-replay either corpus. It stays as a synthetic benchmark topology.
-`tests/topology.rs` pins all three hashes.
+`advantage2-system1` is not a chain bucket. It is the real Advantage2 working
+graph, the same one `chain-h0` carries, but with ternary fields. The chain
+never posed ternary-field problems over this graph, so it hashes to neither
+bucket and cannot replay either corpus. `tests/topology.rs` pins all three
+hashes.
 
 ## A corpus run ends when the corpus does
 
@@ -119,10 +155,24 @@ the hash to `chain_fixtures_hash_to_their_recorded_bucket` in
 `tests/topology.rs`. That test is what catches a bucket copied to the wrong
 name.
 
+## The h0 regime
+
+`h = 0` is the regime worth measuring, and it is the one the chain's hardest
+bucket uses. With no local fields the problem is a pure spin glass. The ground
+state comes entirely from frustration among the couplings, and no field biases
+a spin toward an easy answer. Adding fields hands a solver terms it can satisfy
+greedily, which makes an instance easier.
+
+Every bundled graph ships an `-h0` variant, so the h0 regime is available at
+every scale rather than only at chain scale. See "The h0 regime" in
+`docs/backend-notes.md` for the full list and for how `extends` works.
+
 ## Limits
 
 - Only `throughput` mode reads `--corpus` today. The other modes derive from a
   seed.
+- `chain-ternary` cannot run natively on `Advantage2_system1` anymore. See the
+  retired-qubit section above.
 - `quip-cuda-sa` and `quip-cuda-gibbs` cap below 4577 nodes by default. Raise
   the cap with `--max-nodes`, up to what the card's memory allows. See
   `docs/backend-notes.md`.

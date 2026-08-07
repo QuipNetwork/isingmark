@@ -4,28 +4,50 @@
 
 `--topology-preset <name>` loads `fixtures/<name>.spec.json`.
 
-| Preset | Nodes | Edges | Purpose |
-|---|---|---|---|
-| `smoke` | 8 | 8 | Fast checks |
-| `cuopt-small` | 128 | 749 | Largest size `cuopt` passed every attempt |
-| `common-small` | 548 | 4247 | Largest Advantage2 subgraph every backend accepts, including `beit` |
-| `chimera-c8-16-4` | 1024 | 2976 | Chimera C(8,16). The only fixture BEIT's exact solver could accept |
-| `chain-h0` | 4577 | 41515 | Chain h0 bucket. Pairs with the `chain-h0` corpus |
-| `chain-ternary` | 4578 | 41531 | Chain ternary bucket. Pairs with the `chain-ternary` corpus |
-| `advantage2-system1` | 4577 | 41515 | D-Wave Advantage2 (Zephyr), synthetic |
-| `pegasus-p16` | 5640 | 40484 | Ideal Pegasus P16 |
+| Preset | Nodes | Edges | `allowed_h_milli` | Purpose |
+|---|---|---|---|---|
+| `smoke` | 8 | 8 | ternary | Fast checks |
+| `cuopt-small` | 128 | 749 | ternary | Largest size `cuopt` passed every try |
+| `common-small` | 548 | 4247 | ternary | Largest Advantage2 subgraph every backend accepts, including `beit` |
+| `chimera-c8-16-4` | 1024 | 2976 | ternary | Chimera C(8,16). The only fixture BEIT's exact solver could accept |
+| `chain-h0` | 4577 | 41515 | `[0]` | Advantage2_system1 working graph. Pairs with the `chain-h0` corpus |
+| `advantage2-system1` | 4577 | 41515 | ternary | The same working graph with fields. `extends: chain-h0` |
+| `chain-ternary` | 4578 | 41531 | ternary | Older Advantage2 graph. Pairs with the `chain-ternary` corpus |
+| `advantage-system6` | 5612 | 40088 | ternary | Advantage_system6 working graph (Pegasus) |
+| `pegasus-p16` | 5640 | 40484 | ternary | Ideal Pegasus P16 |
+
+Every one of those graphs also ships an `-h0` variant with
+`allowed_h_milli: [0]`. See "The h0 regime" below.
 
 `chain-h0` and `chain-ternary` are the two topologies the chain has actually
 posed problems over. Each one is paired with a corpus of harvested instances
 under `corpora/`. See `docs/datasets.md`.
 
-`advantage2-system1` carries the `chain-h0` graph with the `chain-ternary`
-allowed-h set, so it hashes to neither chain bucket and cannot replay either
-corpus. It stays as a synthetic benchmark topology.
+### Which fixtures are real machines
 
-`common-small` and `cuopt-small` are connected induced subgraphs of
-`advantage2-system1`, grown breadth-first from the highest-degree node. They
-keep the original qubit identifiers, so both stay natively embeddable on
+`chain-h0` and `advantage-system6` were read from the live QPUs on 2026-08-07
+through `dwave.cloud`. Each one is an exact working graph, qubit for qubit and
+coupler for coupler:
+
+| Fixture | Solver | Topology | Nominal qubits | Working |
+|---|---|---|---|---|
+| `chain-h0` | `Advantage2_system1` | Zephyr [12, 4] | 4800 | 4577 |
+| `advantage-system6` | `Advantage_system6` | Pegasus [16] | 5760 | 5612 |
+
+`advantage2-system1` is the same `Advantage2_system1` working graph as
+`chain-h0`, carrying ternary fields instead of `[0]`. The two are the h0 and
+non-h0 pair for that machine. It declares `extends: chain-h0` so one graph
+cannot drift away from the other. Its `topology_hash` matches neither chain
+bucket, because the chain never posed ternary-field problems over this graph,
+so it cannot replay either corpus.
+
+`pegasus-p16` is an ideal `dwave_networkx.pegasus_graph(16)` with identifiers
+remapped to `0..5639`. It matches no real machine. Prefer
+`advantage-system6` for anything meant to run on Pegasus hardware.
+
+`common-small` and `cuopt-small` are connected induced subgraphs of the
+Advantage2 working graph, grown breadth-first from the highest-degree node.
+They keep the original qubit identifiers, so both stay natively embeddable on
 Advantage2 hardware.
 
 `common-small` is sized to the `beit` limit. At 548 nodes and 4247 edges the
@@ -44,10 +66,98 @@ only and at most 8 by 16 unit cells. `quip-beit-sa` wraps the heuristic
 that solver today. The fixture is what a comparison against it would need.
 
 `pegasus-p16` comes from `dwave_networkx.pegasus_graph(16)` with node
-identifiers remapped to `0..5639`. It is an ideal graph. A real
-`Advantage_system1` has dead qubits, near 5436 working of 5640, so this
-fixture is not natively embeddable on any specific machine. Replace it with
-`DWaveSampler().to_networkx_graph()` output before running D-Wave.
+identifiers remapped to `0..5639`. It is an ideal graph, so it is not natively
+embeddable on any specific machine. `advantage-system6` is the real
+Pegasus graph and should be preferred for hardware runs.
+
+### The h0 regime
+
+Every graph ships an `-h0` variant that sets `allowed_h_milli: [0]` and
+changes nothing else.
+
+`h = 0` is the regime worth measuring. With no local fields the problem is a
+pure spin glass: the ground state is set entirely by frustration among the
+couplings, there is no field to bias a spin toward an easy answer, and the
+`+s` and `-s` states are degenerate. Adding fields gives a solver terms it can
+satisfy greedily, which makes an instance easier and makes engines look better
+than they are. The chain's own hardest bucket is the h0 one, so h0 is also the
+regime that matches production mining.
+
+| Base | h0 variant |
+|---|---|
+| `smoke` | `smoke-h0` |
+| `cuopt-small` | `cuopt-small-h0` |
+| `common-small` | `common-small-h0` |
+| `chimera-c8-16-4` | `chimera-c8-16-4-h0` |
+| `pegasus-p16` | `pegasus-p16-h0` |
+| `advantage-system6` | `advantage-system6-h0` |
+| `chain-ternary` | `chain-ternary-h0` |
+| `advantage2-system1` | `chain-h0` |
+
+`advantage2-system1` is the one case with no `-h0` suffix, because its h0 form
+already exists under the name `chain-h0`, which is also the corpus pairing
+name. Adding a second file for the same topology would give one graph two
+names and two chances to drift.
+
+An h0 variant is a two-line file:
+
+```json
+{"extends": "chain-ternary", "allowed_h_milli": [0]}
+```
+
+`extends` names a bundled fixture and inherits its `nodes` and `edges`. Any
+allowed-value set the variant omits is inherited too. Inheritance is one level
+deep, and a spec that sets `extends` must not also carry its own `nodes` or
+`edges`. This keeps a graph described exactly once. Duplicating it is how
+`advantage2-system1` came to hold one bucket's graph with another bucket's
+fields.
+
+## D-Wave hardware ranges
+
+Read from the live solvers on 2026-08-07. Reading solver properties costs no
+QPU time.
+
+| Property | `Advantage2_system1` | `Advantage_system6` |
+|---|---|---|
+| `h_range` | `[-6.0, 6.0]` | `[-4.0, 4.0]` |
+| `j_range` | `[-1.0, 1.0]` | `[-1.0, 1.0]` |
+| `extended_j_range` | `[-2.0, 1.0]` | `[-2.0, 1.0]` |
+| `per_group_coupling_range` | `[-13.0, 10.0]` | not applicable |
+| `per_qubit_coupling_range` | not applicable | `[-18.0, 15.0]` |
+| `annealing_time_range` | `[0.5, 2000.0]` µs | `[0.5, 2000.0]` µs |
+| `num_reads_range` | `[1, 10000]` | `[1, 10000]` |
+
+`allowed_h_milli` and `allowed_j_milli` in a topology spec are the chain
+protocol's discrete draw sets, not hardware limits. They feed the
+`topology_hash`, so widening them changes problem identity. The comparison
+below is about headroom, not about a defect.
+
+- **Fields use one sixth of the range.** The chain draws `h` from
+  `{-1, 0, +1}` against a `[-6, 6]` bias range. The h0 bucket uses none of it.
+- **Couplings are saturated.** The chain draws `J` from `{-1, +1}`, which is
+  exactly `j_range`. No headroom is left without `extended_j_range`.
+- **Group coupling sums reach the limit.** Zephyr splits each qubit's couplers
+  into two groups and bounds the signed sum of `J` in each. The largest group
+  on the Advantage2 working graph holds 10 couplers, and 4829 of 9154 groups
+  are that size. At `|J| = 1` an all-positive group sums to exactly `+10`,
+  which is the positive limit. That happens with probability 2⁻¹⁰ per full
+  group, so roughly 5 groups per instance sit precisely on the boundary. The
+  limit is never exceeded, but the positive side has no margin.
+
+`quip-miner-dwave` decodes milli straight to floats and passes `h` and `J`
+through unscaled. It sets only `num_reads` and optionally `annealing_time`,
+and never sets `auto_scale`, so D-Wave's default applies and that default is
+on. Every submission is rescaled to fill `h_range` and
+`extended_j_range`. Rescaling shrinks the problem's energy scale against a
+fixed hardware noise floor. Nobody has measured what that costs in solution
+quality. Reproduce the properties above with:
+
+```python
+from dwave.cloud import Client
+with Client.from_config(token=...) as c:
+    s = [x for x in c.get_solvers() if x.id.startswith("Advantage2_system1")][0]
+    print(s.properties["h_range"], s.properties["per_group_coupling_range"])
+```
 
 `quip-cuda-sa` caps at 5000 nodes and cannot run `pegasus-p16`.
 
@@ -80,11 +190,11 @@ Tested on induced subgraphs of `fixtures/advantage2-system1.spec.json`, with
 
 That table shows no size ceiling. 320 nodes passes cleanly while both 256 and
 384 fail, so the failure is per job rather than per size. The rate
-rises with node count, and 548 failed every attempt at time limits of 1, 10
+rises with node count, and 548 failed every try at time limits of 1, 10
 and 60 seconds and at `CUOPT_GIGABYTES_PER_PROC` of both 1 and 10.
 
 `fixtures/cuopt-small.spec.json` holds the 128-node case, the largest size
-that passed every attempt.
+that passed every try.
 
 ### Quality and speed
 
@@ -112,7 +222,7 @@ job at 320 nodes succeeds and another at 256 does not.
 At 548 nodes the cuOpt solver process stops about 1.0 s into branch and bound
 and then restarts, and the server answers the next poll with HTTP 500. The
 miner maps that to `OVERLOADED`, which reads as load shedding rather than a
-solver fault. An attempt to measure a pass rate over 10 jobs at 256 nodes hung
+solver fault. A try at measuring a pass rate over 10 jobs at 256 nodes hung
 instead of finishing, which is the same HTTP 500 handling defect listed under
 open defects below.
 

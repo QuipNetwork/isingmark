@@ -51,6 +51,11 @@ Two chain corpora ship with the crate: `chain-h0` (4658 instances) and
 same name, and isingmark refuses a mismatched pair rather than replaying the
 wrong problems. See `docs/datasets.md`.
 
+`chain-h0` and `advantage-system6` are exact D-Wave working graphs, read from
+the live QPUs. Every bundled graph also ships an `-h0` variant with
+`allowed_h_milli: [0]`, which is the regime the chain mines in and the one
+worth benchmarking. See `docs/backend-notes.md`.
+
 ### sweep
 
 Parameter grid over the same problem set (paired design).

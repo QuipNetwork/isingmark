@@ -112,7 +112,7 @@ Prefer deleting `.cargo/config.toml` when you are not co-developing upstream.
 ## Extension points
 
 - **Backend**: add a registry entry in `src/backend/registry.rs` pointing at a miner binary that speaks the quip session protocol. New annealers are miner binaries, not in-process adapters.
-- **Topology**: ship a JSON `TopologySpec` under `fixtures/` or pass `--topology-file`.
+- **Topology**: ship a JSON `TopologySpec` under `fixtures/` or pass `--topology-file`. A spec may set `extends: "<fixture>"` to inherit that fixture's `nodes` and `edges` and override only the allowed-value sets, which is how every `-h0` variant is defined. Inheritance is one level deep. Add an `-h0` variant for any new graph and list the pair in `H0_PAIRS` in `tests/topology.rs`.
 - **Dataset**: ship a JSONL corpus of chain nonces under `corpora/`. Add it to `corpus::BUNDLED` paired with its fixture. Pin that fixture's `topology_hash` in `tests/topology.rs`. See `docs/datasets.md`.
 - **Mode**: add a module under `src/modes/`, a clap subcommand in `src/cli.rs`, and a branch in `src/main.rs`.
 - **Params**: edit `ParamCurve` defaults or supply `param_curve` in YAML for hardness mapping.

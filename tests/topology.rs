@@ -262,3 +262,143 @@ fn hex_decode(s: &str) -> Vec<u8> {
         })
         .collect()
 }
+
+/// Every graph this crate ships, paired with its `-h0` variant. The h0
+/// regime (no local fields) is the one the chain mines in, so every
+/// topology needs an h0 counterpart to benchmark against.
+const H0_PAIRS: [(&str, &str); 7] = [
+    ("smoke", "smoke-h0"),
+    ("cuopt-small", "cuopt-small-h0"),
+    ("common-small", "common-small-h0"),
+    ("chimera-c8-16-4", "chimera-c8-16-4-h0"),
+    ("pegasus-p16", "pegasus-p16-h0"),
+    ("advantage-system6", "advantage-system6-h0"),
+    ("chain-ternary", "chain-ternary-h0"),
+];
+
+/// An h0 variant must be the same graph as its base with the fields removed.
+/// If the two ever describe different graphs, a comparison between the h0 and
+/// non-h0 regimes stops being a controlled experiment.
+#[test]
+fn every_h0_variant_is_its_base_graph_with_no_fields() {
+    for (base_name, h0_name) in H0_PAIRS {
+        let base = load_fixture(base_name).expect("base fixture parses");
+        let h0 = load_fixture(h0_name).expect("h0 fixture parses");
+        assert_eq!(h0.nodes, base.nodes, "{h0_name} node list");
+        assert_eq!(h0.edges, base.edges, "{h0_name} edge list");
+        assert_eq!(
+            h0.allowed_j_milli, base.allowed_j_milli,
+            "{h0_name} allowed_j"
+        );
+        assert_eq!(
+            h0.allowed_spin_milli, base.allowed_spin_milli,
+            "{h0_name} allowed_spin"
+        );
+        assert_eq!(
+            h0.allowed_h_milli,
+            vec![0],
+            "{h0_name} must zero the fields"
+        );
+        assert_ne!(
+            h0.topology_hash(),
+            base.topology_hash(),
+            "{h0_name} is a distinct topology from {base_name}"
+        );
+    }
+}
+
+/// `chain-h0` already is the h0 form of the Advantage2 machine graph, and
+/// `advantage2-system1` is that same graph with ternary fields. They are the
+/// h0/non-h0 pair for that machine, so no separate variant is needed.
+#[test]
+fn advantage2_system1_is_the_chain_h0_graph_with_ternary_fields() {
+    let ternary = load_fixture("advantage2-system1").expect("fixture parses");
+    let h0 = load_fixture("chain-h0").expect("fixture parses");
+    assert_eq!(ternary.nodes, h0.nodes);
+    assert_eq!(ternary.edges, h0.edges);
+    assert_eq!(ternary.allowed_h_milli, vec![-1000, 0, 1000]);
+    assert_eq!(h0.allowed_h_milli, vec![0]);
+}
+
+/// Working-graph sizes read from the live QPUs on 2026-08-07. These are
+/// machine graphs, not idealized ones, so the counts are the record of what
+/// the hardware actually had.
+#[test]
+fn machine_fixtures_match_their_recorded_working_graphs() {
+    for (name, nodes, edges) in [
+        // Advantage2_system1, Zephyr [12, 4], 4800 nominal qubits.
+        ("chain-h0", 4577, 41515),
+        // Advantage_system6, Pegasus [16], 5760 nominal qubits.
+        ("advantage-system6", 5612, 40088),
+    ] {
+        let spec = load_fixture(name).expect("fixture parses");
+        assert_eq!(spec.nodes.len(), nodes, "{name} qubits");
+        assert_eq!(spec.edges.len(), edges, "{name} couplers");
+    }
+}
+
+#[test]
+fn extends_inherits_the_base_graph_and_overrides_only_what_it_sets() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("derived.spec.json");
+    std::fs::write(&path, r#"{"extends":"smoke","allowed_h_milli":[0]}"#).expect("write");
+    let derived = load_topology(&path).expect("derived spec parses");
+    let base = load_fixture("smoke").expect("smoke parses");
+    assert_eq!(derived.nodes, base.nodes);
+    assert_eq!(derived.edges, base.edges);
+    assert_eq!(derived.allowed_j_milli, base.allowed_j_milli);
+    assert_eq!(derived.allowed_h_milli, vec![0]);
+}
+
+#[test]
+fn extends_with_its_own_graph_is_rejected() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("both.spec.json");
+    std::fs::write(
+        &path,
+        r#"{"extends":"smoke","nodes":[0,1],"allowed_h_milli":[0]}"#,
+    )
+    .expect("write");
+    assert_eq!(
+        load_topology(&path).expect_err("must reject"),
+        TopologyError::ExtendsWithOwnGraph
+    );
+}
+
+#[test]
+fn extends_of_an_extends_spec_is_rejected() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("deep.spec.json");
+    // `smoke-h0` is itself an `extends` spec, so this is two levels.
+    std::fs::write(&path, r#"{"extends":"smoke-h0"}"#).expect("write");
+    assert_eq!(
+        load_topology(&path).expect_err("must reject"),
+        TopologyError::ExtendsNotABase("smoke-h0".to_string())
+    );
+}
+
+#[test]
+fn extends_naming_a_missing_fixture_is_rejected() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("missing.spec.json");
+    std::fs::write(&path, r#"{"extends":"no-such-fixture"}"#).expect("write");
+    let err = load_topology(&path).expect_err("must reject");
+    assert!(
+        matches!(err, TopologyError::ExtendsUnloadable(ref n, _) if n == "no-such-fixture"),
+        "{err}"
+    );
+}
+
+/// `extends` resolves through the same name guard as `--topology-preset`, so
+/// it cannot be used to read a file outside `fixtures/`.
+#[test]
+fn extends_cannot_escape_the_fixtures_directory() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = dir.path().join("escape.spec.json");
+    std::fs::write(&path, r#"{"extends":"../../../etc/passwd"}"#).expect("write");
+    let err = load_topology(&path).expect_err("must reject");
+    // The name guard fires before any file is opened, so this surfaces as the
+    // guard's own message rather than a wrapped load failure.
+    assert!(matches!(err, TopologyError::Json(_)), "{err}");
+    assert!(err.to_string().contains("must match [A-Za-z0-9-]"), "{err}");
+}

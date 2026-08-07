@@ -58,6 +58,16 @@ pub enum TopologyError {
         /// Node id that was not present in `nodes`.
         endpoint: u32,
     },
+    /// The spec set `extends` and also carried its own `nodes` or `edges`.
+    /// Rejected rather than picking one, because the two could disagree and
+    /// the graph a run actually used would depend on that choice.
+    ExtendsWithOwnGraph,
+    /// `extends` named a fixture that itself sets `extends`. Inheritance is
+    /// one level deep, so a base must carry a real graph.
+    ExtendsNotABase(String),
+    /// `extends` named a fixture that could not be loaded. The message is
+    /// the underlying error.
+    ExtendsUnloadable(String, Box<TopologyError>),
 }
 
 impl std::fmt::Display for TopologyError {
@@ -79,6 +89,21 @@ impl std::fmt::Display for TopologyError {
                 "topology spec: edge {edge_index} references node id {endpoint}, \
                  which is not in the topology"
             ),
+            Self::ExtendsWithOwnGraph => write!(
+                f,
+                "topology spec: `extends` inherits nodes and edges, so the spec \
+                 must not also set `nodes` or `edges`"
+            ),
+            Self::ExtendsNotABase(name) => write!(
+                f,
+                "topology spec: `extends` names {name:?}, which itself uses \
+                 `extends`; inheritance is one level deep, so extend its base \
+                 directly"
+            ),
+            Self::ExtendsUnloadable(name, e) => write!(
+                f,
+                "topology spec: `extends` names {name:?}, which failed to load: {e}"
+            ),
         }
     }
 }
@@ -87,13 +112,21 @@ impl std::error::Error for TopologyError {}
 
 #[derive(Debug, Deserialize)]
 struct TopologySpecJson {
-    nodes: Vec<u32>,
+    /// Bundled fixture to inherit `nodes` and `edges` from. When set, this
+    /// spec must not carry its own graph, and any allowed-value set it omits
+    /// is inherited too.
     #[serde(default)]
-    edges: Vec<(u32, u32)>,
-    allowed_h_milli: Vec<i32>,
-    allowed_j_milli: Vec<i32>,
+    extends: Option<String>,
     #[serde(default)]
-    allowed_spin_milli: Vec<i32>,
+    nodes: Option<Vec<u32>>,
+    #[serde(default)]
+    edges: Option<Vec<(u32, u32)>>,
+    #[serde(default)]
+    allowed_h_milli: Option<Vec<i32>>,
+    #[serde(default)]
+    allowed_j_milli: Option<Vec<i32>>,
+    #[serde(default)]
+    allowed_spin_milli: Option<Vec<i32>>,
 }
 
 fn validate_edges(nodes: &[u32], edges: &[(u32, u32)]) -> Result<(), TopologyError> {
@@ -113,39 +146,92 @@ fn validate_edges(nodes: &[u32], edges: &[(u32, u32)]) -> Result<(), TopologyErr
 
 /// Load and validate a topology spec from a JSON file at `path`.
 ///
+/// A spec either carries its own `nodes`/`edges`, or sets `extends` to the
+/// name of a bundled fixture and inherits that fixture's graph. An `extends`
+/// spec may override any allowed-value set and inherits the ones it omits.
+/// This exists so a topology and its `allowed_h_milli: [0]` variant cannot
+/// drift apart: they are one graph, described once.
+///
 /// # Errors
 ///
 /// Returns [`TopologyError`] when the file cannot be read, its contents are
-/// not valid topology-spec JSON, required fields are empty, or an edge
-/// references an unknown node id.
+/// not valid topology-spec JSON, required fields are empty or absent, an edge
+/// references an unknown node id, or `extends` names a fixture that is
+/// missing, unloadable, or itself an `extends` spec.
 pub fn load_topology(path: &Path) -> Result<TopologySpec, TopologyError> {
+    let raw = read_spec(path)?;
+    resolve_spec(raw)
+}
+
+/// Read and JSON-decode a spec file without resolving `extends`.
+fn read_spec(path: &Path) -> Result<TopologySpecJson, TopologyError> {
     let text = fs::read_to_string(path)
         .map_err(|e| TopologyError::Json(format!("failed to read {}: {e}", path.display())))?;
-    let raw: TopologySpecJson =
-        serde_json::from_str(&text).map_err(|e| TopologyError::Json(e.to_string()))?;
+    serde_json::from_str(&text).map_err(|e| TopologyError::Json(e.to_string()))
+}
 
-    if raw.nodes.is_empty() {
-        return Err(TopologyError::EmptyNodes);
-    }
-    if raw.allowed_h_milli.is_empty() {
-        return Err(TopologyError::EmptyAllowedH);
-    }
-    if raw.allowed_j_milli.is_empty() {
-        return Err(TopologyError::EmptyAllowedJ);
-    }
-    validate_edges(&raw.nodes, &raw.edges)?;
-
-    let allowed_spin_milli = if raw.allowed_spin_milli.is_empty() {
-        DEFAULT_ALLOWED_SPIN_MILLI.to_vec()
-    } else {
-        raw.allowed_spin_milli
+/// Resolve a decoded spec into a validated [`TopologySpec`], following
+/// `extends` exactly one level.
+#[expect(
+    clippy::similar_names,
+    reason = "allowed_h_milli and allowed_j_milli mirror the spec field names; \
+              renaming them here would obscure which JSON key each one carries"
+)]
+fn resolve_spec(raw: TopologySpecJson) -> Result<TopologySpec, TopologyError> {
+    let base = match &raw.extends {
+        None => None,
+        Some(name) => {
+            if raw.nodes.is_some() || raw.edges.is_some() {
+                return Err(TopologyError::ExtendsWithOwnGraph);
+            }
+            let base_path = fixture_path(name)?;
+            let base_raw = read_spec(&base_path)
+                .map_err(|e| TopologyError::ExtendsUnloadable(name.clone(), Box::new(e)))?;
+            // One level only. A chain would work, but it would also make the
+            // graph a spec resolves to depend on a file two hops away.
+            if base_raw.extends.is_some() {
+                return Err(TopologyError::ExtendsNotABase(name.clone()));
+            }
+            let base = resolve_spec(base_raw)
+                .map_err(|e| TopologyError::ExtendsUnloadable(name.clone(), Box::new(e)))?;
+            Some(base)
+        }
     };
 
+    let (nodes, edges) = match base.as_ref() {
+        Some(b) => (b.nodes.clone(), b.edges.clone()),
+        None => (raw.nodes.unwrap_or_default(), raw.edges.unwrap_or_default()),
+    };
+    let allowed_h_milli = raw
+        .allowed_h_milli
+        .or_else(|| base.as_ref().map(|b| b.allowed_h_milli.clone()))
+        .unwrap_or_default();
+    let allowed_j_milli = raw
+        .allowed_j_milli
+        .or_else(|| base.as_ref().map(|b| b.allowed_j_milli.clone()))
+        .unwrap_or_default();
+    let allowed_spin_milli = raw
+        .allowed_spin_milli
+        .filter(|v| !v.is_empty())
+        .or_else(|| base.as_ref().map(|b| b.allowed_spin_milli.clone()))
+        .unwrap_or_else(|| DEFAULT_ALLOWED_SPIN_MILLI.to_vec());
+
+    if nodes.is_empty() {
+        return Err(TopologyError::EmptyNodes);
+    }
+    if allowed_h_milli.is_empty() {
+        return Err(TopologyError::EmptyAllowedH);
+    }
+    if allowed_j_milli.is_empty() {
+        return Err(TopologyError::EmptyAllowedJ);
+    }
+    validate_edges(&nodes, &edges)?;
+
     Ok(TopologySpec {
-        nodes: raw.nodes,
-        edges: raw.edges,
-        allowed_h_milli: raw.allowed_h_milli,
-        allowed_j_milli: raw.allowed_j_milli,
+        nodes,
+        edges,
+        allowed_h_milli,
+        allowed_j_milli,
         allowed_spin_milli,
     })
 }
@@ -161,16 +247,24 @@ pub fn load_topology(path: &Path) -> Result<TopologySpec, TopologyError> {
 /// Returns [`TopologyError::Json`] when `name` contains characters outside
 /// `[A-Za-z0-9-]`, and otherwise the same errors as [`load_topology`].
 pub fn load_fixture(name: &str) -> Result<TopologySpec, TopologyError> {
+    load_topology(&fixture_path(name)?)
+}
+
+/// Resolve a bundled fixture name to its path.
+///
+/// `name` must match `[A-Za-z0-9-]` so it cannot escape the fixtures
+/// directory (rejects path separators and `..`). This guard also covers
+/// `extends`, which resolves through here.
+fn fixture_path(name: &str) -> Result<PathBuf, TopologyError> {
     if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         return Err(TopologyError::Json(format!(
             "fixture name {name:?} must match [A-Za-z0-9-]"
         )));
     }
-    let path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "fixtures"]
+    Ok([env!("CARGO_MANIFEST_DIR"), "fixtures"]
         .iter()
         .collect::<PathBuf>()
-        .join(format!("{name}.spec.json"));
-    load_topology(&path)
+        .join(format!("{name}.spec.json")))
 }
 
 impl TopologySpec {
