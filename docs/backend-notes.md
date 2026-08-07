@@ -7,13 +7,13 @@
 | Preset | Nodes | Edges | Purpose |
 |---|---|---|---|
 | `smoke` | 8 | 8 | Fast checks |
-| `cuOpt-ceiling` | 128 | 749 | Reproduces the `cuopt` size ceiling below |
+| `cuopt-small` | 128 | 749 | Largest size `cuopt` passed every attempt |
 | `common-small` | 548 | 4247 | Largest Advantage2 subgraph every backend accepts, including `beit` |
 | `chimera-c8-16-4` | 1024 | 2976 | Chimera C(8,16). The only fixture BEIT's exact solver could accept |
 | `advantage2-system1` | 4577 | 41515 | D-Wave Advantage2 (Zephyr) |
 | `pegasus-p16` | 5640 | 40484 | Ideal Pegasus P16 |
 
-`common-small` and `cuOpt-ceiling` are connected induced subgraphs of
+`common-small` and `cuopt-small` are connected induced subgraphs of
 `advantage2-system1`, grown breadth-first from the highest-degree node. They
 keep the original qubit identifiers, so both stay natively embeddable on
 Advantage2 hardware.
@@ -48,30 +48,39 @@ what each backend does in practice, including limits that the backend's own
 
 ## cuopt (quip-cuopt-milp)
 
-Do not use `cuopt` for problems above about 128 nodes. The declared
-`max_nodes` of 20000 does not reflect what the backend can solve.
+`cuopt` is not competitive on this problem class, and it fails on some jobs
+for reasons that are not size alone. The declared `max_nodes` of 20000 does
+not reflect what the backend delivers.
 
 ### Measured results
 
 Tested on induced subgraphs of `fixtures/advantage2-system1.spec.json`, with
 `num_reads: 36` and cuOpt server 26.06 on an NVIDIA RTX A4000.
 
-| Nodes | Edges | Time limit | Result |
-|---|---|---|---|
-| 8 | 8 | 103 µs | 128 of 128 jobs passed |
-| 128 | 749 | 10 s | 3 of 3 jobs passed, energy worse than `cpu-sa` on all 3 |
-| 548 | 4247 | 1 s, 10 s, 60 s | 0 of 6 jobs passed, solver process stops |
+| Nodes | Edges | Jobs passed |
+|---|---|---|
+| 8 | 8 | 128 of 128 |
+| 128 | 749 | 3 of 3 |
+| 192 | 1270 | 2 of 2 |
+| 256 | 1710 | 1 of 2 |
+| 320 | 2298 | 2 of 2 |
+| 384 | 2887 | 0 of 2 |
+| 448 | 3345 | 1 of 2 |
+| 548 | 4247 | 0 of 6 |
+
+That table shows no size ceiling. 320 nodes passes cleanly while both 256 and
+384 fail, so the failure is per job rather than per size. The rate
+rises with node count, and 548 failed every attempt at time limits of 1, 10
+and 60 seconds and at `CUOPT_GIGABYTES_PER_PROC` of both 1 and 10.
+
+`fixtures/cuopt-small.spec.json` holds the 128-node case, the largest size
+that passed every attempt.
+
+### Quality and speed
 
 At 128 nodes, `cuopt` takes 20.6 s per job. `cpu-sa` takes 55 ms per job on
 the same problems and finds lower energy on all three. `cuopt` is 374 times
-slower and gives worse results.
-
-At 548 nodes the cuOpt solver process stops about 1.0 s into branch and
-bound, then restarts. The failure does not depend on the time limit or the
-memory pool size. Tests at `CUOPT_GIGABYTES_PER_PROC` of 1 and 10 both fail.
-The miner reports the failure as `OVERLOADED`.
-
-### Cause
+slower and gives worse results, on the size where it is most reliable.
 
 cuOpt solves a mixed integer linear program. The miner converts the Ising
 problem with a Fortet linearization, which gives a weak relaxation. On the
@@ -84,6 +93,22 @@ cuOpt has no native quadratic or QUBO mode, so the linearization is the only
 available formulation. Mixed integer linear solvers are a poor match for dense
 Ising problems. The problem class causes this result. Tuning does not change
 it.
+
+### Why jobs fail
+
+The weak relaxation explains the poor energies. It does not explain why one
+job at 320 nodes succeeds and another at 256 does not.
+
+At 548 nodes the cuOpt solver process stops about 1.0 s into branch and bound
+and then restarts, and the server answers the next poll with HTTP 500. The
+miner maps that to `OVERLOADED`, which reads as load shedding rather than a
+solver fault. An attempt to measure a pass rate over 10 jobs at 256 nodes hung
+instead of finishing, which is the same HTTP 500 handling defect listed under
+open defects below.
+
+The evidence points at a reliability fault in the solver process or in the
+miner's handling of a failed poll, not at a capacity limit. It is not
+diagnosed.
 
 ### Time budget
 
