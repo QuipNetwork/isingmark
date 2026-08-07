@@ -260,6 +260,14 @@ pub struct ThroughputArgs {
     /// Required from `--duration` or `--config`.
     #[arg(long, value_parser = parse_duration_arg)]
     pub duration: Option<f64>,
+    /// Replay a corpus of chain-harvested instances instead of deriving
+    /// problems from `--seed`. A bundled corpus name (`chain-h0`,
+    /// `chain-ternary`) or a path to a JSONL file.
+    ///
+    /// A bundled corpus must be paired with the topology it was drawn
+    /// against. A corpus is finite, so `--duration` becomes an upper bound.
+    #[arg(long)]
+    pub corpus: Option<String>,
 }
 
 impl ThroughputArgs {
@@ -291,6 +299,7 @@ impl ThroughputArgs {
             }
         };
         let param_curve = merge_param_curve(&file, THROUGHPUT_DEFAULT_CURVE);
+        let corpus = self.corpus.or(file.corpus.clone());
         Ok(ThroughputConfig {
             backend,
             topology,
@@ -298,6 +307,7 @@ impl ThroughputArgs {
             param_curve,
             duration_s,
             seed,
+            corpus,
             output_dir,
             backend_bin_override: None,
             backend_args_override: None,

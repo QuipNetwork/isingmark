@@ -38,6 +38,19 @@ Jobs per minute at fixed hardness for a fixed duration.
 isingmark throughput --backend cpu-sa --topology-preset smoke --duration 30s
 ```
 
+Replay problems the chain actually posed, instead of deriving them from a
+seed:
+
+```bash
+isingmark throughput --backend cpu-sa \
+  --topology-preset chain-h0 --corpus chain-h0 --duration 10m
+```
+
+Two chain corpora ship with the crate: `chain-h0` (4658 instances) and
+`chain-ternary` (3148). Each must be paired with the topology preset of the
+same name, and isingmark refuses a mismatched pair rather than replaying the
+wrong problems. See `docs/datasets.md`.
+
 ### sweep
 
 Parameter grid over the same problem set (paired design).
@@ -160,7 +173,7 @@ Prefer deleting `.cargo/config.toml` when you are not co-developing upstream.
 
 ## Architecture
 
-See `AGENTS.md` for module layout and extension points. See `ANNEALBENCH.md` for mode behaviour, result formats, and design notes.
+See `AGENTS.md` for module layout and extension points. See `ANNEALBENCH.md` for mode behaviour, result formats, and design notes. See `docs/datasets.md` for the bundled chain corpora and `docs/backend-notes.md` for measured backend limits.
 
 ## License
 

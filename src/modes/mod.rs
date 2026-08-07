@@ -7,7 +7,11 @@
 use std::fmt;
 use std::path::PathBuf;
 
+use quip_proto::v1::Job;
+
 use crate::backend::SessionError;
+use crate::corpus::{CorpusError, CorpusSource};
+use crate::problem::ProblemSource;
 use crate::topology::{self, TopologyError, TopologySpec};
 
 pub mod comparative;
@@ -17,6 +21,55 @@ pub mod scaling;
 pub mod sweep;
 pub mod throughput;
 pub mod ttt;
+
+/// Where a mode's jobs come from: derived from a seed, or replayed from a
+/// corpus of chain-harvested instances.
+///
+/// The two differ in one way that matters to a caller. A derived source is
+/// endless — it will draw as many problems as asked for. A corpus is finite
+/// and yields each instance exactly once, so a mode that dispatches until a
+/// wall-clock target stops early when the corpus runs out. Treat `--duration`
+/// as a cap in that case, not a target.
+#[derive(Debug)]
+pub enum JobSource {
+    /// Deterministic problems derived from `(seed, topology, index)`.
+    Derived(Box<ProblemSource>),
+    /// Chain-harvested instances replayed from a corpus.
+    Corpus(Box<CorpusSource>),
+}
+
+impl JobSource {
+    /// Draw the next job, or `None` when the source is exhausted. A
+    /// [`Derived`](Self::Derived) source is exhausted only at the job count
+    /// it was built with.
+    #[must_use]
+    pub fn next_job(&mut self) -> Option<Job> {
+        match self {
+            Self::Derived(s) => s.next_job(),
+            Self::Corpus(s) => s.next_job(),
+        }
+    }
+
+    /// A short label naming the source for a run summary: `"seed:<n>"` for a
+    /// derived source, or the corpus name or path.
+    #[must_use]
+    pub fn label(&self, seed: u64) -> String {
+        match self {
+            Self::Derived(_) => format!("seed:{seed}"),
+            Self::Corpus(s) => s.label().to_string(),
+        }
+    }
+
+    /// How many instances a corpus source holds, or `None` for a derived
+    /// source, which has no fixed size.
+    #[must_use]
+    pub fn instances(&self) -> Option<usize> {
+        match self {
+            Self::Derived(_) => None,
+            Self::Corpus(s) => Some(s.len()),
+        }
+    }
+}
 
 /// A topology to benchmark against: a bundled fixture name, or a JSON file
 /// path. Every mode that needs a topology takes one of these rather than a
@@ -60,6 +113,9 @@ impl TopologyRef {
 pub enum ModeError {
     /// The configured topology could not be loaded.
     Topology(TopologyError),
+    /// The configured corpus could not be loaded, or does not belong to the
+    /// configured topology.
+    Corpus(CorpusError),
     /// `backend` did not match any entry in `backend::builtin_registry`.
     UnknownBackend(String),
     /// The coordinator-side session loop failed to start (bind/spawn).
@@ -175,6 +231,7 @@ impl fmt::Display for ModeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Topology(e) => write!(f, "failed to load topology: {e}"),
+            Self::Corpus(e) => write!(f, "failed to load corpus: {e}"),
             Self::UnknownBackend(name) => write!(
                 f,
                 "unknown backend {name:?}; see `backend::builtin_registry` for valid names"
@@ -265,6 +322,7 @@ impl std::error::Error for ModeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Topology(e) => Some(e),
+            Self::Corpus(e) => Some(e),
             Self::UnknownBackend(_)
             | Self::RecordsFileExists(_)
             | Self::EmptyGrid
@@ -292,6 +350,12 @@ impl std::error::Error for ModeError {
 impl From<TopologyError> for ModeError {
     fn from(e: TopologyError) -> Self {
         Self::Topology(e)
+    }
+}
+
+impl From<CorpusError> for ModeError {
+    fn from(e: CorpusError) -> Self {
+        Self::Corpus(e)
     }
 }
 

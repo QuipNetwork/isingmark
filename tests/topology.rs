@@ -22,6 +22,55 @@ fn loads_advantage2_system1_fixture() {
     assert_eq!(spec.edges.len(), 41515);
 }
 
+/// The two chain-corpus fixtures must hash to the `topology_hash` the chain
+/// recorded for their bucket, or the corpora in `corpora/` replay against the
+/// wrong graph and every drawn problem is silently different from the one the
+/// miner actually solved. The expected values are the bucket directory names
+/// under the `quip-coordinator download` output that produced the corpora.
+#[test]
+fn chain_fixtures_hash_to_their_recorded_bucket() {
+    for (name, nodes, edges, bucket_hash) in [
+        (
+            "chain-h0",
+            4577,
+            41515,
+            "e66d3dfa3c9c6afb15efe29891cf9412498d94692ab5956af3ad98ba3693a02d",
+        ),
+        (
+            "chain-ternary",
+            4578,
+            41531,
+            "6eae38a92b27e8d353ea3b0fa311952c06e4f0a0ba6e5d705ca116b44a42c4e5",
+        ),
+    ] {
+        let spec = load_fixture(name).expect("chain fixture parses");
+        assert_eq!(spec.nodes.len(), nodes, "{name} node count");
+        assert_eq!(spec.edges.len(), edges, "{name} edge count");
+        assert_eq!(
+            spec.topology_hash(),
+            hex_decode(bucket_hash),
+            "{name} must hash to the chain bucket it claims to be"
+        );
+    }
+}
+
+/// `advantage2-system1` carries the `chain-h0` graph with the `chain-ternary`
+/// allowed-h set, so it matches neither chain bucket. It stays as a synthetic
+/// benchmark topology; this pins the fact so nobody replays a corpus against
+/// it by mistake.
+#[test]
+fn advantage2_system1_is_not_a_chain_bucket() {
+    let synthetic = load_fixture("advantage2-system1").expect("fixture parses");
+    for name in ["chain-h0", "chain-ternary"] {
+        let chain = load_fixture(name).expect("chain fixture parses");
+        assert_ne!(
+            synthetic.topology_hash(),
+            chain.topology_hash(),
+            "advantage2-system1 must not be mistaken for {name}"
+        );
+    }
+}
+
 #[test]
 fn rejects_empty_nodes() {
     let dir = tempfile::tempdir().expect("create temp dir");
