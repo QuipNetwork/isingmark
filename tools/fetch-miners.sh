@@ -3,9 +3,13 @@ set -euo pipefail
 
 # Fetch released quip miner binaries for local development.
 #
-# Wraps quip-miner's crates/quip-coordinator/tools/fetch-miners.sh at the same
-# git rev this crate depends on (QUIP_MINER_REV in .gitlab-ci.yml / Cargo.toml),
-# then checks that each downloaded binary can run on this host.
+# Downloads each miner from its own GitLab package registry, then checks that
+# every binary can run on this host.
+#
+# Each repo is resolved independently: the version it publishes is the version
+# this script takes. An earlier form required one version common to every repo,
+# which meant a release in one repo stayed invisible until every other repo cut
+# the same tag, and forced no-change version bumps purely to align numbers.
 #
 # Usage:
 #   tools/fetch-miners.sh [DEST_DIR]   (default: <repo>/miners)
@@ -17,14 +21,13 @@ set -euo pipefail
 #   MINERS_ALLOW_PRERELEASE  0|1 (default 1). When 0, only stable versions are
 #                            candidates. When 1, prereleases are included.
 #                            Widens the set; does not prefer prereleases.
-#   MINER_SET                auto | cpu | cpu-cuda (upstream default: auto)
+#   MINER_SET                auto | cpu | cpu-cuda (default: auto)
 #   DRY_RUN                  if set, resolve and print the plan, skip download
 #   TARGETARCH               override arch detection (amd64|arm64)
 #
-# MINERS_TAG is auto-detected: the newest semver present in every package
-# registry repo this run requires (see required_repos). An inherited MINERS_TAG
-# is ignored with a warning, then overwritten with the resolved value so the
-# upstream script cannot see a stale tag.
+# Versions are auto-detected per repo: the newest qualifying semver that repo
+# publishes. An inherited MINERS_TAG is ignored with a warning, because one tag
+# cannot express a per-repo answer.
 #
 # Semver ordering implemented here (not sort -V; BSD/GNU sort -V both get
 # prerelease order wrong relative to semver):
@@ -39,8 +42,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CI_YML="${REPO_ROOT}/.gitlab-ci.yml"
-QUIP_MINER_REPO="${QUIP_MINER_REPO:-https://gitlab.com/quip.network/quip-miner.git}"
+QUIP_MINER_DWAVE_REPO="${QUIP_MINER_DWAVE_REPO:-https://gitlab.com/quip.network/quip-miner-dwave.git}"
 GITLAB_API="${GITLAB_API:-https://gitlab.com/api/v4}"
 
 # ---------------------------------------------------------------------------
@@ -277,21 +279,8 @@ if [[ "${1:-}" == "--select-version" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Resolve QUIP_MINER_REV and destination (unchanged structure)
+# Destination
 # ---------------------------------------------------------------------------
-if [[ ! -f "${CI_YML}" ]]; then
-  echo "error: missing ${CI_YML}" >&2
-  exit 1
-fi
-QUIP_MINER_REV="$(
-  sed -n 's/^[[:space:]]*QUIP_MINER_REV:[[:space:]]*"\([0-9a-f]\{7,40\}\)".*/\1/p' "${CI_YML}" |
-    head -n 1
-)"
-if [[ -z "${QUIP_MINER_REV}" ]]; then
-  echo "error: could not parse QUIP_MINER_REV from ${CI_YML}" >&2
-  exit 1
-fi
-
 validate_allow_prerelease
 
 if [[ -n "${MINERS_TAG:-}" ]]; then
@@ -312,6 +301,15 @@ DEST="$(cd "${DEST}" && pwd)"
 # ---------------------------------------------------------------------------
 MINER_SET_RESOLVED="${MINER_SET:-auto}"
 os="$(uname -s)"
+# Asset names carry a lowercase OS tag, matching what the miner repos publish.
+case "${os}" in
+Linux) os_tag=linux ;;
+Darwin) os_tag=darwin ;;
+*)
+  echo "error: unsupported OS: ${os}" >&2
+  exit 1
+  ;;
+esac
 raw_arch="${TARGETARCH:-$(uname -m)}"
 case "${raw_arch}" in
 x86_64 | amd64) arch=amd64 ;;
@@ -356,6 +354,7 @@ repo_project_path() {
   quip-miner-cpu) echo "quip.network%2Fquip-miner-cpu" ;;
   quip-miner-cuda) echo "quip.network%2Fquip-miner-cuda" ;;
   quip-miner-metal) echo "quip.network%2Fquip-miner-metal" ;;
+  quip-miner-dwave) echo "quip.network%2Fquip-miner-dwave" ;;
   *)
     echo "error: unknown repo name: $1" >&2
     return 1
@@ -394,114 +393,112 @@ for p in data:
 }
 
 # ---------------------------------------------------------------------------
-# Discover newest common version across required repos
+# Per-repo version resolution and download
 # ---------------------------------------------------------------------------
-declare -a repo_names=()
-declare -a repo_version_lines=() # parallel to repo_names; space-joined versions
 
-common_candidates=()
-first_repo=1
-for name in ${required_repos}; do
-  repo_names+=("${name}")
-  vers=()
+# Binary basenames published by a display-name repo. The published asset adds
+# an `-<os>-<arch>` suffix; the file is saved under the bare name.
+binaries_for() {
+  case "$1" in
+  quip-miner-cpu) echo "quip-cpu-sa quip-cpu-gibbs" ;;
+  quip-miner-cuda) echo "quip-cuda-sa quip-cuda-gibbs" ;;
+  quip-miner-metal) echo "quip-metal-sa quip-metal-gibbs" ;;
+  *)
+    echo "error: unknown repo name: $1" >&2
+    return 1
+    ;;
+  esac
+}
+
+# Newest qualifying version published by one repo. Each repo is resolved on
+# its own: requiring one version common to every repo means a release in one
+# repo is invisible until every other repo cuts the same tag, which forced
+# no-change version bumps purely to align numbers.
+resolve_repo_version() {
+  local name="$1"
+  local vers=()
+  local line
   while IFS= read -r line; do
     [[ -n "${line}" ]] || continue
     vers+=("${line}")
   done < <(list_repo_versions "${name}")
   if [[ ${#vers[@]} -eq 0 ]]; then
     echo "error: no package versions listed for required repo ${name}" >&2
-    exit 1
+    return 1
   fi
-  repo_version_lines+=("${vers[*]}")
-  if [[ "${first_repo}" -eq 1 ]]; then
-    common_candidates=("${vers[@]}")
-    first_repo=0
-  else
-    next_common=()
-    for c in "${common_candidates[@]}"; do
-      for v in "${vers[@]}"; do
-        if [[ "${c}" == "${v}" ]]; then
-          next_common+=("${c}")
-          break
-        fi
-      done
-    done
-    common_candidates=("${next_common[@]}")
+  local picked
+  if ! picked="$(select_newest_version "${vers[@]}")"; then
+    echo "error: no version from ${name} qualifies under MINERS_ALLOW_PRERELEASE=${MINERS_ALLOW_PRERELEASE:-1}" >&2
+    echo "  ${name}: ${vers[*]}" >&2
+    return 1
   fi
-done
+  printf '%s\n' "${picked}"
+}
 
-if [[ ${#common_candidates[@]} -eq 0 ]]; then
-  echo "error: no version is common to all required package repos for MINER_SET=${MINER_SET_RESOLVED} on ${os}/${arch}" >&2
-  local_i=0
-  for name in "${repo_names[@]}"; do
-    echo "  ${name}: ${repo_version_lines[local_i]}" >&2
-    local_i=$((local_i + 1))
-  done
-  if [[ "${MINERS_ALLOW_PRERELEASE:-1}" == "0" ]]; then
-    echo "  note: MINERS_ALLOW_PRERELEASE=0 (stable only); MINERS_ALLOW_PRERELEASE=1 may help when a required repo publishes only prereleases (metal currently has no stable tag)" >&2
-  fi
-  exit 1
+if [[ -n "${MINERS_TAG:-}" ]]; then
+  echo "warning: MINERS_TAG=${MINERS_TAG} is set in the environment but ignored; each repo's version is resolved from its own package registry" >&2
 fi
 
-if ! RESOLVED_TAG="$(select_newest_version "${common_candidates[@]}")"; then
-  echo "error: no version common to the required repos qualifies under MINERS_ALLOW_PRERELEASE=${MINERS_ALLOW_PRERELEASE:-1}" >&2
-  local_i=0
-  for name in "${repo_names[@]}"; do
-    echo "  ${name}: ${repo_version_lines[local_i]}" >&2
-    local_i=$((local_i + 1))
-  done
-  if [[ "${MINERS_ALLOW_PRERELEASE:-1}" == "0" ]]; then
-    echo "  note: stable-only produced an empty candidate set; MINERS_ALLOW_PRERELEASE=1 may help (metal currently publishes only a prerelease)" >&2
-  fi
-  exit 1
-fi
-
-export MINERS_TAG="${RESOLVED_TAG}"
-
-echo "quip-miner rev: ${QUIP_MINER_REV}"
-echo "MINERS_TAG:     ${MINERS_TAG}  (auto-detected)"
 echo "MINERS_ALLOW_PRERELEASE: ${MINERS_ALLOW_PRERELEASE:-1}"
 echo "MINER_SET:      ${MINER_SET_RESOLVED}"
-echo "required repos: ${required_repos}"
-local_i=0
-for name in "${repo_names[@]}"; do
-  echo "  ${name} versions: ${repo_version_lines[local_i]}"
-  local_i=$((local_i + 1))
-done
+echo "host:           ${os_tag}/${arch}"
 echo "destination:    ${DEST}"
 echo
 
-tmp=""
-cleanup() {
-  if [[ -n "${tmp}" && -d "${tmp}" ]]; then
-    rm -rf "${tmp}"
-  fi
+declare -a resolved_repos=()
+declare -a resolved_tags=()
+for name in ${required_repos}; do
+  tag="$(resolve_repo_version "${name}")"
+  resolved_repos+=("${name}")
+  resolved_tags+=("${tag}")
+  echo "${name}: ${tag}"
+done
+echo
+
+# Download one repo's binaries at its own tag. The asset name carries the
+# host triple; the saved file does not.
+fetch_repo() {
+  local name="$1" tag="$2"
+  local proj bin asset url
+  proj="$(repo_project_path "${name}")"
+  for bin in $(binaries_for "${name}"); do
+    asset="${bin}-${os_tag}-${arch}"
+    url="${GITLAB_API}/projects/${proj}/packages/generic/${name}/${tag}/${asset}"
+    if [[ -n "${DRY_RUN:-}" ]]; then
+      echo "would fetch: ${asset} -> ${DEST}/${bin}  <- ${url}"
+      continue
+    fi
+    echo "fetch ${asset} -> ${DEST}/${bin}"
+    if ! curl --fail --location --silent --show-error --output "${DEST}/${bin}" "${url}"; then
+      echo "error: could not download ${asset} from ${name} at ${tag}" >&2
+      return 1
+    fi
+    chmod +x "${DEST}/${bin}"
+  done
 }
-trap cleanup EXIT
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/isingmark-fetch-miners.XXXXXX")"
-clone_dir="${tmp}/quip-miner"
+local_i=0
+for name in "${resolved_repos[@]}"; do
+  fetch_repo "${name}" "${resolved_tags[local_i]}"
+  local_i=$((local_i + 1))
+done
 
-git clone --filter=blob:none --no-checkout "${QUIP_MINER_REPO}" "${clone_dir}"
-git -C "${clone_dir}" fetch --depth 1 origin "${QUIP_MINER_REV}"
-git -C "${clone_dir}" checkout "${QUIP_MINER_REV}"
-
-upstream="${clone_dir}/crates/quip-coordinator/tools/fetch-miners.sh"
-if [[ ! -f "${upstream}" ]]; then
-  echo "error: upstream fetch-miners.sh missing at ${upstream}" >&2
-  exit 1
+# The dwave miner is a Python wheel, not a native binary. Its version is
+# resolved the same way so the hint names a tag that exists.
+if dwave_tag="$(resolve_repo_version quip-miner-dwave 2>/dev/null)"; then
+  echo "dwave: pip install 'quip-miner-dwave @ git+${QUIP_MINER_DWAVE_REPO}@${dwave_tag}'"
 fi
-
-bash "${upstream}" "${DEST}"
+echo "done -> ${DEST}"
 
 if [[ -n "${DRY_RUN:-}" ]]; then
   echo
-  echo "DRY_RUN set: resolved MINERS_TAG=${MINERS_TAG} from repos [${required_repos}]; no binaries downloaded; skipping host verification."
+  echo "DRY_RUN set: resolved a version per repo (see above); no binaries downloaded; skipping host verification."
   exit 0
 fi
 
-# Known miner binary basenames the upstream script may place in DEST.
-# Dwave is a Python wheel (upstream only prints a pip install hint).
+# Every miner binary basename this script may place in DEST, across all
+# repos, so verification covers whatever a previous run left behind too.
+# Dwave is a Python wheel and only gets a pip install hint.
 miner_names=(
   quip-cpu-sa
   quip-cpu-gibbs
