@@ -274,33 +274,97 @@ Scripts and raw output are under `out/rerun3-2026-08-07/`.
 
 ## cuda-gibbs session hang
 
-`quip-cuda-gibbs` deadlocks when one session carries more than a
-size-dependent number of jobs. Every thread parks in `futex_wait_queue`, the
-GPU sits at 0 percent busy, and no job ever returns. The miner does not
-error or exit, so a run only ends when something kills it.
+`quip-cuda-gibbs` 0.3.0-rc3 hangs during a streaming session on large
+problems. Every thread parks in `futex_wait_queue`, the GPU sits at 0 percent
+busy, and no job ever returns. The miner does not error, time out, or exit, so
+a run only ends when something kills it.
 
-Measured thresholds on `smoke-h0`, 8 nodes:
+### What is required to reproduce it
 
-| Jobs in session | Result |
+Each condition was tested against a control that isolates it.
+
+| Test | Result |
 |---|---|
-| 8, 16, 17, 18 | completes in about 2 s |
-| 20, 22, 24, 26, 28, 30, 32, 64, 128, 256 | hangs |
+| `bench run`, 20 real 4577-node models, isolated launches | works, 19 s |
+| Session loop, `cuda-gibbs`, 4577 nodes | hangs |
+| Session loop, `cuda-gibbs`, 8 nodes | works |
+| Session loop, `cuda-sa`, 4577 nodes | works |
 
-`quip-cuda-sa` completes 800 jobs in one session on the same topology, and
-`quip-cpu-gibbs` completes 800. The fault is specific to the CUDA Gibbs miner.
+The kernel is not the problem. `bench run` drives the same Gibbs kernel over
+the same 4577-node chain models through single-shot launches and completes.
+The session loop is not the problem on its own either, because `cuda-sa` runs
+through it at the same size. The fault needs the streaming session, the Gibbs
+algorithm, and a large problem together.
 
-The threshold falls as the problem grows. At 4577 nodes a session of 16 hangs,
-and so does a session of 8, three attempts out of three. The same 8-job
-sessions completed 184 jobs earlier the same day on the same host, so the
-threshold is not purely a function of size. The GPUs were idle and free of
-leaked contexts when the later attempts hung.
+### It is size-gated and intermittent
 
-Not diagnosed. Three things are established. Small topologies are unaffected.
-An 8-node problem runs fine at batch 8, repeatedly. No error is ever reported.
+Session mode at batch 8, 15 s per run:
 
-Until this is fixed, `cuda-gibbs` cannot be benchmarked at chain scale, and
-any `cuda-gibbs` number taken before 2026-08-07 should be treated as
-unreproducible rather than as a measurement.
+| Topology | Nodes | Result |
+|---|---|---|
+| `smoke-h0` | 8 | 56 jobs |
+| `cuopt-small-h0` | 128 | 56 jobs |
+| `common-small-h0` | 548 | 56 jobs |
+| `chimera-c8-16-4-h0` | 1024 | 56 jobs |
+| `chain-h0` | 4577 | hangs |
+| `advantage-system6-h0` | 5612 | hangs |
+
+Everything at or below 1024 nodes passed every try. Above that it is a
+coin flip rather than a wall: three consecutive `chain-h0` runs went hang,
+pass, pass, and a separate set of three hung three times. A hang can arrive
+after 0, 24 or 48 completed jobs.
+
+Raising `--batch-size` makes it more likely, which is how it was found. At 8
+nodes a session of 18 jobs passes and 20 hangs. At 4577 nodes a session of 8
+can hang. The default batch of 8 kept it rare enough to look like flakiness.
+
+### Where it is
+
+`streaming::pump_session` polls a device ctrl mailbox for slots the kernel has
+marked COMPLETE, and sleeps 1 ms whenever a scan sees no progress. That sleep
+carries no deadline and no bound on the number of retries, so a slot that is
+never marked COMPLETE turns into an unbounded loop. That is the observed
+symptom rather than the cause.
+
+For the cause, `stream_width` sizes the persistent kernel to fill the device:
+
+```rust
+pub fn stream_width(device: &CudaDevice, algorithm: Algorithm) -> usize {
+    (device.max_sms / algo_limits(algorithm).sms_per_nonce).max(1)
+}
+```
+
+Gibbs launches 4 blocks per nonce against simulated annealing's 1, so both ask
+for about one block per SM. A self-feeding kernel needs every block resident
+at once, and nothing here checks that they are. Slot uploads and the ctrl
+READY flag also travel on a different stream from the kernel that polls them,
+and the window between a job's `h`/`J` upload and its ctrl write grows with
+node count. Either would produce a slot that is never marked COMPLETE, and the
+size gate and the intermittency both fit. Which one it is has not been
+established.
+
+### Status
+
+Not diagnosed further. Reported against `quip-miner-cuda` 0.3.0-rc3, which is
+what `tools/fetch-miners.sh` installs today. An unreleased commit in
+`quip-miner-cuda` (`cf7528d`, "Fix NVML governor self-throttle, wire yielding,
+add driver time budget") rewrites `streaming.rs` and `nvml_gov.rs`. It has not
+been tested against this hang.
+
+One fix is worth making regardless of the root cause: `pump_session` should
+give up and reject its held jobs after a deadline instead of sleeping forever.
+A rejected job can be retried and shows up in the records, which is more than
+a hang offers.
+
+### What this means for benchmarking
+
+`cuda-gibbs` is absent from the throughput tables above. Its 2026-08-07
+figure of 184 jobs per minute at 4577 nodes was taken before this was known
+and could not be reproduced later the same day, so it is withdrawn rather than
+reported. Any `cuda-gibbs` number at more than 1024 nodes should be treated
+the same way.
+
+Below 1024 nodes `cuda-gibbs` has been reliable in every test here.
 
 ## cuopt (quip-cuopt-milp)
 
