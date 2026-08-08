@@ -387,37 +387,49 @@ Porting the SA wait into `gibbs.cu` fixes the batch-size hang outright, on an
 
 The fix is committed on `fix/gibbs-feeder-starvation` in `quip-miner-cuda`.
 
-### A second, separate defect above 3072 nodes
+### The starvation fix is not shippable as written
 
-The starvation fix does not clear the large-problem hang. Bisecting node count
-with the patched kernel at batch 8, two attempts each:
+Porting the SA wait fixes the batch-size hang, but measuring it against the
+unpatched kernel afterwards showed it introduces a different stall. At 4096
+nodes, batch 8, on an A4000:
 
-| Nodes | Result |
-|---|---|
-| 1024 | passes |
-| 1536 | passes |
-| 2048 | passes |
-| 3072 | passes |
-| 4096 | hangs, both attempts |
-| 4577 | hangs, five of five |
+| Kernel | 3072 nodes | 4096 nodes |
+|---|---|---|
+| unpatched rc4 | 0 hangs of 2 | 0 hangs of 4 |
+| with the wait | 0 hangs of 2 | 3 hangs of 4 |
 
-The boundary sits between 3072 and 4096 and is reproducible, unlike the
-starvation bug's timing dependence. The job count at the point of the hang is
-always a multiple of the batch size (8, 16, 40), so the session stalls at a
-batch boundary rather than part way through a model.
+So the wait trades a hang at small problems for a hang at large ones. The
+diagnosis stands and the direction is right, but the branch must not merge as
+written.
 
-Shared memory does not explain it. `shared_state[QUIP_MAX_NODES]` is sized
-from `--max-nodes`, and isingmark's value is raised to the 4800 default at
-every size tested, so the kernel is compiled identically for 1024 and 4577.
-Only runtime `N` and `nnz` differ.
+Likely cause, unconfirmed: with the wait in place a starved nonce's 4 blocks
+stay resident spinning rather than exiting, and nothing releases them until
+the host raises EXIT_NOW. The old early exit retired the nonce and freed its
+blocks. That difference only matters once per-model work is large enough for
+the feeder to fall behind.
 
-Gibbs runs 4 blocks per nonce and synchronises them through a
-generation-counter barrier on `CTRL_BLOCKS_DONE`. SA runs 1 block per nonce
-and needs no such barrier. A block that never reaches that barrier would keep
-the last block from ever running the slot transition, which matches the
-symptom, but that has not been confirmed.
+Either bound the wait, retrying for a while and then retiring the nonce as
+before, or fix the feeder so a slot scan cannot come up empty while work
+remains.
 
-Not diagnosed. It reproduces identically on rc3 and rc4.
+### The original large-problem hang
+
+Separate from the above, and present without any patch. Unpatched rc4 at
+batch 8 hangs at 4577 nodes (one pass in five attempts) while 4096 nodes
+passed four of four, so the untouched kernel's boundary sits above 4096
+rather than at it.
+
+An earlier bisect in this file put that boundary between 3072 and 4096. That
+measurement used the patched kernel and was reading the regression above, not
+the original defect. It has been withdrawn.
+
+`compute-sanitizer --tool synccheck` reports no errors on the 4096 case, so
+there is no `__syncthreads()` divergence. The run also completes under the
+sanitizer when it hangs without it, which makes this a timing-dependent race
+rather than a static barrier fault. That rules out the barrier-divergence
+theory this file carried earlier.
+
+Not diagnosed.
 
 ### What this means for benchmarking
 
@@ -426,9 +438,10 @@ figure of 184 jobs per minute at 4577 nodes was taken before this was known
 and could not be reproduced later the same day, so it is withdrawn rather than
 reported.
 
-At or below 3072 nodes `cuda-gibbs` passed every test here, and with the
-starvation fix it also takes any batch size. Above 3072 nodes it cannot be
-benchmarked until the second defect is fixed.
+At or below 4096 nodes the unpatched `cuda-gibbs` passed every test here, at
+the default batch of 8. At 4577 nodes it hangs about four times in five, so it
+cannot be benchmarked at chain scale until that is fixed. Raising
+`--batch-size` on the unpatched kernel hangs at any size and must be avoided.
 
 ## cuopt (quip-cuopt-milp)
 
