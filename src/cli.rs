@@ -268,6 +268,15 @@ pub struct ThroughputArgs {
     /// against. A corpus is finite, so `--duration` becomes an upper bound.
     #[arg(long)]
     pub corpus: Option<String>,
+    /// Jobs per miner session (default 8).
+    ///
+    /// Each session costs one subprocess spawn, device open and teardown. On
+    /// a GPU backend that includes CUDA context setup and kernel load, which
+    /// at small problem sizes costs far more than the work itself. Raise this
+    /// to amortize that cost when comparing backends; leave it at the default
+    /// to measure throughput including miner restarts.
+    #[arg(long)]
+    pub batch_size: Option<u32>,
 }
 
 impl ThroughputArgs {
@@ -300,6 +309,7 @@ impl ThroughputArgs {
         };
         let param_curve = merge_param_curve(&file, THROUGHPUT_DEFAULT_CURVE);
         let corpus = self.corpus.or(file.corpus.clone());
+        let batch_size = self.batch_size.or(file.batch_size);
         Ok(ThroughputConfig {
             backend,
             topology,
@@ -307,6 +317,7 @@ impl ThroughputArgs {
             param_curve,
             duration_s,
             seed,
+            batch_size,
             corpus,
             output_dir,
             backend_bin_override: None,

@@ -37,6 +37,7 @@ fn base_config(output_dir: PathBuf) -> ThroughputConfig {
         duration_s: 1.2,
         seed: 42,
         corpus: None,
+        batch_size: None,
         output_dir,
         backend_bin_override: Some(fake_miner_bin()),
         backend_args_override: None,
@@ -582,4 +583,79 @@ async fn hermetic_throughput_replays_the_bundled_chain_h0_corpus() {
             record.job_id
         );
     }
+}
+
+/// `batch_size` must control how many miner sessions a run spawns. Each
+/// session costs a spawn and device open, which for a GPU backend dominates
+/// the work at small problem sizes, so a backend comparison needs to be able
+/// to amortize it.
+#[tokio::test]
+async fn hermetic_throughput_batch_size_controls_the_number_of_sessions() {
+    let small = tempfile::tempdir().expect("create temp dir");
+    let large = tempfile::tempdir().expect("create temp dir");
+
+    let _ = run_throughput(&ThroughputConfig {
+        duration_s: 1.2,
+        batch_size: Some(4),
+        ..base_config(small.path().to_path_buf())
+    })
+    .await
+    .expect("small-batch run succeeds");
+    let _ = run_throughput(&ThroughputConfig {
+        duration_s: 1.2,
+        batch_size: Some(64),
+        ..base_config(large.path().to_path_buf())
+    })
+    .await
+    .expect("large-batch run succeeds");
+
+    let s = read_summary(small.path());
+    let l = read_summary(large.path());
+    assert_eq!(s.config["batch_size"].as_u64(), Some(4));
+    assert_eq!(l.config["batch_size"].as_u64(), Some(64));
+    let small_batches = s.config["batches_run"].as_u64().expect("batches_run");
+    let large_batches = l.config["batches_run"].as_u64().expect("batches_run");
+    assert!(
+        small_batches > large_batches,
+        "a 4-job batch must spawn more sessions than a 64-job batch over the \
+         same duration, got {small_batches} and {large_batches}"
+    );
+}
+
+/// The default must stay 8, so an existing run's numbers keep their meaning.
+#[tokio::test]
+async fn hermetic_throughput_batch_size_defaults_to_eight() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let _ = run_throughput(&base_config(dir.path().to_path_buf()))
+        .await
+        .expect("run succeeds");
+    assert_eq!(
+        read_summary(dir.path()).config["batch_size"].as_u64(),
+        Some(8)
+    );
+}
+
+/// The summary must carry per-job medians, so a reader can separate the work
+/// from the per-session fixed cost without reparsing records.jsonl.
+#[tokio::test]
+async fn hermetic_throughput_summary_reports_per_job_medians() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let report = run_throughput(&base_config(dir.path().to_path_buf()))
+        .await
+        .expect("run succeeds");
+    assert!(!report.records.is_empty());
+
+    let summary = read_summary(dir.path());
+    let wall = summary.config["median_job_wall_ms"]
+        .as_u64()
+        .expect("median_job_wall_ms is numeric");
+    assert!(summary.config["median_device_ms"].is_u64());
+
+    let mut walls: Vec<u64> = report.records.iter().map(|r| r.wall_ms).collect();
+    walls.sort_unstable();
+    assert_eq!(
+        wall,
+        walls[walls.len() / 2],
+        "median_job_wall_ms must be the median of the records' own wall_ms"
+    );
 }

@@ -121,7 +121,7 @@ Prefer deleting `.cargo/config.toml` when you are not co-developing upstream.
 
 | Mode | Measures |
 |---|---|
-| `throughput` | Jobs per minute over a fixed duration at fixed hardness. `--corpus` replays a chain dataset instead of deriving problems from `--seed`; the corpus is finite, so `--duration` becomes an upper bound |
+| `throughput` | Jobs per minute over a fixed duration at fixed hardness. `--corpus` replays a chain dataset instead of deriving problems from `--seed`; the corpus is finite, so `--duration` becomes an upper bound. `--batch-size` sets jobs per miner session (default 8); raise it to amortize spawn and device-open cost, and read `median_device_ms` for a setup-free per-job figure |
 | `sweep` | Grid over `num_reads` x `num_sweeps` or `anneal_time_us` |
 | `comparative` | Hardness search that matches a reference energy distribution |
 | `ttt` | Time-to-target per energy level |

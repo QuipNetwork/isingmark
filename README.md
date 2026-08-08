@@ -51,6 +51,20 @@ Two chain corpora ship with the crate: `chain-h0` (4658 instances) and
 same name, and isingmark refuses a mismatched pair rather than replaying the
 wrong problems. See `docs/datasets.md`.
 
+Each session costs a subprocess spawn, device open and kernel load. Throughput
+mode pays that per 8-job batch by default, which at small problem sizes costs
+far more than the work. Raise `--batch-size` to measure the backend rather than
+the restart cost:
+
+```bash
+isingmark throughput --backend cuda --topology-preset smoke-h0 \
+  --duration 30s --batch-size 512
+```
+
+That one change moves `cuda` on an 8-node topology from 182 to 12883 jobs per
+minute. The summary also reports `median_device_ms`, the per-job device time,
+which excludes session setup regardless of batch size.
+
 `chain-h0` and `advantage-system6` are exact D-Wave working graphs, read from
 the live QPUs. Every bundled graph also ships an `-h0` variant with
 `allowed_h_milli: [0]`, which is the regime the chain mines in and the one

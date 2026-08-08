@@ -45,6 +45,10 @@ pub const SUMMARY_FILENAME: &str = "summary.json";
 /// session's own spawn-and-handshake cost across more than a job or two.
 const BATCH_SIZE: u32 = 8;
 
+/// Ceiling on `--batch-size`, so a typo cannot make this mode allocate an
+/// unbounded job vector up front.
+pub const MAX_BATCH_SIZE: u32 = 100_000;
+
 /// Miner account this mode always derives jobs against. Only affects the
 /// derived job nonce (via `problem::ProblemSource`), not this run's
 /// results, so a fixed value is used across every run rather than
@@ -92,6 +96,21 @@ pub struct ThroughputConfig {
     /// [`Self::corpus`] is set, because a corpus names its problems rather
     /// than deriving them.
     pub seed: u64,
+    /// Jobs dispatched per miner session, or `None` for [`BATCH_SIZE`].
+    ///
+    /// This mode runs repeated sessions until the duration elapses, and each
+    /// session costs one subprocess spawn, handshake, device open, and
+    /// teardown. For a GPU backend that fixed cost includes CUDA context
+    /// setup and kernel load, which at small problem sizes dwarfs the work:
+    /// `cuda` on an 8-node topology spends about 2.55 s per 8-job batch on
+    /// overhead against 80 ms of device time.
+    ///
+    /// Raise this to amortize that cost when comparing backends. A batch
+    /// large enough to cover the whole duration pays the fixed cost once,
+    /// which is what a steady-state comparison wants. Leave it at the default
+    /// to measure throughput as a coordinator that restarts miners would see
+    /// it.
+    pub batch_size: Option<u32>,
     /// Replay a corpus of chain-harvested instances instead of deriving
     /// problems from [`Self::seed`].
     ///
@@ -194,6 +213,9 @@ pub async fn run_throughput_with_summary(
         target,
         target_wall(cfg.duration_s),
         &records_path,
+        cfg.batch_size
+            .unwrap_or(BATCH_SIZE)
+            .clamp(1, MAX_BATCH_SIZE),
     )
     .await?;
 
@@ -297,13 +319,16 @@ struct Aggregate {
     batches_run: u32,
 }
 
-/// Repeatedly draw a [`BATCH_SIZE`]-job batch from `source` and run a
+/// Repeatedly draw a `batch_size`-job batch from `source` and run a
 /// session against `backend`, appending every completed record to
 /// `records_path` as its batch completes, until the summed measured wall
 /// time of every session reaches `target_wall`. Stops early if a session
 /// never completes its handshake, since retrying a backend that cannot
 /// even start would otherwise busy-loop for the rest of the requested
 /// duration.
+///
+/// Each batch is one session, so each batch pays the backend's fixed
+/// startup cost. See [`ThroughputConfig::batch_size`].
 async fn dispatch_until_duration(
     backend: &BackendSpec,
     spec: &TopologySpec,
@@ -311,6 +336,7 @@ async fn dispatch_until_duration(
     target: SetTarget,
     target_wall: Duration,
     records_path: &Path,
+    batch_size: u32,
 ) -> Result<Aggregate, ModeError> {
     let mut agg = Aggregate {
         records: Vec::new(),
@@ -327,8 +353,8 @@ async fn dispatch_until_duration(
     let mut total_wall = Duration::ZERO;
 
     while total_wall < target_wall {
-        let mut batch = Vec::with_capacity(BATCH_SIZE as usize);
-        for _ in 0..BATCH_SIZE {
+        let mut batch = Vec::with_capacity(batch_size as usize);
+        for _ in 0..batch_size {
             let Some(job) = source.next_job() else {
                 break;
             };
@@ -421,6 +447,18 @@ fn build_summary(
         "num_sweeps": params.num_sweeps,
         "anneal_time_us": params.anneal_time_us,
         "jobs_per_min": jobs_per_min(agg.records.len(), agg.total_wall_ms),
+        // `jobs_per_min` above divides by the whole run's wall, which includes
+        // one subprocess spawn, device open and teardown per batch. The three
+        // below isolate the work from that fixed cost: `batches_run` says how
+        // many times it was paid, and the two medians are per job.
+        "batch_size": cfg.batch_size.unwrap_or(BATCH_SIZE).clamp(1, MAX_BATCH_SIZE),
+        "batches_run": agg.batches_run,
+        "median_job_wall_ms": median_u64(agg.records.iter().map(|r| r.wall_ms)),
+        "median_device_ms": median_u64(
+            agg.records
+                .iter()
+                .map(|r| r.device_access_time_us / 1000),
+        ),
         "miner_exit_code": agg.last_exit_code,
         "miner_unresponsive": agg.any_unresponsive,
         "miner_stderr_tail": agg.last_stderr_tail.clone(),
@@ -440,6 +478,18 @@ fn build_summary(
         config,
         totals,
     }
+}
+
+/// Median of an iterator of counts, or `0` when it is empty. Used for the
+/// per-job figures in a run summary, where the mean would be dragged by the
+/// first job of each batch absorbing device warmup.
+fn median_u64(values: impl Iterator<Item = u64>) -> u64 {
+    let mut v: Vec<u64> = values.collect();
+    if v.is_empty() {
+        return 0;
+    }
+    v.sort_unstable();
+    v[v.len() / 2]
 }
 
 /// Jobs completed per minute of measured wall time, `0.0` if none elapsed

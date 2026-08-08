@@ -175,76 +175,132 @@ an error rather than failing quietly when a problem does not fit.
 
 ## Measured throughput
 
-Measured 2026-08-07. Read "Measurement conditions" below before comparing any
-of these numbers to anything measured elsewhere.
+Measured 2026-08-07 with one miner session per run, so subprocess spawn,
+device open and kernel load are paid once instead of once per batch. Read
+"Removing startup cost" and "Measurement conditions" below before comparing
+these numbers to anything measured elsewhere.
+
+Throughput mode runs repeated sessions until the duration elapses, and each
+session pays that fixed cost. `--batch-size` controls how many jobs share a
+session. The default of 8 measures throughput as a coordinator that restarts
+miners would see it. A large batch measures the backend.
+
+### Removing startup cost
+
+Same runs, same host, batch 8 against batch 512:
+
+| Topology | Backend | batch 8 | batch 512 | Ratio |
+|---|---|---|---|---|
+| `smoke-h0` (8) | `cpu-sa` | 2890 | 267842 | 93x |
+| `smoke-h0` (8) | `cuda` | 182 | 12883 | 71x |
+| `chain-h0` (4577) | `cpu-sa` | 91.6 | 267.3 | 2.9x |
+| `chain-h0` (4577) | `cpu-gibbs` | 44.3 | 150.0 | 3.4x |
+| `chain-h0` (4577) | `cuda` | 72.7 | 86.7 | 1.2x |
+
+Startup dominated every small-topology figure and still cost a factor of
+three at chain scale for the CPU backends. Any earlier throughput number
+taken at the default batch understates the backend, most severely for GPU
+backends and small problems.
+
+`median_device_ms` in a run summary is the per-job device time. It excludes
+session setup for every backend, including ones that cannot take a large
+batch, so it is the metric to use when batch size cannot be raised.
+
+### Size ladder, h0 regime
+
+30 s per run, hardness 0.5, batch 512.
+
+| Topology | Nodes | `cpu-sa` | `cpu-gibbs` | `cuda` |
+|---|---|---|---|---|
+| `smoke-h0` | 8 | 267842 | 99651 | 12883 |
+| `cuopt-small-h0` | 128 | 11343 | 5610 | 4832 |
+| `common-small-h0` | 548 | 2473 | 1321 | 1671 |
+| `chimera-c8-16-4-h0` | 1024 | 1829 | 872 | 1163 |
+| `advantage-system6-h0` | 5612 | 254 | 136 | 85 |
+| `pegasus-p16-h0` | 5640 | 254 | 135 | 86 |
+
+Jobs per minute. `cpu-sa` leads at every size on this host.
+
+Median device time per job at 4577 nodes: `cpu-sa` 3334 ms, `cuda` 5617 ms,
+`cpu-gibbs` 5937 ms. `cuda` also shows 11105 ms of median wall against that
+5617 ms of device time, so about half its per-job cost sits outside the
+kernel even in a single session.
 
 ### h0 against fields, on one graph
 
 `chain-h0` and `advantage2-system1` are the same 4577-node Advantage2 working
-graph. One draws `h` from `{0}`, the other from `{-1, 0, +1}`. Nothing else
-differs. Throughput mode, 60 s, hardness 0.5, which resolves to `num_reads`
-36 and `num_sweeps` 550.
+graph. One draws `h` from `{0}`, the other from `{-1, 0, +1}`. 60 s, hardness
+0.5, batch 512.
 
-| Backend | h0 jobs/min | h0 median energy | fields jobs/min | fields median energy |
+| Backend | h0 jobs/min | fields jobs/min | h0 median energy | fields median energy |
 |---|---|---|---|---|
-| `cuda-gibbs` | 184.0 | -14274000 | 181.6 | -14741000 |
-| `cpu-sa` | 91.6 | -14268000 | 75.8 | -14728000 |
-| `cuda` | 72.7 | -14267000 | 70.9 | -14730000 |
-| `cpu-gibbs` | 44.3 | -14272000 | 38.1 | -14734500 |
+| `cpu-sa` | 267.3 | 271.0 | -14268000 | -14728000 |
+| `cpu-gibbs` | 150.0 | 152.3 | -14272000 | -14734500 |
+| `cuda` | 86.7 | 86.7 | -14267000 | -14730000 |
 
-Adding fields moves the median energy about 460000 milli lower, near 3.2
-percent, for every backend. Throughput barely moves. The field regime is
-easier, not faster: the solver gains 2998 field terms it can satisfy
-greedily, and reaches deeper energy on a problem that is not harder to
-compute.
+**Throughput is the same in both regimes.** An earlier round at batch 8
+reported h0 as the faster one, by 91.6 against 75.8 for `cpu-sa`. That gap was
+session-startup noise and it disappears once the startup is paid once.
 
-That is the practical reason to benchmark at h0, and it also sizes the hazard
-in replaying an h0 corpus against a fields topology. Doing so would report
-energies about 3 percent better than the real problem allows.
+The energy difference is real and holds. Fields reach about 460000 milli
+lower on every backend, near 3.2 percent. The field regime is easier, not
+faster. A solver gains 2998 field terms it can satisfy greedily and reaches
+deeper energy on a problem that costs the same to compute.
 
-### Size ladder, h0 regime
+That is the reason to benchmark at h0, and it sizes the hazard of replaying an
+h0 corpus against a fields topology: the run would report energies about 3
+percent better than the real problem allows.
 
-Throughput mode, 30 s, hardness 0.5.
+### cuda-gibbs is missing from these tables
 
-| Topology | Nodes | `cpu-sa` jobs/min | `cuda` jobs/min |
-|---|---|---|---|
-| `smoke-h0` | 8 | 2890.6 | 182.2 |
-| `cuopt-small-h0` | 128 | 1771.2 | 185.7 |
-| `common-small-h0` | 548 | 568.5 | 184.0 |
-| `chimera-c8-16-4-h0` | 1024 | 426.7 | 180.2 |
-| `advantage-system6-h0` | 5612 | 79.3 | 64.0 |
-| `pegasus-p16-h0` | 5640 | 67.9 | 55.9 |
-
-**The `cuda` column below 5000 nodes measures the harness, not the GPU.**
-Throughput mode spawns a fresh miner session per 8-job batch. At 8 nodes
-`cuda` reports 209 ms of wall per job against 10 ms of device time, so 95
-percent of that wall is process spawn and kernel setup. The near-constant 180
-jobs per minute across four problem sizes is the batch cadence, not GPU
-throughput. Use `sweep` with a large `--num-jobs` to measure a GPU backend at
-small sizes.
-
-At chain scale the same runs become compute-bound and the comparison means
-something. Device time per job at 4577 nodes: `cuda-gibbs` 1057 ms, `cpu-sa`
-4199 ms, `cuda` 5250 ms, `cpu-gibbs` 8128 ms. `cuda-gibbs` is the fastest
-backend at that size by a factor of four, and `cuda` simulated annealing is
-slower than `cpu-sa` on this host.
+`quip-cuda-gibbs` hangs, and the hang is what raising the batch size exposed.
+See "cuda-gibbs session hang" below. Its 2026-08-07 batch-8 figure of 184
+jobs per minute at 4577 nodes could not be reproduced later the same day, so
+it is not reported here.
 
 ### Measurement conditions
 
-The 2026-08-07 round ran on `finney`: 32 cores, 2 NVIDIA RTX A4000, 125.7 GiB
-RAM. **Load average ran between 44 and 92 for the whole round.** Other users'
-long-running jobs held roughly 14 of the 32 cores throughout.
+Host `finney`: 32 cores, 2 NVIDIA RTX A4000, 125.7 GiB RAM.
 
-CPU numbers are depressed and noisy in absolute terms. Comparisons
-within the round hold, because every backend saw the same contention. Do not
-compare them against numbers measured on an idle host. The `cpu-sa` figure
-that moved from 55 ms to 254 ms per job between rounds is contention, not a
-regression.
+Load average ran between 14 and 30 during this round. An earlier round the
+same day ran at 44 to 92, because another user's job held roughly 14 of the
+32 cores. Absolute CPU numbers are not comparable between the two rounds for
+that reason as well as the batching change. Comparisons within a round hold,
+because every backend saw the same conditions.
 
 GPU numbers are cleaner. Both cards were idle apart from these runs.
 
-Reproduce with the scripts recorded in `out/rerun-2026-08-07/run.log` and
-`sweep.log`.
+Scripts and raw output are under `out/rerun3-2026-08-07/`.
+
+## cuda-gibbs session hang
+
+`quip-cuda-gibbs` deadlocks when one session carries more than a
+size-dependent number of jobs. Every thread parks in `futex_wait_queue`, the
+GPU sits at 0 percent busy, and no job ever returns. The miner does not
+error or exit, so a run only ends when something kills it.
+
+Measured thresholds on `smoke-h0`, 8 nodes:
+
+| Jobs in session | Result |
+|---|---|
+| 8, 16, 17, 18 | completes in about 2 s |
+| 20, 22, 24, 26, 28, 30, 32, 64, 128, 256 | hangs |
+
+`quip-cuda-sa` completes 800 jobs in one session on the same topology, and
+`quip-cpu-gibbs` completes 800. The fault is specific to the CUDA Gibbs miner.
+
+The threshold falls as the problem grows. At 4577 nodes a session of 16 hangs,
+and so does a session of 8, three attempts out of three. The same 8-job
+sessions completed 184 jobs earlier the same day on the same host, so the
+threshold is not purely a function of size. The GPUs were idle and free of
+leaked contexts when the later attempts hung.
+
+Not diagnosed. Three things are established. Small topologies are unaffected.
+An 8-node problem runs fine at batch 8, repeatedly. No error is ever reported.
+
+Until this is fixed, `cuda-gibbs` cannot be benchmarked at chain scale, and
+any `cuda-gibbs` number taken before 2026-08-07 should be treated as
+unreproducible rather than as a measurement.
 
 ## cuopt (quip-cuopt-milp)
 

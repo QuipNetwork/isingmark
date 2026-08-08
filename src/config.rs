@@ -121,6 +121,9 @@ pub struct FileConfig {
     /// Replay a bundled corpus name or a JSONL path instead of deriving
     /// problems from [`Self::seed`]. Throughput mode only.
     pub corpus: Option<String>,
+    /// Jobs per miner session in throughput mode (default 8). Raise to
+    /// amortize per-session spawn and device-open cost.
+    pub batch_size: Option<u32>,
     /// Directory for JSONL records and the run summary.
     pub output_dir: Option<PathBuf>,
     /// Hardness-to-parameter curve bounds. Validated on load (see
