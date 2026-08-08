@@ -387,49 +387,48 @@ Porting the SA wait into `gibbs.cu` fixes the batch-size hang outright, on an
 
 The fix is committed on `fix/gibbs-feeder-starvation` in `quip-miner-cuda`.
 
-### The starvation fix is not shippable as written
+### How variable this is, and what that invalidates
 
-Porting the SA wait fixes the batch-size hang, but measuring it against the
-unpatched kernel afterwards showed it introduces a different stall. At 4096
-nodes, batch 8, on an A4000:
+The hang is a coin flip at large node counts, which took three rounds of
+under-powered A/B tests to notice. Unpatched rc4, 12 trials per cell, `.` is a
+pass and `H` a hang:
 
-| Kernel | 3072 nodes | 4096 nodes |
+| Config | Result | Sequence |
 |---|---|---|
-| unpatched rc4 | 0 hangs of 2 | 0 hangs of 4 |
-| with the wait | 0 hangs of 2 | 3 hangs of 4 |
+| 8 nodes, batch 64 | 11 hangs of 12 | `.HHHHHHHHHHH` |
+| 4096 nodes, batch 8 | 6 hangs of 12 | `H...H..HHHH.` |
 
-So the wait trades a hang at small problems for a hang at large ones. The
-diagnosis stands and the direction is right, but the branch must not merge as
-written.
+Two conclusions earlier drafts of this file carried are withdrawn.
 
-Likely cause, unconfirmed: with the wait in place a starved nonce's 4 blocks
-stay resident spinning rather than exiting, and nothing releases them until
-the host raises EXIT_NOW. The old early exit retired the nonce and freed its
-blocks. That difference only matters once per-model work is large enough for
-the feeder to fall behind.
+**The node-count boundary was not real.** A bisect that put it between 3072
+and 4096 ran 2 trials per size. At a hang rate near one half, 2 passes in a
+row means nothing. The unpatched kernel hangs at 4096 about half the time.
 
-Either bound the wait, retrying for a while and then retiring the nonce as
-before, or fix the feeder so a slot scan cannot come up empty while work
-remains.
+**The starvation fix was not shown to regress large problems.** That verdict
+compared 3 hangs of 4 with the fix against 0 of 4 without. The baseline is 6
+of 12, so the 0-of-4 was a lucky streak and the comparison had no power.
 
-### The original large-problem hang
+Anything measured here at 4 trials per arm says nothing. That includes several
+numbers in earlier revisions of this section.
 
-Separate from the above, and present without any patch. Unpatched rc4 at
-batch 8 hangs at 4577 nodes (one pass in five attempts) while 4096 nodes
-passed four of four, so the untouched kernel's boundary sits above 4096
-rather than at it.
+### What still holds
 
-An earlier bisect in this file put that boundary between 3072 and 4096. That
-measurement used the patched kernel and was reading the regression above, not
-the original defect. It has been withdrawn.
+The code-level finding does not depend on sampling. `sa.cu` waits through
+feeder starvation and `gibbs.cu` retired the nonce instead, both kernels
+arrived in the same verbatim copy, and only SA carried the fix. That is
+readable in the source.
 
-`compute-sanitizer --tool synccheck` reports no errors on the 4096 case, so
-there is no `__syncthreads()` divergence. The run also completes under the
-sanitizer when it hangs without it, which makes this a timing-dependent race
-rather than a static barrier fault. That rules out the barrier-divergence
-theory this file carried earlier.
+The batch-size failure is a large effect rather than a coin flip: unpatched,
+8 nodes at batch 64 hangs 11 times in 12, and with the wait it passed every
+run made. A 2 ms bound on the wait is not viable, because it retires the
+nonce on the same transient starvation the wait exists to ride out and
+reproduced the original hang. The branch now matches `sa.cu` and waits
+unbounded.
 
-Not diagnosed.
+The large-node hang is undiagnosed and is present with and without the fix,
+at roughly one run in two. `compute-sanitizer --tool synccheck` reports no
+errors on it, and the case completes under the sanitizer when it hangs
+without it, so it is a timing-dependent race rather than a barrier fault.
 
 ### What this means for benchmarking
 
@@ -438,10 +437,13 @@ figure of 184 jobs per minute at 4577 nodes was taken before this was known
 and could not be reproduced later the same day, so it is withdrawn rather than
 reported.
 
-At or below 4096 nodes the unpatched `cuda-gibbs` passed every test here, at
-the default batch of 8. At 4577 nodes it hangs about four times in five, so it
-cannot be benchmarked at chain scale until that is fixed. Raising
-`--batch-size` on the unpatched kernel hangs at any size and must be avoided.
+`cuda-gibbs` cannot be benchmarked above about 1024 nodes on the released
+miner: 4096 nodes hangs roughly half of all runs, and 4577 hangs more often
+still. Raising `--batch-size` hangs at any size and must be avoided. Small
+topologies at the default batch have been reliable.
+
+Treat any single `cuda-gibbs` run as one sample of a coin flip, not as a
+measurement.
 
 ## cuopt (quip-cuopt-milp)
 
