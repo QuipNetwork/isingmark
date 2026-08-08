@@ -274,176 +274,87 @@ Scripts and raw output are under `out/rerun3-2026-08-07/`.
 
 ## cuda-gibbs session hang
 
-`quip-cuda-gibbs` 0.3.0-rc3 hangs during a streaming session on large
-problems. Every thread parks in `futex_wait_queue`, the GPU sits at 0 percent
-busy, and no job ever returns. The miner does not error, time out, or exit, so
-a run only ends when something kills it.
+**Root caused and fixed.** Two separate defects in `kernels/gibbs.cu`, both of
+the same shape: the kernel retired a nonce rather than waiting for the host to
+finish uploading to it. Fixes are on `fix/gibbs-cold-start-claim` in
+`quip-miner-cuda`, not yet released.
 
-### What is required to reproduce it
+### The cold-start race
 
-Each condition was tested against a control that isolates it.
+The host enqueues each cold-start slot-0 upload on the transfer stream, data
+first and the `SLOT_READY` ctrl flag last, then launches the persistent kernel
+on the compute stream. The two streams are deliberately unordered. At large
+`N` the uploads are still in flight when the kernel starts, so the lead
+block's single-pass scan saw EMPTY, wrote `CTRL_GENERATION = -1`, and every
+block of that nonce returned. The READY flag landed microseconds later with no
+block left to claim it, and `pump_session` polled for a `SLOT_COMPLETE` that
+could never arrive.
 
-| Test | Result |
-|---|---|
-| `bench run`, 20 real 4577-node models, isolated launches | works, 19 s |
-| Session loop, `cuda-gibbs`, 4577 nodes | hangs |
-| Session loop, `cuda-gibbs`, 8 nodes | works |
-| Session loop, `cuda-sa`, 4577 nodes | works |
+Confirmed by direct observation rather than inference. Host-side dumps of the
+ctrl mailbox on stall showed the same signature in all 12 hangs examined:
 
-The kernel is not the problem. `bench run` drives the same Gibbs kernel over
-the same 4577-node chain models through single-shot launches and completes.
-The session loop is not the problem on its own either, because `cuda-sa` runs
-through it at the same size. The fault needs the streaming session, the Gibbs
-algorithm, and a large problem together.
-
-### It is size-gated and intermittent
-
-Session mode at batch 8, 15 s per run:
-
-| Topology | Nodes | Result |
-|---|---|---|
-| `smoke-h0` | 8 | 56 jobs |
-| `cuopt-small-h0` | 128 | 56 jobs |
-| `common-small-h0` | 548 | 56 jobs |
-| `chimera-c8-16-4-h0` | 1024 | 56 jobs |
-| `chain-h0` | 4577 | hangs |
-| `advantage-system6-h0` | 5612 | hangs |
-
-Everything at or below 1024 nodes passed every try. Above that it is a
-coin flip rather than a wall: three consecutive `chain-h0` runs went hang,
-pass, pass, and a separate set of three hung three times. A hang can arrive
-after 0, 24 or 48 completed jobs.
-
-Raising `--batch-size` makes it more likely, which is how it was found. At 8
-nodes a session of 18 jobs passes and 20 hangs. At 4577 nodes a session of 8
-can hang. The default batch of 8 kept it rare enough to look like flakiness.
-
-### Where it is
-
-`streaming::pump_session` polls a device ctrl mailbox for slots the kernel has
-marked COMPLETE, and sleeps 1 ms whenever a scan sees no progress. That sleep
-carries no deadline and no bound on the number of retries, so a slot that is
-never marked COMPLETE turns into an unbounded loop. That is the observed
-symptom rather than the cause.
-
-For the cause, `stream_width` sizes the persistent kernel to fill the device:
-
-```rust
-pub fn stream_width(device: &CudaDevice, algorithm: Algorithm) -> usize {
-    (device.max_sms / algo_limits(algorithm).sms_per_nonce).max(1)
-}
+```
+nonce=7 slots=[1,0,0] active_slot=0 blocks_done=0 work_queue=0
+        exit_now=0 generation=-1 host_active=Some(0)
 ```
 
-Gibbs launches 4 blocks per nonce against simulated annealing's 1, so both ask
-for about one block per SM. A self-feeding kernel needs every block resident
-at once, and nothing here checks that they are. Slot uploads and the ctrl
-READY flag also travel on a different stream from the kernel that polls them,
-and the window between a job's `h`/`J` upload and its ctrl write grows with
-node count. Either would produce a slot that is never marked COMPLETE, and the
-size gate and the intermittency both fit. Which one it is has not been
-established.
+`generation=-1` is the nonce retired at birth, `slots=[1,0,0]` is slot 0 READY
+and unclaimed, `work_queue=0` means it never processed anything. Healthy
+nonces in the same dump read `generation=1`, `slots=[3,0,0]`, `work_queue=8`.
+The dead nonce was always a high-numbered one, which is what upload order
+predicts.
 
-### Root cause: the Gibbs kernel does not wait through feeder starvation
+This explains every earlier observation. The GPU is idle because the nonce
+never runs, rather than spinning as a lost barrier would. The window grows
+with `N` because the upload is larger, which is the size dependence.
+`compute-sanitizer` hid the bug because it serializes copies and launches,
+closing the window.
 
-`kernels/gibbs.cu` retired a nonce permanently the first time its slot scan
-found nothing READY:
+### The feeder-starvation bug
 
-```c
-} else {
-    // No more work
-    __threadfence();
-    atomicExch((int*)&nonce_ctrl[ctrl_base + CTRL_GENERATION], -1);
-}
-```
+Separately, the next-slot scan had the same single-pass flaw, so a nonce could
+retire mid-session whenever the feeder was briefly empty. `kernels/sa.cu`
+already waits through this and documents why (QUI-828); both kernels came from
+the same verbatim v0.2 copy and only SA carried the fix. This is what made
+`--batch-size` above about 18 hang at any size.
 
-The host refills slots while the kernel runs, so an empty scan usually means
-the feeder is mid-upload rather than out of work. Once a nonce was retired,
-every job the host later marked READY on it went unclaimed, and
-`pump_session` waited on a `SLOT_COMPLETE` that could not arrive.
+### Verification
 
-`kernels/sa.cu` already waits through exactly this, and says so:
+Both arms interleaved in one session, 4096 nodes, batch 8:
 
-```c
-// Find next READY slot. Wait through transient feeder starvation
-// instead of the old bounded ~100ms retry ... that cap let a
-// momentarily-empty feeder kill the block, after which the nonce
-// was dropped permanently ... (QUI-828). Only an explicit host
-// EXIT_NOW ends the block now.
-```
-
-Both kernels arrived in the same verbatim v0.2 copy (`0f28d9f`), but only the
-SA one carried that fix, which is what let `cuda-sa` run 800 jobs in a
-session while `cuda-gibbs` died at 20.
-
-Porting the SA wait into `gibbs.cu` fixes the batch-size hang outright, on an
-8-node topology with one session per run:
-
-| `--batch-size` | Before | After |
+| Build | Hangs | Sequence |
 |---|---|---|
-| 20 | hang | 140 records |
-| 32 | hang | 224 records |
-| 64 | hang | 448 records |
-| 256 | hang | 1792 records |
+| before | 8 of 20 | `.HHH..H.H..H.HH.....` |
+| after | 0 of 20 | `....................` |
 
-The fix is committed on `fix/gibbs-feeder-starvation` in `quip-miner-cuda`.
+Reproduced here independently, building both arms from source and
+interleaving them. The fixed build took 0 hangs of 14 and the unfixed 1 of
+14, which puts the fixed build at 0 hangs in 34 attempts across both runs.
 
-### How variable this is, and what that invalidates
+Baseline rates are unstable between sessions, at 6 of 12, 8 of 20 and 1 of 14
+on different days. The mailbox evidence rather than those rates is what
+establishes the mechanism.
 
-The hang is a coin flip at large node counts, which took three rounds of
-under-powered A/B tests to notice. Unpatched rc4, 12 trials per cell, `.` is a
-pass and `H` a hang:
+Also verified after the fix: 8 of 8 at 4577 nodes and 4 of 4 at 5612. The
+8-node batch-64 case that previously hung 11 times in 12 passed 8 of 8.
 
-| Config | Result | Sequence |
-|---|---|---|
-| 8 nodes, batch 64 | 11 hangs of 12 | `.HHHHHHHHHHH` |
-| 4096 nodes, batch 8 | 6 hangs of 12 | `H...H..HHHH.` |
+### The host no longer waits forever
 
-Two conclusions earlier drafts of this file carried are withdrawn.
+`pump_session` now carries a 30 s no-completion deadline
+(`QUIP_CUDA_PUMP_DEADLINE_MS`, 0 disables). On expiry it dumps the ctrl
+mailbox, rejects held jobs as `Overloaded`, which is retryable, and tears the
+session down. Verified against the unfixed kernel, where 10 of 10 runs exited cleanly and 6
+of those recovered from a wedge that previously hung forever.
 
-**The node-count boundary was not real.** A bisect that put it between 3072
-and 4096 ran 2 trials per size. At a hang rate near one half, 2 passes in a
-row means nothing. The unpatched kernel hangs at 4096 about half the time.
+This is worth having whatever else changes. A rejected job is visible in the
+records, unlike a hang.
 
-**The starvation fix was not shown to regress large problems.** That verdict
-compared 3 hangs of 4 with the fix against 0 of 4 without. The baseline is 6
-of 12, so the 0-of-4 was a lucky streak and the comparison had no power.
+### Still open
 
-Anything measured here at 4 trials per arm says nothing. That includes several
-numbers in earlier revisions of this section.
-
-### What still holds
-
-The code-level finding does not depend on sampling. `sa.cu` waits through
-feeder starvation and `gibbs.cu` retired the nonce instead, both kernels
-arrived in the same verbatim copy, and only SA carried the fix. That is
-readable in the source.
-
-The batch-size failure is a large effect rather than a coin flip: unpatched,
-8 nodes at batch 64 hangs 11 times in 12, and with the wait it passed every
-run made. A 2 ms bound on the wait is not viable, because it retires the
-nonce on the same transient starvation the wait exists to ride out and
-reproduced the original hang. The branch now matches `sa.cu` and waits
-unbounded.
-
-The large-node hang is undiagnosed and is present with and without the fix,
-at roughly one run in two. `compute-sanitizer --tool synccheck` reports no
-errors on it, and the case completes under the sanitizer when it hangs
-without it, so it is a timing-dependent race rather than a barrier fault.
-
-### What this means for benchmarking
-
-`cuda-gibbs` is absent from the throughput tables above. Its 2026-08-07
-figure of 184 jobs per minute at 4577 nodes was taken before this was known
-and could not be reproduced later the same day, so it is withdrawn rather than
-reported.
-
-`cuda-gibbs` cannot be benchmarked above about 1024 nodes on the released
-miner: 4096 nodes hangs roughly half of all runs, and 4577 hangs more often
-still. Raising `--batch-size` hangs at any size and must be avoided. Small
-topologies at the default batch have been reliable.
-
-Treat any single `cuda-gibbs` run as one sample of a coin flip, not as a
-measurement.
+`kernels/sa.cu` has the identical single-scan initial claim and is latently
+exposed to the same cold-start race. It was left untouched and SA hang rates
+were not measured, so "SA never hangs" is an observation rather than a
+guarantee.
 
 ## cuopt (quip-cuopt-milp)
 
