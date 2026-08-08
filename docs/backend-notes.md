@@ -343,13 +343,51 @@ node count. Either would produce a slot that is never marked COMPLETE, and the
 size gate and the intermittency both fit. Which one it is has not been
 established.
 
+### rc4 does not fix it
+
+`quip-miner-cuda` 0.3.0-rc4 (commit `cf7528d`, "Fix NVML governor
+self-throttle, wire yielding, add driver time budget") was built from source
+and tested against every case above.
+
+| Case | rc3 | rc4 |
+|---|---|---|
+| `chain-h0` (4577), batch 8, 5 attempts | intermittent | 1 pass, 4 hangs |
+| `smoke-h0` (8), batch 20, 32, 64, 256 | all hang | all hang |
+| `chain-h0` and `advantage-system6-h0`, batch 64 | hang | hang |
+| 548, 1024 nodes, batch 8 | pass | pass |
+
+The batch-size threshold at 8 nodes is unchanged. That is consistent with the
+commit: it rewrites `nvml_gov.rs` and adds `driver_budget.rs`, and its
+`streaming.rs` changes are about ending a session to yield the device. Neither
+the unbounded wait in `pump_session` nor `stream_width` changed.
+
+The NVML governor was ruled out separately. `--yielding` defaults to off and
+isingmark sends `Configure::default()`, so the governor never engages in these
+runs, and the self-throttle rc4 fixes is not what is happening here.
+
+### Minimal reproducer
+
+The smallest deterministic case needs no large problem at all:
+
+```bash
+isingmark throughput --backend cuda-gibbs --topology-preset smoke-h0 \
+  --duration 15s --hardness 0.5 --batch-size 20
+```
+
+Eight nodes, one session of 20 jobs. This hangs on rc3 and rc4. The same run
+at `--batch-size 18` completes in about 2 seconds, and `--backend cuda` at
+`--batch-size 800` completes on the same topology.
+
+Because 8 nodes involves almost no device memory and almost no transfer, this
+case argues against the upload-versus-ctrl race being the whole story, and
+points at how many nonces a session admits. `stream_width` returns
+`max_sms / 4` for Gibbs, which is 12 on a 48-SM A4000, well under the 18 that
+still passes, so the boundary is not `stream_width` by itself either.
+
 ### Status
 
-Not diagnosed further. Reported against `quip-miner-cuda` 0.3.0-rc3, which is
-what `tools/fetch-miners.sh` installs today. An unreleased commit in
-`quip-miner-cuda` (`cf7528d`, "Fix NVML governor self-throttle, wire yielding,
-add driver time budget") rewrites `streaming.rs` and `nvml_gov.rs`. It has not
-been tested against this hang.
+Not diagnosed. Reported against `quip-miner-cuda` 0.3.0-rc3, which is what
+`tools/fetch-miners.sh` installs, and confirmed unfixed on 0.3.0-rc4.
 
 One fix is worth making regardless of the root cause: `pump_session` should
 give up and reject its held jobs after a deadline instead of sleeping forever.
