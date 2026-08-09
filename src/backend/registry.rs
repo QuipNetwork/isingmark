@@ -112,6 +112,63 @@ const BUILTINS: &[BuiltinEntry] = &[
         kind: BackendKind::Sweeping,
         node_capacity_flag: None,
     },
+    // Simulated bifurcation, one entry per variant. Each variant is its own
+    // binary rather than a flag on one binary, so each needs its own name
+    // here. All four are driven by reads and sweeps.
+    //
+    // Only `cpu-sb` ships in a quip-miner-cpu release. The other three build
+    // behind that crate's `experimental` feature, so their binaries reach
+    // `$PATH` only when someone builds them on purpose. That costs nothing
+    // here: a built-in whose binary is absent still gets an entry and fails
+    // at probe time with `ProbeError::NotFound`, which is the same result as
+    // naming a CUDA backend on a host with no card.
+    BuiltinEntry {
+        name: "cpu-sb",
+        bin_name: "quip-cpu-sb",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
+    BuiltinEntry {
+        name: "cpu-bsb",
+        bin_name: "quip-cpu-bsb",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
+    BuiltinEntry {
+        name: "cpu-hdsb",
+        bin_name: "quip-cpu-hdsb",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
+    BuiltinEntry {
+        name: "cpu-hbsb",
+        bin_name: "quip-cpu-hbsb",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
+    // Tensor network and its bond-dimension-1 limit. `cpu-mps` picks its bond
+    // dimension per job from a flop and memory budget, so it takes reads and
+    // sweeps like the rest and needs no capacity flag of its own.
+    BuiltinEntry {
+        name: "cpu-mps",
+        bin_name: "quip-cpu-mps",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
+    BuiltinEntry {
+        name: "cpu-mfa",
+        bin_name: "quip-cpu-mfa",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
+    // BP-gauged tensor network on the problem graph, experimental like the
+    // SB variants: reads and sweeps drive it, so it is a Sweeping backend.
+    BuiltinEntry {
+        name: "cpu-flatiron",
+        bin_name: "quip-cpu-flatiron",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
     // `cuda` keeps its historical name rather than becoming `cuda-sa`:
     // renaming it would break every existing config and command line for no
     // functional gain.
@@ -162,7 +219,9 @@ const BUILTINS: &[BuiltinEntry] = &[
     },
 ];
 
-/// Build the registry of built-in backends (`cpu-sa`, `cpu-gibbs`, `cuda`,
+/// Build the registry of built-in backends (`cpu-sa`, `cpu-gibbs`, `cpu-sb`,
+/// `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`, `cpu-mps`, `cpu-mfa`, `cpu-flatiron`,
+/// `cuda`,
 /// `cuda-gibbs`, `metal`, `dwave`, `beit`, `cuopt`), resolving each binary
 /// from `$PATH`.
 ///
@@ -289,7 +348,7 @@ mod tests {
     /// `Sweeping`) fails a specific assertion rather than being masked by a
     /// coincidental match.
     #[test]
-    fn builtin_registry_has_the_eight_expected_entries_in_order() {
+    fn builtin_registry_has_the_fourteen_expected_entries_in_order() {
         let registry = builtin_registry();
         let actual: Vec<(&str, &str, BackendKind)> = registry
             .iter()
@@ -306,6 +365,13 @@ mod tests {
             vec![
                 ("cpu-sa", "quip-cpu-sa", BackendKind::Sweeping),
                 ("cpu-gibbs", "quip-cpu-gibbs", BackendKind::Sweeping),
+                ("cpu-sb", "quip-cpu-sb", BackendKind::Sweeping),
+                ("cpu-bsb", "quip-cpu-bsb", BackendKind::Sweeping),
+                ("cpu-hdsb", "quip-cpu-hdsb", BackendKind::Sweeping),
+                ("cpu-hbsb", "quip-cpu-hbsb", BackendKind::Sweeping),
+                ("cpu-mps", "quip-cpu-mps", BackendKind::Sweeping),
+                ("cpu-mfa", "quip-cpu-mfa", BackendKind::Sweeping),
+                ("cpu-flatiron", "quip-cpu-flatiron", BackendKind::Sweeping),
                 ("cuda", "quip-cuda-sa", BackendKind::Sweeping),
                 ("cuda-gibbs", "quip-cuda-gibbs", BackendKind::Sweeping),
                 ("metal", "quip-metal-sa", BackendKind::Sweeping),
