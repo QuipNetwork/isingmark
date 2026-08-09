@@ -58,7 +58,7 @@ fn builtin_registry_contains_exactly_the_fifteen_documented_backends_in_order() 
             "cpu-hbsb",
             "cpu-mps",
             "cpu-mfa",
-            "cpu-bptns",
+            "cpu-flatiron",
             "cuda",
             "cuda-gibbs",
             "metal",
