@@ -161,6 +161,14 @@ const BUILTINS: &[BuiltinEntry] = &[
         kind: BackendKind::Sweeping,
         node_capacity_flag: None,
     },
+    // BP-gauged tensor network on the problem graph, experimental like the
+    // SB variants: reads and sweeps drive it, so it is a Sweeping backend.
+    BuiltinEntry {
+        name: "cpu-bptns",
+        bin_name: "quip-cpu-bptns",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
     // `cuda` keeps its historical name rather than becoming `cuda-sa`:
     // renaming it would break every existing config and command line for no
     // functional gain.
@@ -212,7 +220,8 @@ const BUILTINS: &[BuiltinEntry] = &[
 ];
 
 /// Build the registry of built-in backends (`cpu-sa`, `cpu-gibbs`, `cpu-sb`,
-/// `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`, `cpu-mps`, `cpu-mfa`, `cuda`,
+/// `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`, `cpu-mps`, `cpu-mfa`, `cpu-bptns`,
+/// `cuda`,
 /// `cuda-gibbs`, `metal`, `dwave`, `beit`, `cuopt`), resolving each binary
 /// from `$PATH`.
 ///
@@ -362,6 +371,7 @@ mod tests {
                 ("cpu-hbsb", "quip-cpu-hbsb", BackendKind::Sweeping),
                 ("cpu-mps", "quip-cpu-mps", BackendKind::Sweeping),
                 ("cpu-mfa", "quip-cpu-mfa", BackendKind::Sweeping),
+                ("cpu-bptns", "quip-cpu-bptns", BackendKind::Sweeping),
                 ("cuda", "quip-cuda-sa", BackendKind::Sweeping),
                 ("cuda-gibbs", "quip-cuda-gibbs", BackendKind::Sweeping),
                 ("metal", "quip-metal-sa", BackendKind::Sweeping),
