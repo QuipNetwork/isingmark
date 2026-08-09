@@ -950,24 +950,30 @@ async fn fake_miner_bounded_stderr_wait_does_not_hang_on_a_leaked_pipe() {
 }
 
 #[tokio::test]
-async fn fake_miner_credit_cap_limits_jobs_dispatched_per_request() {
-    // MAX_DISPATCH_CREDITS_PER_REQUEST (F2) caps how many jobs one
-    // JobRequest triggers dispatching, regardless of how many credits the
-    // miner asks for. `--report-jobs-received-after-ms` makes the fake
-    // miner request 100 credits up front, accept whatever arrives without
-    // ever answering or asking for more, then report the exact count once
-    // inbound goes quiet — so whatever it reports is exactly what the one
-    // grant dispatched, on an otherwise well-behaved (not crashed, not
-    // wedged) run, not just a broken one. 200ms of quiet is comfortably
-    // under the coordinator's own 3s Ping interval, so nothing else
-    // interferes before the miner reports and exits.
+async fn fake_miner_credit_grant_is_bounded_by_outstanding_not_per_request() {
+    // `max_outstanding_jobs` (F2) caps jobs dispatched but unanswered. A
+    // miner asking for more than that gets the cap, not its full request.
+    // `--report-jobs-received-after-ms` makes the fake miner request far
+    // more credits than the cap, accept whatever arrives without ever
+    // answering or asking for more, then report the exact count once
+    // inbound goes quiet — so it never returns a credit, and the count it
+    // reports is the outstanding ceiling itself on an otherwise
+    // well-behaved (not crashed, not wedged) run. 200ms of quiet is
+    // comfortably under the coordinator's own 3s Ping interval, so nothing
+    // else interferes before the miner reports and exits.
+    //
+    // The cap scales with host cores, so both the staged queue and the
+    // credit request are derived from it rather than hard-coded: a literal
+    // here would assert this machine's core count instead of the behaviour,
+    // and would start failing on a different runner for no real reason.
+    let cap = isingmark::backend::max_outstanding_jobs();
     let spec = load_fixture("smoke").expect("smoke fixture parses");
-    let jobs = draw_jobs(&spec, 16, 30);
+    let jobs = draw_jobs(&spec, 16, u32::try_from(cap + 100).expect("cap fits u32"));
     let dir = tempfile::tempdir().expect("create temp dir");
     let sock_path = dir.path().join("coordinator.sock");
     let backend = fake_miner_backend(vec![
         "--credits".to_string(),
-        "100".to_string(),
+        (cap * 4).to_string(),
         "--report-jobs-received-after-ms".to_string(),
         "200".to_string(),
     ]);
@@ -976,9 +982,39 @@ async fn fake_miner_credit_cap_limits_jobs_dispatched_per_request() {
 
     let tail = report.miner_stderr_tail.as_deref().unwrap_or("");
     assert!(
-        tail.contains("jobs_received=15"),
-        "a 100-credit grant against 30 staged jobs should dispatch exactly \
-         the 15-job cap, got tail {tail:?}"
+        tail.contains(&format!("jobs_received={cap}")),
+        "a {}-credit request against {} staged jobs should dispatch the \
+         {cap}-job outstanding cap, got tail {tail:?}",
+        cap * 4,
+        cap + 100
+    );
+}
+
+#[tokio::test]
+async fn fake_miner_pipeline_depth_request_is_granted_in_full() {
+    // The regression this whole constant exists to prevent: a request for a
+    // realistic pipeline depth must be granted whole. A streaming miner asks
+    // once for `2 * stream_width` and then one credit per completion, so a
+    // grant short of that opening request pins concurrency for the entire
+    // run. 96 is what a 48-SM GPU running SA asks for.
+    let spec = load_fixture("smoke").expect("smoke fixture parses");
+    let jobs = draw_jobs(&spec, 16, 200);
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let sock_path = dir.path().join("coordinator.sock");
+    let backend = fake_miner_backend(vec![
+        "--credits".to_string(),
+        "96".to_string(),
+        "--report-jobs-received-after-ms".to_string(),
+        "200".to_string(),
+    ]);
+
+    let report = run_with(&backend, &spec, jobs, &sock_path).await;
+
+    let tail = report.miner_stderr_tail.as_deref().unwrap_or("");
+    assert!(
+        tail.contains("jobs_received=96"),
+        "a 96-credit pipeline-depth request against 200 staged jobs must be \
+         granted in full, got tail {tail:?}"
     );
 }
 

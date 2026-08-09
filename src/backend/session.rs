@@ -64,10 +64,74 @@ const MINER_ID: &str = "isingmark-0";
 /// non-empty-token requirement on the miner side.
 const SESSION_TOKEN: &str = "isingmark-benchmark-session";
 
-/// Depth of the outbound `CoordMsg` channel. Sized like the reference
-/// miner's own outbound channel (`quip-mock-miner`, `mpsc::channel(16)`):
-/// control traffic only, one message per job event, never a backlog.
-const OUTBOUND_CHANNEL_DEPTH: usize = 16;
+/// Outstanding-job allowance per core. A streaming miner keeps
+/// `2 * stream_width` jobs in flight — one executing per lane and one
+/// preloaded in that lane's NEXT slot — so the allowance has to clear twice
+/// the widest lane count a host of this size is likely to drive. 16 covers a
+/// GPU miner running one lane per SM on a card with up to 8 SMs per host
+/// core, which is well past any current pairing.
+const OUTSTANDING_JOBS_PER_CORE: usize = 16;
+
+/// Floor for [`max_outstanding_jobs`]. A 1-2 core CI container still has to
+/// clear the pipeline depth of whatever accelerator is attached to it, and
+/// that depth does not shrink with the host.
+const MIN_OUTSTANDING_JOBS: usize = 64;
+
+/// Ceiling for [`max_outstanding_jobs`]. Each outstanding job is held twice
+/// — once queued in the outbound channel, once in `in_flight` — at roughly
+/// 250 KB per job at chain scale, so a many-core host would otherwise size
+/// itself into hundreds of megabytes of queued problems for no benefit: the
+/// miner never asks for more than its own prefetch.
+const MAX_OUTSTANDING_JOBS_CEILING: usize = 1024;
+
+/// Ceiling on jobs dispatched but not yet answered — the benchmark's real
+/// concurrency limit, and the only thing that should bound it.
+///
+/// A miner asks for its whole pipeline depth in its opening `JobRequest` and
+/// then one credit per completion, so any limit below that prefetch does not
+/// merely delay work — it pins concurrency there for the rest of the run and
+/// measures the limit instead of the backend.
+///
+/// Scaled to the host rather than fixed, so the same binary does not starve a
+/// large machine or oversize its queues on a small one.
+/// [`std::thread::available_parallelism`] is the right input because it
+/// reports the cores this process may actually use, honouring cgroup quotas
+/// and CPU affinity — a container pinned to 4 cores must not size its queue
+/// for the whole host it happens to run on.
+///
+/// This remains a defensive bound, not flow control. `req.credits` comes from
+/// the miner, the untrusted component under test, so a request for `u32::MAX`
+/// must not become an unbounded dispatch. Bounding queued *bytes* is the
+/// outbound channel's job, and [`outbound_channel_depth`] is sized so a full
+/// outstanding set never blocks on it.
+#[must_use]
+pub fn max_outstanding_jobs() -> usize {
+    std::thread::available_parallelism()
+        .map_or(MIN_OUTSTANDING_JOBS, |cores| {
+            cores.get().saturating_mul(OUTSTANDING_JOBS_PER_CORE)
+        })
+        .clamp(MIN_OUTSTANDING_JOBS, MAX_OUTSTANDING_JOBS_CEILING)
+}
+
+/// Depth of the outbound `CoordMsg` channel.
+///
+/// This channel is not the miner's mirror image. The miner's outbound
+/// carries control replies only (`Result`, `JobRequest`, `Status`), so
+/// `quip-mock-miner` sizes it at 16. This one carries `Job` messages with
+/// the full h/J payload — hundreds of kilobytes each at chain scale — and it
+/// is what actually bounds queued bytes.
+///
+/// Sized to hold a complete outstanding set plus room for control traffic
+/// (`Ping`, `Shutdown`) alongside it, so the dispatch loop never blocks on
+/// backpressure. That matters because the loop awaits each `send` without
+/// reading inbound in between: a coordinator blocked sending while the miner
+/// is blocked sending leaves nobody reading, which is the deadlock
+/// [`DISPATCH_SEND_TIMEOUT`] exists to break. Sizing the channel this way
+/// means that timeout guards a genuinely broken miner rather than firing on
+/// ordinary depth.
+fn outbound_channel_depth() -> usize {
+    max_outstanding_jobs() + 8
+}
 
 /// Grace period advertised on `Shutdown`, and reused as the bound on the
 /// post-shutdown inbound drain and on waiting for the child to exit after
@@ -136,21 +200,6 @@ const MAX_MISSED_PINGS: u32 = 9;
 /// `tracing::error!` lines), matching the reasoning
 /// [`crate::backend::registry`]'s probe stderr capture already applies.
 const MAX_STDERR_LINES: usize = 50;
-
-/// Per-`JobRequest` cap on how many jobs are dispatched at once, regardless
-/// of the credits the miner asks for. `req.credits` is chosen by the miner
-/// — the untrusted, benchmarked component — and a `Job` message carries the
-/// full h/J problem payload, not just an id, so an uncapped credit grant
-/// could queue enough data to exceed the outbound channel (and any HTTP/2
-/// flow-control window backing it) well before `OUTBOUND_CHANNEL_DEPTH`
-/// itself is reached. One less than `OUTBOUND_CHANNEL_DEPTH` leaves room for
-/// at least one non-`Job` control message (e.g. `Ping`) to still be queued
-/// alongside a full batch of dispatches.
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "OUTBOUND_CHANNEL_DEPTH is a small literal (16) that always fits u32"
-)]
-const MAX_DISPATCH_CREDITS_PER_REQUEST: u32 = OUTBOUND_CHANNEL_DEPTH as u32 - 1;
 
 /// Bound on a single dispatch `send`. Without this, a miner that requests
 /// credits but never polls its own inbound stream while solving (an
@@ -608,7 +657,7 @@ impl MinerService for CoordinatorSvc {
             .unwrap_or_else(PoisonError::into_inner)
             .take();
 
-        let (tx, rx) = mpsc::channel(OUTBOUND_CHANNEL_DEPTH);
+        let (tx, rx) = mpsc::channel(outbound_channel_depth());
         let spec = self.spec.clone();
         let target = self.target;
         let backend_name = self.backend_name.clone();
@@ -732,15 +781,27 @@ async fn drive_session(
                     // stream could wedge both sides once outbound
                     // backpressure fills — an ordinary naive shape, not
                     // malice, and `req.credits` is chosen by the miner
-                    // itself. `MAX_DISPATCH_CREDITS_PER_REQUEST` bounds how
-                    // much can queue at once; `DISPATCH_SEND_TIMEOUT` bounds
-                    // how long any one `send` may block, treating an
-                    // elapsed timeout the same as a failed send (dead
-                    // miner) rather than hanging with no timeout on any
-                    // path — the liveness `Ping` loop does not cover this
-                    // send, since it only wraps `inbound.message()`.
+                    // itself. `OUTBOUND_CHANNEL_DEPTH` holds a full
+                    // outstanding set so ordinary depth never blocks here;
+                    // `DISPATCH_SEND_TIMEOUT` bounds how long any one `send`
+                    // may block, treating an elapsed timeout the same as a
+                    // failed send (dead miner) rather than hanging with no
+                    // timeout on any path — the liveness `Ping` loop does
+                    // not cover this send, since it only wraps
+                    // `inbound.message()`.
                     Some(miner_msg::Msg::JobRequest(req)) => {
-                        let credits = req.credits.min(MAX_DISPATCH_CREDITS_PER_REQUEST);
+                        // Grant against remaining outstanding capacity, not
+                        // a per-request constant. The miner asks once for
+                        // its whole pipeline depth and then one credit per
+                        // completion, so a per-request cap throttles that
+                        // opening request and every later grant of 1 keeps
+                        // concurrency pinned at the capped value for the
+                        // whole run.
+                        let outstanding: usize = in_flight.values().map(VecDeque::len).sum();
+                        let headroom = max_outstanding_jobs().saturating_sub(outstanding);
+                        let credits = usize::try_from(req.credits)
+                            .unwrap_or(usize::MAX)
+                            .min(headroom);
                         for _ in 0..credits {
                             let Some(job) = remaining.pop_front() else {
                                 break;
@@ -1217,9 +1278,9 @@ fn milli_round(fraction: f64) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        abandon_in_flight, duration_ms, edge_positions, hex_encode, maybe_shutdown, milli_round,
-        push_in_flight, reject_reason_text, take_front_in_flight, SessionProgress,
-        OUTBOUND_CHANNEL_DEPTH,
+        abandon_in_flight, duration_ms, edge_positions, hex_encode, max_outstanding_jobs,
+        maybe_shutdown, milli_round, outbound_channel_depth, push_in_flight, reject_reason_text,
+        take_front_in_flight, SessionProgress, MAX_OUTSTANDING_JOBS_CEILING, MIN_OUTSTANDING_JOBS,
     };
     use crate::record::JobRecord;
     use crate::topology::TopologySpec;
@@ -1229,6 +1290,40 @@ mod tests {
     use std::time::{Duration, Instant};
     use tokio::sync::mpsc;
     use tonic::Status;
+
+    /// The dispatch loop awaits each `send` without reading inbound in
+    /// between, so a coordinator that can block on its own outbound while
+    /// the miner is blocked on its outbound leaves nobody reading. Sizing
+    /// the channel above a full outstanding set is what keeps that
+    /// unreachable, so the relationship is an invariant rather than a
+    /// coincidence of two independently chosen numbers.
+    #[test]
+    fn outbound_channel_always_holds_a_full_outstanding_set() {
+        assert!(
+            outbound_channel_depth() > max_outstanding_jobs(),
+            "channel depth {} must exceed the outstanding cap {} or dispatch can deadlock",
+            outbound_channel_depth(),
+            max_outstanding_jobs()
+        );
+    }
+
+    /// Scaling to the host must not produce a cap below the pipeline depth
+    /// a miner actually asks for. The floor exists because accelerator lane
+    /// counts do not shrink with the host core count: a 2-core CI container
+    /// can still have a 48-SM card attached, whose SA miner asks for 96.
+    #[test]
+    fn outstanding_cap_stays_within_its_declared_bounds() {
+        let cap = max_outstanding_jobs();
+        assert!(
+            (MIN_OUTSTANDING_JOBS..=MAX_OUTSTANDING_JOBS_CEILING).contains(&cap),
+            "cap {cap} escaped [{MIN_OUTSTANDING_JOBS}, {MAX_OUTSTANDING_JOBS_CEILING}]"
+        );
+        assert!(
+            cap >= 96,
+            "cap {cap} is below the 96-job prefetch of an SA miner on a 48-SM GPU, \
+             which would silently pin concurrency for the whole run"
+        );
+    }
 
     fn dummy_job(job_id: &[u8]) -> Job {
         Job {
@@ -1415,7 +1510,7 @@ mod tests {
         push_in_flight(&mut in_flight, id.clone(), Instant::now(), dummy_job(&id));
         push_in_flight(&mut in_flight, id.clone(), Instant::now(), dummy_job(&id));
 
-        let (tx, mut rx) = mpsc::channel::<Result<CoordMsg, Status>>(OUTBOUND_CHANNEL_DEPTH);
+        let (tx, mut rx) = mpsc::channel::<Result<CoordMsg, Status>>(outbound_channel_depth());
         let remaining = VecDeque::new();
 
         assert!(

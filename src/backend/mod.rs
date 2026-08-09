@@ -10,4 +10,4 @@ mod session;
 pub use registry::{builtin_registry, probe_capabilities, probe_check, BackendSpec, ProbeError};
 #[doc(hidden)]
 pub use session::run_session_with_max_missed_pings_for_tests;
-pub use session::{run_session, RunParams, RunReport, SessionError};
+pub use session::{max_outstanding_jobs, run_session, RunParams, RunReport, SessionError};
