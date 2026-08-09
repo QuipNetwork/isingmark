@@ -67,6 +67,12 @@ Backends are miner binaries invoked with `--quip-coordinator unix://...` and `--
 |---|---|---|
 | `cpu-sa` | `quip-cpu-sa` | Sweeping (`num_reads` + `num_sweeps`) |
 | `cpu-gibbs` | `quip-cpu-gibbs` | Sweeping |
+| `cpu-sb` | `quip-cpu-sb` | Sweeping |
+| `cpu-bsb` | `quip-cpu-bsb` | Sweeping |
+| `cpu-hdsb` | `quip-cpu-hdsb` | Sweeping |
+| `cpu-hbsb` | `quip-cpu-hbsb` | Sweeping |
+| `cpu-mps` | `quip-cpu-mps` | Sweeping |
+| `cpu-mfa` | `quip-cpu-mfa` | Sweeping |
 | `cuda` | `quip-cuda-sa` | Sweeping |
 | `cuda-gibbs` | `quip-cuda-gibbs` | Sweeping |
 | `metal` | `quip-metal-sa` | Sweeping |
