@@ -400,7 +400,7 @@ for p in data:
 # an `-<os>-<arch>` suffix; the file is saved under the bare name.
 binaries_for() {
   case "$1" in
-  quip-miner-cpu) echo "quip-cpu-sa quip-cpu-gibbs" ;;
+  quip-miner-cpu) echo "quip-cpu-sa quip-cpu-gibbs quip-cpu-sb" ;;
   quip-miner-cuda) echo "quip-cuda-sa quip-cuda-gibbs" ;;
   quip-miner-metal) echo "quip-metal-sa quip-metal-gibbs" ;;
   *)
@@ -502,6 +502,7 @@ fi
 miner_names=(
   quip-cpu-sa
   quip-cpu-gibbs
+  quip-cpu-sb
   quip-metal-sa
   quip-metal-gibbs
   quip-cuda-sa
