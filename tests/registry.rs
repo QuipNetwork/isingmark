@@ -41,10 +41,10 @@ fn missing_binary_probe_returns_not_found_and_never_panics() {
     assert!(matches!(check_err, ProbeError::NotFound(_)));
 }
 
-/// The built-in registry produces exactly the fifteen documented backends,
+/// The built-in registry produces exactly the twenty documented backends,
 /// in order — no more, no fewer, and none renamed.
 #[test]
-fn builtin_registry_contains_exactly_the_fifteen_documented_backends_in_order() {
+fn builtin_registry_contains_exactly_the_twenty_documented_backends_in_order() {
     let registry = builtin_registry();
     let names: Vec<&str> = registry.iter().map(|spec| spec.name.as_str()).collect();
     assert_eq!(
@@ -56,6 +56,11 @@ fn builtin_registry_contains_exactly_the_fifteen_documented_backends_in_order() 
             "cpu-bsb",
             "cpu-hdsb",
             "cpu-hbsb",
+            "cpu-gbsb",
+            "cpu-gdsb",
+            "cpu-tedsb",
+            "cpu-sbqa",
+            "cpu-ggdsb",
             "cpu-mps",
             "cpu-mfa",
             "cpu-flatiron",
