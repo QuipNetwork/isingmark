@@ -48,6 +48,7 @@ fn base_config(output_dir: PathBuf) -> SweepConfig {
         grid: grid_2x2(),
         num_jobs: 3,
         seed: 42,
+        corpus: None,
         output_dir,
         backend_bin_override: Some(fake_miner_bin()),
         backend_args_override: None,
@@ -469,5 +470,113 @@ async fn hermetic_sweep_supports_an_annealing_backend_and_reads_still_match_per_
             assert_eq!(record.measured_reads, Some(expected_reads));
             assert_eq!(record.measured_sweeps, Some(0));
         }
+    }
+}
+
+/// Nonces for a path-loaded corpus. A path declares no bundled pairing, so
+/// the `smoke` topology stays usable here and no test draws a 4577-node
+/// problem per job. Mirrors `tests/mode_throughput.rs`'s own fixture.
+const CORPUS_NONCE_A: &str = "0cf67b0f85e37ddd3dda2ac11685c7ad857d069eda939ae3f2d6d93e3d5b8864";
+const CORPUS_NONCE_B: &str = "22681ca9153f4f30a0d5af9da319e2b93848c182a7584a541d52db2214a08d54";
+
+fn write_corpus(dir: &std::path::Path, nonces: &[&str]) -> PathBuf {
+    use std::fmt::Write as _;
+
+    let path = dir.join("corpus.jsonl");
+    let text = nonces.iter().fold(String::new(), |mut out, n| {
+        let _ = writeln!(out, "{{\"nonce\":\"{n}\"}}");
+        out
+    });
+    std::fs::write(&path, text).expect("write corpus");
+    path
+}
+
+/// A corpus sweep must replay exactly the corpus instances, in file order,
+/// in *every* cell. This is the paired design the mode already guarantees
+/// for a derived source, now anchored on the instances the chain actually
+/// posed: a per-cell energy difference is then attributable to the cell's
+/// parameters and not to which problems that cell happened to draw.
+///
+/// `seed` is left at its base value throughout to prove it no longer drives
+/// which problems are drawn once a corpus is set.
+#[tokio::test]
+async fn hermetic_sweep_corpus_replays_the_same_instances_in_every_cell() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let corpus = write_corpus(dir.path(), &[CORPUS_NONCE_A, CORPUS_NONCE_B]);
+    let cfg = SweepConfig {
+        // Above the corpus length, so the corpus is what bounds the draw.
+        num_jobs: 10,
+        corpus: Some(corpus.display().to_string()),
+        ..base_config(dir.path().to_path_buf())
+    };
+
+    let report = run_sweep(&cfg).await.expect("corpus sweep run succeeds");
+    assert_eq!(report.cells.len(), 4, "a 2x2 grid must produce 4 cells");
+
+    for (i, cell) in report.cells.iter().enumerate() {
+        let ids: Vec<&str> = cell
+            .report
+            .records
+            .iter()
+            .map(|r| r.job_id.as_str())
+            .collect();
+        assert_eq!(
+            ids,
+            vec![CORPUS_NONCE_A, CORPUS_NONCE_B],
+            "cell {i} must replay the corpus instances once each, in file order"
+        );
+    }
+}
+
+/// A corpus caps `num_jobs`: asking for more instances than the corpus
+/// holds draws the corpus and stops, rather than erroring or silently
+/// topping up with seed-derived problems that were never on the chain.
+#[tokio::test]
+async fn hermetic_sweep_corpus_caps_num_jobs_at_the_corpus_length() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let corpus = write_corpus(dir.path(), &[CORPUS_NONCE_A]);
+    let cfg = SweepConfig {
+        num_jobs: 5,
+        corpus: Some(corpus.display().to_string()),
+        ..base_config(dir.path().to_path_buf())
+    };
+
+    let report = run_sweep(&cfg).await.expect("corpus sweep run succeeds");
+
+    for (i, cell) in report.cells.iter().enumerate() {
+        assert_eq!(
+            cell.report.records.len(),
+            1,
+            "cell {i} must stop at the corpus length, not pad up to num_jobs"
+        );
+    }
+}
+
+/// A cell must draw no more than `num_jobs` even when the corpus is longer,
+/// so the flag still bounds QPU spend on a 4658-instance corpus.
+#[tokio::test]
+async fn hermetic_sweep_corpus_draws_at_most_num_jobs() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let corpus = write_corpus(dir.path(), &[CORPUS_NONCE_A, CORPUS_NONCE_B]);
+    let cfg = SweepConfig {
+        num_jobs: 1,
+        corpus: Some(corpus.display().to_string()),
+        ..base_config(dir.path().to_path_buf())
+    };
+
+    let report = run_sweep(&cfg).await.expect("corpus sweep run succeeds");
+
+    for (i, cell) in report.cells.iter().enumerate() {
+        let ids: Vec<&str> = cell
+            .report
+            .records
+            .iter()
+            .map(|r| r.job_id.as_str())
+            .collect();
+        assert_eq!(
+            ids,
+            vec![CORPUS_NONCE_A],
+            "cell {i} must draw exactly num_jobs instances from the corpus front"
+        );
     }
 }

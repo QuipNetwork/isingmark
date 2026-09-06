@@ -341,6 +341,15 @@ pub struct SweepArgs {
     /// and the process exits non-zero with a rebuild message.
     #[arg(long, value_name = "PATH")]
     pub plot: Option<PathBuf>,
+    /// Replay a corpus of chain-harvested instances instead of deriving
+    /// problems from `--seed`. A bundled corpus name (`chain-h0`,
+    /// `chain-ternary`) or a path to a JSONL file.
+    ///
+    /// A bundled corpus must be paired with the topology it was drawn
+    /// against. A corpus is finite, so `--num-jobs` becomes an upper bound:
+    /// every cell draws the same `min(num_jobs, corpus length)` instances.
+    #[arg(long)]
+    pub corpus: Option<String>,
 }
 
 impl SweepArgs {
@@ -384,12 +393,14 @@ impl SweepArgs {
             .or(file.param_grid.clone())
             .ok_or_else(|| missing_required("param-grid", "--param-grid", config_path))?;
         let num_jobs = merge(self.num_jobs, file.num_jobs, DEFAULT_NUM_JOBS);
+        let corpus = self.corpus.or(file.corpus.clone());
         Ok(SweepConfig {
             backend,
             topology,
             grid,
             num_jobs,
             seed,
+            corpus,
             output_dir,
             backend_bin_override: None,
             backend_args_override: None,
