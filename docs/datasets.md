@@ -11,6 +11,9 @@ isingmark throughput --backend cpu-sa \
   --topology-preset chain-h0 --corpus chain-h0 --duration 10m
 ```
 
+`sweep` accepts the same flag. Every cell reloads the corpus from the start,
+so all cells measure the identical instances and a corpus caps `--num-jobs`.
+
 ## What ships
 
 | Corpus | Instances | Paired topology | Nodes | Edges | `allowed_h_milli` |

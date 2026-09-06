@@ -82,7 +82,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use serde::Deserialize;
 
 use crate::backend::{builtin_registry, run_session, BackendSpec, RunParams, RunReport};
-use crate::modes::{hex_encode, ModeError, ParseError, TopologyRef};
+use crate::corpus::CorpusSource;
+use crate::modes::{hex_encode, JobSource, ModeError, ParseError, TopologyRef};
 use crate::params::BackendKind;
 use crate::problem::ProblemSource;
 use crate::record::{append_jsonl, write_summary, HardwareInfo, Summary, TopologyInfo, Totals};
@@ -169,7 +170,19 @@ pub struct SweepConfig {
     /// paired design this establishes.
     pub num_jobs: u32,
     /// Seed for deterministic problem generation, shared by every cell.
+    /// Ignored when [`Self::corpus`] is set, because a corpus names its
+    /// problems rather than deriving them.
     pub seed: u64,
+    /// Replay a corpus of chain-harvested instances instead of deriving
+    /// problems from [`Self::seed`]. A bundled corpus name
+    /// (`corpus::bundled_names`) or a path to a JSONL file; a bundled name
+    /// must be paired with the topology it was drawn against.
+    ///
+    /// A corpus is finite, so it caps [`Self::num_jobs`]: a cell draws
+    /// `min(num_jobs, corpus length)` problems. Every cell reloads the
+    /// corpus from the start, so the paired design holds exactly as it does
+    /// for a derived source.
+    pub corpus: Option<String>,
     /// Directory to write one subdirectory per cell into, plus a top-level
     /// [`SUMMARY_FILENAME`]. Created if it does not already exist. Refuses
     /// to start (see [`ModeError::RecordsFileExists`]) if *any* cell's
@@ -272,7 +285,7 @@ pub async fn run_sweep(cfg: &SweepConfig) -> Result<SweepReport, ModeError> {
         std::fs::create_dir_all(dir).map_err(ModeError::Io)?;
         std::fs::File::create(records_path).map_err(ModeError::Io)?;
 
-        let jobs = cell.draw_jobs(&spec, cfg.seed, cfg.num_jobs);
+        let jobs = cell.draw_jobs(&spec, cfg.seed, cfg.num_jobs, cfg.corpus.as_deref())?;
 
         let sock_path = unique_sock_path();
         let report = run_session(RunParams {
@@ -349,10 +362,28 @@ impl Cell {
     /// yields the same job sequence (`ProblemSource`'s own documented
     /// contract), so every cell draws byte-identical jobs regardless of
     /// which cell ran first.
-    fn draw_jobs(&self, spec: &TopologySpec, seed: u64, count: u32) -> Vec<quip_proto::v1::Job> {
-        let mut source = ProblemSource::new(spec, MINER_ACCOUNT, seed, count, NO_DEADLINE_MS);
+    fn draw_jobs(
+        &self,
+        spec: &TopologySpec,
+        seed: u64,
+        count: u32,
+        corpus: Option<&str>,
+    ) -> Result<Vec<quip_proto::v1::Job>, ModeError> {
+        let mut source = match corpus {
+            Some(name) => JobSource::Corpus(Box::new(CorpusSource::load(name, spec)?)),
+            None => JobSource::Derived(Box::new(ProblemSource::new(
+                spec,
+                MINER_ACCOUNT,
+                seed,
+                count,
+                NO_DEADLINE_MS,
+            ))),
+        };
         let mut jobs = Vec::with_capacity(count as usize);
-        while let Some(mut job) = source.next_job() {
+        while jobs.len() < count as usize {
+            let Some(mut job) = source.next_job() else {
+                break;
+            };
             if let Some(ising) = job.ising.as_mut() {
                 ising.num_reads = self.num_reads;
                 ising.num_sweeps = self.num_sweeps;
@@ -360,7 +391,7 @@ impl Cell {
             }
             jobs.push(job);
         }
-        jobs
+        Ok(jobs)
     }
 }
 
@@ -537,6 +568,7 @@ fn build_summary(cfg: &SweepConfig, spec: &TopologySpec, outcomes: &[CellOutcome
         "backend": cfg.backend,
         "topology": cfg.topology.label(),
         "seed": cfg.seed,
+        "corpus": cfg.corpus.clone(),
         "num_jobs_per_cell": cfg.num_jobs,
         "grid": {
             "num_reads": cfg.grid.num_reads,

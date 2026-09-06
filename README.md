@@ -68,6 +68,19 @@ isingmark sweep --backend cpu-sa --topology-preset smoke \
   --plot out/sweep.png
 ```
 
+Sweep a corpus instead of seed-derived problems. Every cell replays the same
+instances, so a difference between cells comes from the parameters and not
+from the problems:
+
+```bash
+isingmark sweep --backend dwave \
+  --topology-preset chain-h0 --corpus chain-h0 \
+  --param-grid '{"num_reads":[16,32],"anneal_time_us":[80,120]}' --num-jobs 250
+```
+
+A corpus is finite, so `--num-jobs` becomes an upper bound: each cell draws
+the first `min(--num-jobs, corpus length)` instances.
+
 ### ttt
 
 Time-to-target for each energy level (natural units on the CLI).
