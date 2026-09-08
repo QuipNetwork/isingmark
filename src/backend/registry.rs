@@ -112,6 +112,22 @@ const BUILTINS: &[BuiltinEntry] = &[
         kind: BackendKind::Sweeping,
         node_capacity_flag: None,
     },
+    // The annealing accelerations added on 2026-09-03, from Isakov et al.
+    // (Comput. Phys. Commun. 192, 265 (2015)): tabulated Metropolis
+    // thresholds, and the same with 64 reads packed per machine word. See
+    // quip-miner-cpu/docs/sa-acceleration.md.
+    BuiltinEntry {
+        name: "cpu-fsa",
+        bin_name: "quip-cpu-fsa",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
+    BuiltinEntry {
+        name: "cpu-msa",
+        bin_name: "quip-cpu-msa",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
     // Simulated bifurcation, one entry per variant. Each variant is its own
     // binary rather than a flag on one binary, so each needs its own name
     // here. All nine are driven by reads and sweeps.
@@ -252,11 +268,11 @@ const BUILTINS: &[BuiltinEntry] = &[
     },
 ];
 
-/// Build the registry of built-in backends (`cpu-sa`, `cpu-gibbs`, `cpu-sb`,
-/// `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`, `cpu-gbsb`, `cpu-gdsb`, `cpu-tedsb`,
-/// `cpu-sbqa`, `cpu-ggdsb`, `cpu-mps`, `cpu-mfa`, `cpu-flatiron`, `cuda`,
-/// `cuda-gibbs`, `metal`, `dwave`, `beit`, `cuopt`), resolving each binary
-/// from `$PATH`.
+/// Build the registry of built-in backends (`cpu-sa`, `cpu-gibbs`, `cpu-fsa`,
+/// `cpu-msa`, `cpu-sb`, `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`, `cpu-gbsb`,
+/// `cpu-gdsb`, `cpu-tedsb`, `cpu-sbqa`, `cpu-ggdsb`, `cpu-mps`, `cpu-mfa`,
+/// `cpu-flatiron`, `cuda`, `cuda-gibbs`, `metal`, `dwave`, `beit`, `cuopt`),
+/// resolving each binary from `$PATH`.
 ///
 /// A backend whose binary is not on `$PATH` still gets an entry: `bin` falls
 /// back to the bare binary name, so [`probe_capabilities`]/[`probe_check`]
@@ -398,6 +414,8 @@ mod tests {
             vec![
                 ("cpu-sa", "quip-cpu-sa", BackendKind::Sweeping),
                 ("cpu-gibbs", "quip-cpu-gibbs", BackendKind::Sweeping),
+                ("cpu-fsa", "quip-cpu-fsa", BackendKind::Sweeping),
+                ("cpu-msa", "quip-cpu-msa", BackendKind::Sweeping),
                 ("cpu-sb", "quip-cpu-sb", BackendKind::Sweeping),
                 ("cpu-bsb", "quip-cpu-bsb", BackendKind::Sweeping),
                 ("cpu-hdsb", "quip-cpu-hdsb", BackendKind::Sweeping),
