@@ -129,9 +129,9 @@ Prefer deleting `.cargo/config.toml` when you are not co-developing upstream.
 | `reproducibility` | Two-sample KS on two identical-problem batches |
 | `compare` | Post-hoc KS on two JSONL result files (no miner spawn) |
 
-Built-in backends: `cpu-sa`, `cpu-gibbs`, `cpu-sb`, `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`, `cpu-mps`, `cpu-mfa`, `cuda`, `cuda-gibbs`, `metal`, `dwave`, `beit`, `cuopt`.
+Built-in backends: `cpu-sa`, `cpu-gibbs`, `cpu-sb`, `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`, `cpu-gbsb`, `cpu-gdsb`, `cpu-tedsb`, `cpu-sbqa`, `cpu-ggdsb`, `cpu-mps`, `cpu-mfa`, `cpu-flatiron`, `cuda`, `cuda-gibbs`, `metal`, `dwave`, `beit`, `cuopt`.
 
-Of the CPU kernels, `cpu-sa`, `cpu-gibbs`, and `cpu-sb` ship as release assets. The other five build behind the `experimental` feature of `quip-miner-cpu` and reach `PATH` only when someone builds them on purpose:
+Of the CPU kernels, `cpu-sa`, `cpu-gibbs`, and `cpu-sb` ship as release assets. The other eleven build behind the `experimental` feature of `quip-miner-cpu` and reach `PATH` only when someone builds them on purpose:
 
 ```bash
 cargo build --release --features experimental

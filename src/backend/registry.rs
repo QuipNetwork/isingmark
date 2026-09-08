@@ -114,9 +114,9 @@ const BUILTINS: &[BuiltinEntry] = &[
     },
     // Simulated bifurcation, one entry per variant. Each variant is its own
     // binary rather than a flag on one binary, so each needs its own name
-    // here. All four are driven by reads and sweeps.
+    // here. All nine are driven by reads and sweeps.
     //
-    // Only `cpu-sb` ships in a quip-miner-cpu release. The other three build
+    // Only `cpu-sb` ships in a quip-miner-cpu release. The other eight build
     // behind that crate's `experimental` feature, so their binaries reach
     // `$PATH` only when someone builds them on purpose. That costs nothing
     // here: a built-in whose binary is absent still gets an entry and fails
@@ -143,6 +143,39 @@ const BUILTINS: &[BuiltinEntry] = &[
     BuiltinEntry {
         name: "cpu-hbsb",
         bin_name: "quip-cpu-hbsb",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
+    // The variants added on 2026-09-02: edge-of-chaos control on the
+    // ballistic and discrete couplings, tabu-enhanced dSB, replica-ring dSB,
+    // and globally guided dSB. See quip-miner-cpu/docs/sb-variants.md.
+    BuiltinEntry {
+        name: "cpu-gbsb",
+        bin_name: "quip-cpu-gbsb",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
+    BuiltinEntry {
+        name: "cpu-gdsb",
+        bin_name: "quip-cpu-gdsb",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
+    BuiltinEntry {
+        name: "cpu-tedsb",
+        bin_name: "quip-cpu-tedsb",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
+    BuiltinEntry {
+        name: "cpu-sbqa",
+        bin_name: "quip-cpu-sbqa",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: None,
+    },
+    BuiltinEntry {
+        name: "cpu-ggdsb",
+        bin_name: "quip-cpu-ggdsb",
         kind: BackendKind::Sweeping,
         node_capacity_flag: None,
     },
@@ -220,8 +253,8 @@ const BUILTINS: &[BuiltinEntry] = &[
 ];
 
 /// Build the registry of built-in backends (`cpu-sa`, `cpu-gibbs`, `cpu-sb`,
-/// `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`, `cpu-mps`, `cpu-mfa`, `cpu-flatiron`,
-/// `cuda`,
+/// `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`, `cpu-gbsb`, `cpu-gdsb`, `cpu-tedsb`,
+/// `cpu-sbqa`, `cpu-ggdsb`, `cpu-mps`, `cpu-mfa`, `cpu-flatiron`, `cuda`,
 /// `cuda-gibbs`, `metal`, `dwave`, `beit`, `cuopt`), resolving each binary
 /// from `$PATH`.
 ///
@@ -369,6 +402,11 @@ mod tests {
                 ("cpu-bsb", "quip-cpu-bsb", BackendKind::Sweeping),
                 ("cpu-hdsb", "quip-cpu-hdsb", BackendKind::Sweeping),
                 ("cpu-hbsb", "quip-cpu-hbsb", BackendKind::Sweeping),
+                ("cpu-gbsb", "quip-cpu-gbsb", BackendKind::Sweeping),
+                ("cpu-gdsb", "quip-cpu-gdsb", BackendKind::Sweeping),
+                ("cpu-tedsb", "quip-cpu-tedsb", BackendKind::Sweeping),
+                ("cpu-sbqa", "quip-cpu-sbqa", BackendKind::Sweeping),
+                ("cpu-ggdsb", "quip-cpu-ggdsb", BackendKind::Sweeping),
                 ("cpu-mps", "quip-cpu-mps", BackendKind::Sweeping),
                 ("cpu-mfa", "quip-cpu-mfa", BackendKind::Sweeping),
                 ("cpu-flatiron", "quip-cpu-flatiron", BackendKind::Sweeping),
