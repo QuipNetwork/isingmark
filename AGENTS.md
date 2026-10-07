@@ -131,7 +131,7 @@ Prefer deleting `.cargo/config.toml` when you are not co-developing upstream.
 
 Built-in backends: `cpu-sa`, `cpu-gibbs`, `cpu-fsa`, `cpu-msa`, `cpu-sb`, `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`, `cpu-gbsb`, `cpu-gdsb`, `cpu-tedsb`, `cpu-sbqa`, `cpu-ggdsb`, `cpu-mps`, `cpu-mfa`, `cpu-flatiron`, `cuda`, `cuda-gibbs`, `metal`, `dwave`, `beit`, `cuopt`.
 
-Of the CPU kernels, `cpu-sa`, `cpu-gibbs`, and `cpu-sb` ship as release assets. The other thirteen build behind the `experimental` feature of `quip-miner-cpu` and reach `PATH` only when someone builds them on purpose:
+Of the CPU kernels, `cpu-sa`, `cpu-gibbs`, and `cpu-sb` ship as release assets. The other thirteen build behind the `experimental` feature of `quip-solver-cpu` and reach `PATH` only when someone builds them on purpose:
 
 ```bash
 cargo build --release --features experimental

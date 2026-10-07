@@ -42,7 +42,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-QUIP_MINER_DWAVE_REPO="${QUIP_MINER_DWAVE_REPO:-https://gitlab.com/quip.network/quip-miner-dwave.git}"
+QUIP_MINER_DWAVE_REPO="${QUIP_MINER_DWAVE_REPO:-https://gitlab.com/quip.network/quip-solver-dwave.git}"
 GITLAB_API="${GITLAB_API:-https://gitlab.com/api/v4}"
 
 # ---------------------------------------------------------------------------
@@ -324,18 +324,18 @@ esac
 required_repos=""
 case "${MINER_SET_RESOLVED}" in
 cpu)
-  required_repos="quip-miner-cpu"
+  required_repos="quip-solver-cpu"
   ;;
 cpu-cuda)
-  required_repos="quip-miner-cpu quip-miner-cuda"
+  required_repos="quip-solver-cpu quip-solver-cuda"
   ;;
 auto)
   case "${os}" in
   Linux)
-    required_repos="quip-miner-cpu"
+    required_repos="quip-solver-cpu"
     ;;
   Darwin)
-    required_repos="quip-miner-metal quip-miner-cpu"
+    required_repos="quip-solver-metal quip-solver-cpu"
     ;;
   *)
     echo "error: unsupported OS: ${os}" >&2
@@ -351,10 +351,26 @@ esac
 
 repo_project_path() {
   case "$1" in
-  quip-miner-cpu) echo "quip.network%2Fquip-miner-cpu" ;;
-  quip-miner-cuda) echo "quip.network%2Fquip-miner-cuda" ;;
-  quip-miner-metal) echo "quip.network%2Fquip-miner-metal" ;;
-  quip-miner-dwave) echo "quip.network%2Fquip-miner-dwave" ;;
+  quip-solver-cpu) echo "quip.network%2Fquip-solver-cpu" ;;
+  quip-solver-cuda) echo "quip.network%2Fquip-solver-cuda" ;;
+  quip-solver-metal) echo "quip.network%2Fquip-solver-metal" ;;
+  quip-solver-dwave) echo "quip.network%2Fquip-solver-dwave" ;;
+  *)
+    echo "error: unknown repo name: $1" >&2
+    return 1
+    ;;
+  esac
+}
+
+# Generic-package name a display-name repo publishes under. The solver repos
+# were renamed from quip-miner-* to quip-solver-*, and their packages kept the
+# old names so release history stays under one package.
+repo_package() {
+  case "$1" in
+  quip-solver-cpu) echo "quip-miner-cpu" ;;
+  quip-solver-cuda) echo "quip-miner-cuda" ;;
+  quip-solver-metal) echo "quip-miner-metal" ;;
+  quip-solver-dwave) echo "quip-miner-dwave" ;;
   *)
     echo "error: unknown repo name: $1" >&2
     return 1
@@ -400,9 +416,9 @@ for p in data:
 # an `-<os>-<arch>` suffix; the file is saved under the bare name.
 binaries_for() {
   case "$1" in
-  quip-miner-cpu) echo "quip-cpu-sa quip-cpu-gibbs quip-cpu-sb" ;;
-  quip-miner-cuda) echo "quip-cuda-sa quip-cuda-gibbs" ;;
-  quip-miner-metal) echo "quip-metal-sa quip-metal-gibbs" ;;
+  quip-solver-cpu) echo "quip-cpu-sa quip-cpu-gibbs quip-cpu-sb" ;;
+  quip-solver-cuda) echo "quip-cuda-sa quip-cuda-gibbs" ;;
+  quip-solver-metal) echo "quip-metal-sa quip-metal-gibbs" ;;
   *)
     echo "error: unknown repo name: $1" >&2
     return 1
@@ -459,11 +475,12 @@ echo
 # host triple; the saved file does not.
 fetch_repo() {
   local name="$1" tag="$2"
-  local proj bin asset url
+  local proj pkg bin asset url
   proj="$(repo_project_path "${name}")"
+  pkg="$(repo_package "${name}")"
   for bin in $(binaries_for "${name}"); do
     asset="${bin}-${os_tag}-${arch}"
-    url="${GITLAB_API}/projects/${proj}/packages/generic/${name}/${tag}/${asset}"
+    url="${GITLAB_API}/projects/${proj}/packages/generic/${pkg}/${tag}/${asset}"
     if [[ -n "${DRY_RUN:-}" ]]; then
       echo "would fetch: ${asset} -> ${DEST}/${bin}  <- ${url}"
       continue
@@ -485,8 +502,8 @@ done
 
 # The dwave miner is a Python wheel, not a native binary. Its version is
 # resolved the same way so the hint names a tag that exists.
-if dwave_tag="$(resolve_repo_version quip-miner-dwave 2>/dev/null)"; then
-  echo "dwave: pip install 'quip-miner-dwave @ git+${QUIP_MINER_DWAVE_REPO}@${dwave_tag}'"
+if dwave_tag="$(resolve_repo_version quip-solver-dwave 2>/dev/null)"; then
+  echo "dwave: pip install 'git+${QUIP_MINER_DWAVE_REPO}@${dwave_tag}'"
 fi
 echo "done -> ${DEST}"
 
