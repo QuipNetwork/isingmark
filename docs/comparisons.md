@@ -2,7 +2,7 @@
 # Measured comparisons
 
 Campaign results that compare kernels or tune shared parameters against
-`quip-miner-cpu`. Each section records the exact commands, the measured
+`quip-solver-cpu`. Each section records the exact commands, the measured
 numbers, and the conclusion drawn from them.
 
 ## cpu-mps vs cpu-mfa: zero-bias and biased regimes
@@ -66,7 +66,7 @@ by all four SB binaries (`cpu-sb`, `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`).
 `cpu-sb` (discrete SB) is the only one that ships in a release; the other
 three build only behind the `experimental` feature.
 
-A unit test already in `quip-miner-cpu` (`sb_core.rs`, `frustrated_triangle`
+A unit test already in `quip-solver-cpu` (`sb_core.rs`, `frustrated_triangle`
 fixture) measured a real degradation on a synthetic worst case: a
 three-node, fully symmetric, zero-bias triangle where the diagonal
 subspace is the only attractor a discrete coupling leaves. For `cpu-sb` at

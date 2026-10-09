@@ -1407,7 +1407,7 @@ dependencies = [
 [[package]]
 name = "quip-miner-core"
 version = "0.3.0"
-source = "git+https://gitlab.com/quip.network/quip-miner.git?rev=e667365bef7efbf91ff0d4c988fcfc648e6cc9b6#e667365bef7efbf91ff0d4c988fcfc648e6cc9b6"
+source = "git+https://gitlab.com/quip.network/quip-solver.git?rev=e667365bef7efbf91ff0d4c988fcfc648e6cc9b6#e667365bef7efbf91ff0d4c988fcfc648e6cc9b6"
 dependencies = [
  "clap",
  "getrandom 0.2.17",
@@ -1425,7 +1425,7 @@ dependencies = [
 [[package]]
 name = "quip-proto"
 version = "0.3.0"
-source = "git+https://gitlab.com/quip.network/quip-miner.git?rev=e667365bef7efbf91ff0d4c988fcfc648e6cc9b6#e667365bef7efbf91ff0d4c988fcfc648e6cc9b6"
+source = "git+https://gitlab.com/quip.network/quip-solver.git?rev=e667365bef7efbf91ff0d4c988fcfc648e6cc9b6#e667365bef7efbf91ff0d4c988fcfc648e6cc9b6"
 dependencies = [
  "prost",
  "tonic",
@@ -1435,7 +1435,7 @@ dependencies = [
 [[package]]
 name = "quip-protocol"
 version = "0.3.0"
-source = "git+https://gitlab.com/quip.network/quip-miner.git?rev=e667365bef7efbf91ff0d4c988fcfc648e6cc9b6#e667365bef7efbf91ff0d4c988fcfc648e6cc9b6"
+source = "git+https://gitlab.com/quip.network/quip-solver.git?rev=e667365bef7efbf91ff0d4c988fcfc648e6cc9b6#e667365bef7efbf91ff0d4c988fcfc648e6cc9b6"
 dependencies = [
  "blake3",
  "prost",

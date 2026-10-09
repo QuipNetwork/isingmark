@@ -165,9 +165,9 @@ Plot tests need the feature flag:
 ISINGMARK_ALLOW_MISSING_MINERS=1 cargo test --all-targets --features plot
 ```
 
-## Local quip-miner override
+## Local quip-solver override
 
-To build against a local checkout of `quip-miner` instead of the pinned git rev:
+To build against a local checkout of `quip-solver` instead of the pinned git rev:
 
 1. Copy `.cargo/config.toml.example` to `.cargo/config.toml`.
 2. Edit the three path entries to your checkout.
@@ -178,7 +178,7 @@ To build against a local checkout of `quip-miner` instead of the pinned git rev:
 **Warning:** while that patch file is present, every `cargo` command rewrites `Cargo.lock` to path sources. Before you commit, check that the lock still has three git sources:
 
 ```bash
-rg -c 'source = "git\+https://gitlab.com/quip.network/quip-miner' Cargo.lock
+rg -c 'source = "git\+https://gitlab.com/quip.network/quip-solver' Cargo.lock
 # expect 3
 ```
 

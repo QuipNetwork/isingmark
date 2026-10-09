@@ -27,7 +27,7 @@ cargo install --path .
 # Default: real miner binaries must be on $PATH, or tests that need them FAIL
 cargo test --all-targets
 
-# Download released miners into miners/ (pinned to QUIP_MINER_REV):
+# Download released miners into miners/ (pinned to QUIP_SOLVER_REV):
 ./tools/fetch-miners.sh
 export PATH="$(pwd)/miners:${PATH}"
 
@@ -98,12 +98,12 @@ src/
   report/             text tables; plot.rs behind the plot feature
 ```
 
-Pinned git deps (rev in `Cargo.toml`): `quip-proto`, `quip-protocol`, `quip-miner-core` from `https://gitlab.com/quip.network/quip-miner.git`.
+Pinned git deps (rev in `Cargo.toml`): `quip-proto`, `quip-protocol`, `quip-miner-core` from `https://gitlab.com/quip.network/quip-solver.git`.
 
 Local override: copy `.cargo/config.toml.example` to `.cargo/config.toml` (gitignored) to patch those crates to a local checkout. While the patch is active, cargo rewrites `Cargo.lock` to path sources. Before commit, confirm three git sources remain:
 
 ```bash
-rg -c 'source = "git\+https://gitlab.com/quip.network/quip-miner' Cargo.lock
+rg -c 'source = "git\+https://gitlab.com/quip.network/quip-solver' Cargo.lock
 # expect 3
 ```
 
@@ -131,7 +131,7 @@ Prefer deleting `.cargo/config.toml` when you are not co-developing upstream.
 
 Built-in backends: `cpu-sa`, `cpu-gibbs`, `cpu-fsa`, `cpu-msa`, `cpu-sb`, `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`, `cpu-gbsb`, `cpu-gdsb`, `cpu-tedsb`, `cpu-sbqa`, `cpu-ggdsb`, `cpu-mps`, `cpu-mfa`, `cpu-flatiron`, `cuda`, `cuda-gibbs`, `metal`, `dwave`, `beit`, `cuopt`.
 
-Of the CPU kernels, `cpu-sa`, `cpu-gibbs`, and `cpu-sb` ship as release assets. The other thirteen build behind the `experimental` feature of `quip-miner-cpu` and reach `PATH` only when someone builds them on purpose:
+Of the CPU kernels, `cpu-sa`, `cpu-gibbs`, and `cpu-sb` ship as release assets. The other thirteen build behind the `experimental` feature of `quip-solver-cpu` and reach `PATH` only when someone builds them on purpose:
 
 ```bash
 cargo build --release --features experimental
