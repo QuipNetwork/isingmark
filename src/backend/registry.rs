@@ -115,7 +115,7 @@ const BUILTINS: &[BuiltinEntry] = &[
     // The annealing accelerations added on 2026-09-03, from Isakov et al.
     // (Comput. Phys. Commun. 192, 265 (2015)): tabulated Metropolis
     // thresholds, and the same with 64 reads packed per machine word. See
-    // quip-miner-cpu/docs/sa-acceleration.md.
+    // quip-solver-cpu/docs/sa-acceleration.md.
     BuiltinEntry {
         name: "cpu-fsa",
         bin_name: "quip-cpu-fsa",
@@ -132,7 +132,7 @@ const BUILTINS: &[BuiltinEntry] = &[
     // binary rather than a flag on one binary, so each needs its own name
     // here. All nine are driven by reads and sweeps.
     //
-    // Only `cpu-sb` ships in a quip-miner-cpu release. The other eight build
+    // Only `cpu-sb` ships in a quip-solver-cpu release. The other eight build
     // behind that crate's `experimental` feature, so their binaries reach
     // `$PATH` only when someone builds them on purpose. That costs nothing
     // here: a built-in whose binary is absent still gets an entry and fails
@@ -164,7 +164,7 @@ const BUILTINS: &[BuiltinEntry] = &[
     },
     // The variants added on 2026-09-02: edge-of-chaos control on the
     // ballistic and discrete couplings, tabu-enhanced dSB, replica-ring dSB,
-    // and globally guided dSB. See quip-miner-cpu/docs/sb-variants.md.
+    // and globally guided dSB. See quip-solver-cpu/docs/sb-variants.md.
     BuiltinEntry {
         name: "cpu-gbsb",
         bin_name: "quip-cpu-gbsb",

@@ -6,7 +6,7 @@ Language: Rust (edition 2021, toolchain 1.97.1). License: AGPL-3.0-or-later.
 
 ## Why this design
 
-Problem generation, energy scoring, nonce derivation, and session wire types already exist in the `quip-miner` crates (`quip-protocol`, `quip-proto`, `quip-miner-core`). IsingMark reuses those crates. It does not reimplement the draw or the scoring path.
+Problem generation, energy scoring, nonce derivation, and session wire types already exist in the `quip-solver` crates (`quip-protocol`, `quip-proto`, `quip-miner-core`). IsingMark reuses those crates. It does not reimplement the draw or the scoring path.
 
 "Add a new annealer" means "ship a quip miner binary that speaks the session protocol." `quip-miner-core` reduces that work to implementing `Sampler::sample` and calling `run`.
 
@@ -14,7 +14,7 @@ IsingMark does not depend on `quip-coordinator`. That crate pulls Substrate and 
 
 ## Dependencies
 
-Pinned git rev of `https://gitlab.com/quip.network/quip-miner.git` (see `Cargo.toml`):
+Pinned git rev of `https://gitlab.com/quip.network/quip-solver.git` (see `Cargo.toml`):
 
 | Crate | Provides |
 |---|---|
@@ -207,12 +207,12 @@ Every mode accepts common flags where they apply: `--backend`, `--topology-prese
 - Set `ISINGMARK_ALLOW_MISSING_MINERS=1` to opt out of that requirement.
 - Plot unit tests require `--features plot` and assert a real PNG signature.
 
-## Local quip-miner override
+## Local quip-solver override
 
 Copy `.cargo/config.toml.example` to `.cargo/config.toml` (gitignored) to patch the three pinned crates to a local checkout. While active, cargo rewrites `Cargo.lock` to path sources. Before commit:
 
 ```bash
-rg -c 'source = "git\+https://gitlab.com/quip.network/quip-miner' Cargo.lock
+rg -c 'source = "git\+https://gitlab.com/quip.network/quip-solver' Cargo.lock
 # expect 3
 ```
 
