@@ -23,9 +23,9 @@ unwrap-used = "deny"
 pedantic = { level = "warn", priority = -1 }
 
 [dependencies]
-quip-proto = { git = "https://gitlab.com/quip.network/quip-solver.git", rev = "e667365bef7efbf91ff0d4c988fcfc648e6cc9b6" }
-quip-protocol = { git = "https://gitlab.com/quip.network/quip-solver.git", rev = "e667365bef7efbf91ff0d4c988fcfc648e6cc9b6" }
-quip-miner-core = { git = "https://gitlab.com/quip.network/quip-solver.git", rev = "e667365bef7efbf91ff0d4c988fcfc648e6cc9b6" }
+quip-proto = "0.0.2"
+quip-protocol = "0.0.2"
+quip-solver-core = "0.0.2"
 tonic = "0.12"
 prost = "0.13"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "io-util", "sync", "process"] }

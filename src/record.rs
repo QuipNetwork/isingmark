@@ -31,8 +31,9 @@ pub struct JobRecord {
     /// was recomputed; `None` on empty results, rejects, and abandoned jobs.
     /// Never a sentinel zero: a genuine zero-energy solution is `Some(0)`.
     pub best_energy_milli: Option<i64>,
-    /// Hex text of the winning solution's protocol `spins_bytes` (one byte
-    /// per spin: `0x01` for `+1`, `0xFF` for `-1`). Decode with
+    /// Hex text of the winning solution's spins in unpacked form (one byte
+    /// per spin: `0x01` for `+1`, `0xFF` for `-1`), re-encoded from the
+    /// bit-packed `Solution.spins` wire field. Decode with
     /// `quip_protocol::wire::decode_spins` after hex-decoding this field.
     /// `None` when no solution was returned.
     pub best_spins_hex: Option<String>,

@@ -14,12 +14,16 @@
 //! `crates/quip-coordinator/src/drive/topology_spec.rs`) — there is no chain
 //! in benchmark mode to read a real one from — so this does the same.
 
-use quip_proto::v1::{ising_problem, IsingProblem, Job, JobKind, Provenance};
+use quip_proto::v1::{ising_problem, CoefficientEncoding, IsingProblem, Job, JobKind, Provenance};
 use quip_protocol::chacha8::draw_ising_milli;
 use quip_protocol::derive::derive_nonce;
 use quip_protocol::wire::encode_i32_le;
 
 use crate::topology::TopologySpec;
+
+/// Fixed-point scale of the `I32` coefficient encoding: wire integers are
+/// milli-units (natural units times 1000).
+pub(crate) const MILLI_SCALE: u32 = 1000;
 
 /// `last_proof_block_hash` upstream drive mode always derives against: there
 /// is no chain in benchmark mode to read a real one from.
@@ -101,16 +105,17 @@ impl ProblemSource {
                 graph: Some(ising_problem::Graph::TopologyHash(
                     self.spec.topology_hash(),
                 )),
-                h_milli_le32: encode_i32_le(&h),
-                j_milli_le32: encode_i32_le(&j),
-                num_reads: 0,
-                num_sweeps: 0,
-                anneal_time_us: 0,
+                encoding: CoefficientEncoding::I32 as i32,
+                scale: MILLI_SCALE,
+                h: encode_i32_le(&h),
+                j: encode_i32_le(&j),
+                ..IsingProblem::default()
             }),
             provenance: Some(Provenance {
                 is_pow: true,
                 order_id: vec![],
             }),
+            generator: None,
         })
     }
 }
@@ -171,14 +176,8 @@ mod tests {
         for (ja, jb) in jobs_a.iter().zip(&jobs_b) {
             assert_eq!(ja.job_id, jb.job_id);
             assert_eq!(
-                ja.ising
-                    .as_ref()
-                    .expect("job has an ising problem")
-                    .h_milli_le32,
-                jb.ising
-                    .as_ref()
-                    .expect("job has an ising problem")
-                    .h_milli_le32
+                ja.ising.as_ref().expect("job has an ising problem").h,
+                jb.ising.as_ref().expect("job has an ising problem").h
             );
         }
     }
@@ -216,8 +215,8 @@ mod tests {
         let mut src = ProblemSource::new(&spec, [1u8; 32], 99, 4, 9_999_999);
         for job in drain_all(&mut src) {
             let ising = job.ising.expect("job has an ising problem");
-            let h = decode_i32_le(&ising.h_milli_le32).expect("h decodes");
-            let j = decode_i32_le(&ising.j_milli_le32).expect("j decodes");
+            let h = decode_i32_le(&ising.h).expect("h decodes");
+            let j = decode_i32_le(&ising.j).expect("j decodes");
             assert_eq!(h.len(), spec.nodes.len());
             assert_eq!(j.len(), spec.edges.len());
             assert!(h.iter().all(|v| spec.allowed_h_milli.contains(v)));

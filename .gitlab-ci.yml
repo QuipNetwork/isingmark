@@ -3,9 +3,10 @@
 # Toolchain matches rust-toolchain.toml (1.97.1). Stages run in order:
 # fmt, clippy, test, build with plot feature.
 #
-# Miner binaries: fetch via upstream fetch-miners.sh onto $PATH and run
-# tests WITHOUT ISINGMARK_ALLOW_MISSING_MINERS=1 so the real probe and
-# session paths execute. Do not set that skip variable in CI.
+# Miner binaries: fetch with tools/fetch-miners.sh, which resolves the newest
+# quip-solver-<x> release of each miner, onto $PATH and run tests WITHOUT
+# ISINGMARK_ALLOW_MISSING_MINERS=1 so the real probe and session paths
+# execute. Do not set that skip variable in CI.
 #
 # fetch-miners.sh writes to its DEST argument (default ./miners relative to
 # CWD). Real miner tests need quip-cpu-sa on $PATH. MINER_SET=cpu pulls the
@@ -16,18 +17,6 @@ variables:
   CARGO_TERM_COLOR: always
   # Pinned toolchain (must match rust-toolchain.toml channel).
   RUST_VERSION: "1.97.1"
-  # Crate deps pin this git rev (see Cargo.toml / Cargo.lock).
-  QUIP_SOLVER_REV: "e667365bef7efbf91ff0d4c988fcfc648e6cc9b6"
-  QUIP_SOLVER_REPO: "https://gitlab.com/quip.network/quip-solver.git"
-  # Package-registry tag used by fetch-miners.sh. Default in the script at
-  # QUIP_SOLVER_REV is v0.3.0-rc2; set explicitly here so the coupling to the
-  # crate rev is visible. Keep this in sync when bumping QUIP_SOLVER_REV /
-  # the pinned quip-solver crates — do not change one without checking the other.
-  #
-  # The tag and the rev must move together. At this rev the script names assets
-  # NAME-OS-ARCH, and only v0.3.0-rc2 and later publish that form. Pointing this
-  # rev at an earlier tag gives a 404 on every asset.
-  MINERS_TAG: "v0.3.0-rc2"
   MINERS_DIR: "${CI_PROJECT_DIR}/miners"
 
 default:
@@ -35,12 +24,6 @@ default:
   before_script:
     - rustc --version
     - cargo --version
-    # quip-proto's build script runs prost-build, which shells out to protoc.
-    # Every job that compiles the crate needs it; the rust image does not
-    # ship it. Without it the build fails at quip-proto with "Could not find
-    # `protoc`", before any lint or test runs.
-    - apt-get update -qq && apt-get install -y -qq protobuf-compiler
-    - protoc --version
     - rustup component add rustfmt clippy
 
 stages:
@@ -65,18 +48,11 @@ test:
   before_script:
     - rustc --version
     - cargo --version
-    # This job replaces the default before_script, so it must install protoc
-    # itself (see the default block for why the build needs it).
-    # Fetch CPU miner binaries onto $PATH (upstream script from quip-solver).
-    - apt-get update -qq && apt-get install -y -qq protobuf-compiler git ca-certificates curl
-    - protoc --version
-    - git clone --filter=blob:none --no-checkout "${QUIP_SOLVER_REPO}" /tmp/quip-solver
-    - git -C /tmp/quip-solver fetch --depth 1 origin "${QUIP_SOLVER_REV}"
-    - git -C /tmp/quip-solver checkout "${QUIP_SOLVER_REV}"
-    # MINERS_TAG is set in variables above; export so the script does not
-    # rely on its internal default alone.
-    - export MINERS_TAG="${MINERS_TAG}"
-    - MINER_SET=cpu bash /tmp/quip-solver/crates/quip-coordinator/tools/fetch-miners.sh "${MINERS_DIR}"
+    # This job replaces the default before_script, so it repeats the toolchain
+    # steps it needs. Fetch CPU miner binaries onto $PATH (newest
+    # quip-solver-<x> releases).
+    - apt-get update -qq && apt-get install -y -qq ca-certificates curl
+    - MINER_SET=cpu bash tools/fetch-miners.sh "${MINERS_DIR}"
     - export PATH="${MINERS_DIR}:${PATH}"
     # Fail the job if the real binary is still missing (do not soft-skip).
     - command -v quip-cpu-sa

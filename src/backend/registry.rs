@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Built-in backend registry and `--capabilities`/`--check` probing.
 //!
-//! Mirrors the CLI surface `quip-miner-core::session::run` dispatches on
-//! (`crates/quip-miner-core/src/session.rs` at the upstream rev this crate
-//! pins): `--capabilities` prints a JSON document to stdout and exits `0`
-//! without opening the device; `--check` opens the device, discards the
-//! result, and exits `0` on success or a backend-specific non-zero code
-//! (e.g. `EnvIncompatible`) on failure.
+//! Mirrors the CLI surface `quip-solver-core::session::run` dispatches on
+//! (`crates/quip-solver-core/src/session.rs` in `quip-solver-core` 0.0.2):
+//! `--capabilities` prints a JSON document to stdout and exits `0` without
+//! opening the device; `--check` opens the device, discards the result, and
+//! exits `0` on success or a backend-specific non-zero code (e.g.
+//! `EnvIncompatible`) on failure.
 
 use std::env;
 use std::ffi::OsStr;
