@@ -37,13 +37,13 @@ use std::time::Duration;
 use clap::Parser;
 use quip_proto::v1::miner_service_client::MinerServiceClient;
 use quip_proto::v1::{
-    coord_msg, ising_problem, miner_msg, CoordMsg, Fatal, IsingProblem, Job, JobKind, JobRequest,
-    MinerMsg, Ready, Reject, RejectReason, Result as JobResult, SamplerMeta, Solution, Status,
-    Topology,
+    coord_msg, ising_problem, miner_msg, Algorithm, Backend, Capabilities, CoefficientEncoding,
+    CoordMsg, Fatal, IsingProblem, Job, JobKind, JobRequest, MinerMsg, Ready, Reject, RejectReason,
+    Result as JobResult, SamplerMeta, Solution, Status, Topology,
 };
 use quip_protocol::scoring::energy_milli;
-use quip_protocol::session::{build_hello, check_welcome, BackendCaps, ExitCode, SessionError};
-use quip_protocol::wire::{decode_i32_le, encode_spins};
+use quip_protocol::session::{build_hello, check_welcome, ExitCode, SessionError};
+use quip_protocol::wire::{decode_i32_le, encode_spins_packed};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::{Endpoint, Uri};
@@ -56,7 +56,7 @@ struct Cli {
     quip_coordinator: String,
     #[arg(long, default_value = "fake-miner-0")]
     miner_id: String,
-    /// `Hello.protocol_version` to advertise. A value other than the real
+    /// `Capabilities.protocol_version` to advertise in `Hello`. A value other than the real
     /// `quip_protocol::session::PROTOCOL_VERSION` exercises the
     /// coordinator's handshake-rejection path.
     #[arg(long, default_value_t = quip_protocol::session::PROTOCOL_VERSION)]
@@ -279,7 +279,7 @@ fn scan_pattern(step: u64, n: usize) -> Vec<i8> {
 /// `isingmark`'s comparative-mode hardness search (Task 12): the coordinator
 /// (`isingmark::backend::session::build_result_record`, already-reviewed,
 /// not modified here) recomputes `best_energy_milli` itself from the
-/// returned `spins_bytes` — never from a miner's own reported
+/// returned `spins` — never from a miner's own reported
 /// `Solution.energy_milli` — so the only way for this fake miner to make its
 /// *actual* solve quality depend on the requested sampling effort is to
 /// return spins that really are better, not merely to shift a reported
@@ -360,8 +360,8 @@ fn solve(
     num_solutions: u32,
 ) -> JobResult {
     let ising = job.ising.clone().unwrap_or_default();
-    let h = decode_milli_f64(&ising.h_milli_le32).unwrap_or_default();
-    let j = decode_milli_f64(&ising.j_milli_le32).unwrap_or_default();
+    let h = decode_milli_f64(&ising.h).unwrap_or_default();
+    let j = decode_milli_f64(&ising.j).unwrap_or_default();
     let edges = resolve_edges(&ising, topo);
     let n = h.len();
     let count = num_solutions.max(1);
@@ -375,7 +375,7 @@ fn solve(
             }
             let true_energy = energy_milli(&spins, &h, &j, &edges);
             Solution {
-                spins_bytes: encode_spins(&spins),
+                spins: encode_spins_packed(&spins),
                 energy_milli: true_energy + energy_lie_milli,
             }
         })
@@ -386,7 +386,7 @@ fn solve(
         let spins = multi_start_search(&h, &j, &edges, restarts);
         let true_energy = energy_milli(&spins, &h, &j, &edges);
         solutions.push(Solution {
-            spins_bytes: encode_spins(&spins),
+            spins: encode_spins_packed(&spins),
             energy_milli: true_energy + energy_lie_milli,
         });
     }
@@ -406,6 +406,7 @@ fn solve(
             device_access_time_us: 0,
             ..Default::default()
         }),
+        ..Default::default()
     }
 }
 
@@ -445,18 +446,18 @@ async fn run() -> Result<(), ExitCode> {
         return Err(ExitCode::EnvIncompatible);
     }
 
-    let mut hello = build_hello(
+    let hello = build_hello(
         &cli.miner_id,
-        "fake",
-        "fake-sa",
-        &[JobKind::IsingSample],
-        BackendCaps {
-            max_nodes: 0,
-            max_edges: 0,
+        Capabilities {
+            supported_kinds: vec![JobKind::IsingSample as i32],
+            protocol_version: cli.protocol_version,
+            encodings: vec![CoefficientEncoding::I32 as i32],
+            backend: Backend::Mock as i32,
+            algorithm: Algorithm::External as i32,
+            ..Capabilities::default()
         },
     )
     .map_err(|e: SessionError| ExitCode::from(e))?;
-    hello.protocol_version = cli.protocol_version;
 
     let path = cli
         .quip_coordinator
@@ -617,6 +618,7 @@ async fn run() -> Result<(), ExitCode> {
                             job_id: b"isingmark-stray-orphan-job-id".to_vec(),
                             solutions: Vec::new(),
                             meta: None,
+                            ..Default::default()
                         };
                         tx.send(miner(miner_msg::Msg::Result(stray)))
                             .await
@@ -633,7 +635,12 @@ async fn run() -> Result<(), ExitCode> {
                     .map_err(|_| ExitCode::InternalFatal)?;
             }
             Some(coord_msg::Msg::Shutdown(_)) => break,
-            Some(coord_msg::Msg::Cancel(_) | coord_msg::Msg::SetTarget(_)) | None => {}
+            Some(
+                coord_msg::Msg::Cancel(_)
+                | coord_msg::Msg::SetTarget(_)
+                | coord_msg::Msg::GetCapabilities(_),
+            )
+            | None => {}
         }
     }
 

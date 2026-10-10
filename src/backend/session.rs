@@ -42,7 +42,7 @@ use quip_proto::v1::{
 };
 use quip_protocol::scoring::{energy_milli, set_diversity};
 use quip_protocol::session::{check_welcome, PROTOCOL_VERSION};
-use quip_protocol::wire::{decode_i32_le, decode_spins};
+use quip_protocol::wire::{decode_i32_le, decode_spins_packed, encode_spins};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixListener;
 use tokio::process::{ChildStderr, Command};
@@ -98,7 +98,7 @@ const SHUTDOWN_GRACE_MS: u32 = 2_000;
 /// `Ping`. Deliberately short, not a proxy for expected per-job wall time:
 /// a real miner answers `Ping` with `Status` from its control-plane read
 /// loop, independent of whatever the sampler thread is doing
-/// (`quip-miner-core/src/session.rs` replies to `Ping` unconditionally,
+/// (`quip-solver-core/src/session.rs` replies to `Ping` unconditionally,
 /// never waiting on in-flight sampling), so this interval only needs to
 /// tolerate ordinary scheduling jitter in a live process, not the length of
 /// a single annealing job.
@@ -114,9 +114,9 @@ const PING_INTERVAL: Duration = Duration::from_secs(3);
 /// inbound message of any kind resets the count. It is purely about
 /// whether the miner's control plane can respond while it is busy sampling
 /// — not about how long the sample itself takes. For all four
-/// `quip-miner-core`-based backends (`cpu-sa`, `cpu-gibbs`, `cuda`,
+/// `quip-solver-core`-based backends (`cpu-sa`, `cpu-gibbs`, `cuda`,
 /// `metal`) it provably always can: sampling runs on a dedicated OS thread
-/// (`quip-miner-core/src/session.rs` spawns it via `std::thread::spawn`,
+/// (`quip-solver-core/src/session.rs` spawns it via `std::thread::spawn`,
 /// fed by a channel) while the async control loop answers `Ping`
 /// unconditionally, so this constant should never fire against them at
 /// all. The margin exists for backends this crate cannot inspect —
@@ -664,12 +664,17 @@ async fn drive_session(
         return;
     };
 
-    // 2. Check the version using check_welcome's own comparison: Hello and
-    // Welcome both carry a bare `protocol_version` field checked against
-    // the same constant, so wrapping Hello's value in a Welcome reuses that
-    // logic instead of reimplementing the `!= PROTOCOL_VERSION` check.
+    // 2. Check the version using check_welcome's own comparison: Hello
+    // (via `Capabilities.protocol_version`) and Welcome both carry a bare
+    // version checked against the same constant, so wrapping Hello's value
+    // in a Welcome reuses that logic instead of reimplementing the
+    // `!= PROTOCOL_VERSION` check. A Hello with no capabilities reads as
+    // version 0 and fails the check.
     if check_welcome(&Welcome {
-        protocol_version: hello.protocol_version,
+        protocol_version: hello
+            .capabilities
+            .as_ref()
+            .map_or(0, |caps| caps.protocol_version),
     })
     .is_err()
     {
@@ -836,7 +841,9 @@ async fn drive_session(
                     Some(
                         miner_msg::Msg::Hello(_)
                         | miner_msg::Msg::Ready(_)
-                        | miner_msg::Msg::Status(_),
+                        | miner_msg::Msg::Status(_)
+                        | miner_msg::Msg::Capabilities(_)
+                        | miner_msg::Msg::LeaseDone(_),
                     )
                     | None => {}
                 }
@@ -1000,6 +1007,7 @@ fn build_topology(spec: &TopologySpec) -> Topology {
         nodes: spec.nodes.clone(),
         edges: Some(EdgeList { u, v }),
         allowed_h_milli: spec.allowed_h_milli.clone(),
+        allowed_j_milli: spec.allowed_j_milli.clone(),
     }
 }
 
@@ -1062,14 +1070,14 @@ fn build_result_record(
     wall: Duration,
 ) -> JobRecord {
     let ising = job.ising.clone().unwrap_or_default();
-    let h = decode_milli_f64(&ising.h_milli_le32);
-    let j = decode_milli_f64(&ising.j_milli_le32);
+    let h = decode_milli_f64(&ising.h);
+    let j = decode_milli_f64(&ising.j);
 
     let mut mismatched = false;
     let mut recomputed = Vec::with_capacity(result.solutions.len());
     let mut spins_by_solution = Vec::with_capacity(result.solutions.len());
     for solution in &result.solutions {
-        let spins = decode_spins(&solution.spins_bytes).unwrap_or_default();
+        let spins = decode_spins_packed(&solution.spins, h.len()).unwrap_or_default();
         let energy = energy_milli(&spins, &h, &j, edges);
         if energy != solution.energy_milli {
             mismatched = true;
@@ -1087,7 +1095,7 @@ fn build_result_record(
         .min_by_key(|(_, &e)| e)
         .map(|(i, &e)| (i, e));
     let best_energy_milli = best.map(|(_, e)| e);
-    let best_spins_hex = best.map(|(i, _)| hex_encode(&result.solutions[i].spins_bytes));
+    let best_spins_hex = best.map(|(i, _)| hex_encode(&encode_spins(&spins_by_solution[i])));
     let diversity_milli = milli_round(set_diversity(&spins_by_solution));
     let (measured_reads, measured_sweeps, device_access_time_us) =
         result.meta.as_ref().map_or((None, None, 0), |m| {

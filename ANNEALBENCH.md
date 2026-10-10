@@ -6,21 +6,21 @@ Language: Rust (edition 2021, toolchain 1.97.1). License: AGPL-3.0-or-later.
 
 ## Why this design
 
-Problem generation, energy scoring, nonce derivation, and session wire types already exist in the `quip-solver` crates (`quip-protocol`, `quip-proto`, `quip-miner-core`). IsingMark reuses those crates. It does not reimplement the draw or the scoring path.
+Problem generation, energy scoring, nonce derivation, and session wire types already exist in the `quip-solver-core` crates (`quip-protocol`, `quip-proto`, `quip-solver-core`). IsingMark reuses those crates. It does not reimplement the draw or the scoring path.
 
-"Add a new annealer" means "ship a quip miner binary that speaks the session protocol." `quip-miner-core` reduces that work to implementing `Sampler::sample` and calling `run`.
+"Add a new annealer" means "ship a quip miner binary that speaks the session protocol." `quip-solver-core` reduces that work to implementing `Sampler::sample` and calling `run`.
 
 IsingMark does not depend on `quip-coordinator`. That crate pulls Substrate and chain stack this tool never needs. Consensus-critical functions live in `quip-protocol` and are used directly.
 
 ## Dependencies
 
-Pinned git rev of `https://gitlab.com/quip.network/quip-solver.git` (see `Cargo.toml`):
+Published crates from `quip.network/quip-solver-core`, version 0.0.2 (see `Cargo.toml`):
 
 | Crate | Provides |
 |---|---|
 | `quip-proto` | Protobuf types (`Job`, `IsingProblem`, `RejectReason`) |
 | `quip-protocol` | `draw_ising_milli`, scoring, session handshake, wire codec, derive |
-| `quip-miner-core` | `IsingGraph`, sample types used by miners |
+| `quip-solver-core` | `Sampler` trait, `IsingGraph`, sample types, and the session loop used by miners |
 
 IsingMark also uses `clap`, `serde`, `serde_json`, `serde-saphyr` (YAML), `tokio`, and optional `plotters` behind the `plot` feature.
 
@@ -164,7 +164,7 @@ cargo build --features plot
 
 ### Per-job records (JSONL)
 
-One `JobRecord` per line: `job_id` (hex), `backend`, `n_solutions`, `best_energy_milli` (optional milli-units; null when no solution), `best_spins_hex` (optional hex of protocol `spins_bytes`, one byte per spin `0x01`/`0xFF`, decodable with `quip_protocol::wire::decode_spins`; null when no solution), `diversity_milli`, `passed`, `rejected`, `reject_reason`, `device_access_time_us`, `wall_ms`, `requested_reads` / `requested_sweeps` / `requested_anneal_time_us` (optional; null when no `SetTarget` was sent, distinct from a genuine zero request), `measured_reads` (optional), `measured_sweeps` (optional). There is no measured anneal time: `SamplerMeta` does not carry one.
+One `JobRecord` per line: `job_id` (hex), `backend`, `n_solutions`, `best_energy_milli` (optional milli-units; null when no solution), `best_spins_hex` (optional hex of the winning solution's spins, one byte per spin `0x01`/`0xFF` (the unpacked form, not the bit-packed `Solution.spins` wire field), decodable with `quip_protocol::wire::decode_spins`; null when no solution), `diversity_milli`, `passed`, `rejected`, `reject_reason`, `device_access_time_us`, `wall_ms`, `requested_reads` / `requested_sweeps` / `requested_anneal_time_us` (optional; null when no `SetTarget` was sent, distinct from a genuine zero request), `measured_reads` (optional), `measured_sweeps` (optional). There is no measured anneal time: `SamplerMeta` does not carry one.
 
 Modes that refuse to overwrite refuse a non-empty existing `records.jsonl` before they start.
 
@@ -207,13 +207,13 @@ Every mode accepts common flags where they apply: `--backend`, `--topology-prese
 - Set `ISINGMARK_ALLOW_MISSING_MINERS=1` to opt out of that requirement.
 - Plot unit tests require `--features plot` and assert a real PNG signature.
 
-## Local quip-solver override
+## Local quip-solver-core override
 
-Copy `.cargo/config.toml.example` to `.cargo/config.toml` (gitignored) to patch the three pinned crates to a local checkout. While active, cargo rewrites `Cargo.lock` to path sources. Before commit:
+Copy `.cargo/config.toml.example` to `.cargo/config.toml` (gitignored) to patch the three crates to a local `quip-solver-core` checkout. While active, cargo rewrites `Cargo.lock` to path sources. Before commit:
 
 ```bash
-rg -c 'source = "git\+https://gitlab.com/quip.network/quip-solver' Cargo.lock
-# expect 3
+git diff --stat Cargo.lock
+# expect no output
 ```
 
 Delete the config file when you are not co-developing upstream.

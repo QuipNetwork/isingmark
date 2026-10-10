@@ -4,10 +4,7 @@ IsingMark is a Rust CLI that benchmarks quip Ising miner binaries. It acts as a 
 
 ## Build
 
-Toolchain: Rust 1.97.1 (`rust-toolchain.toml`). Also requires `protoc`
-(`brew install protobuf`, or `apt-get install protobuf-compiler`):
-`quip-proto` generates its bindings at build time with prost-build, which
-shells out to `protoc`.
+Toolchain: Rust 1.97.1 (`rust-toolchain.toml`). No `protoc` is needed: the published `quip-proto` crate ships its generated bindings.
 
 ```bash
 cargo build
@@ -27,7 +24,7 @@ cargo install --path .
 # Default: real miner binaries must be on $PATH, or tests that need them FAIL
 cargo test --all-targets
 
-# Download released miners into miners/ (pinned to QUIP_SOLVER_REV):
+# Download the newest released miners into miners/:
 ./tools/fetch-miners.sh
 export PATH="$(pwd)/miners:${PATH}"
 
@@ -98,13 +95,13 @@ src/
   report/             text tables; plot.rs behind the plot feature
 ```
 
-Pinned git deps (rev in `Cargo.toml`): `quip-proto`, `quip-protocol`, `quip-miner-core` from `https://gitlab.com/quip.network/quip-solver.git`.
+Solver deps (versions in `Cargo.toml`): `quip-proto`, `quip-protocol`, and `quip-solver-core`, published on crates.io from `quip.network/quip-solver-core`.
 
-Local override: copy `.cargo/config.toml.example` to `.cargo/config.toml` (gitignored) to patch those crates to a local checkout. While the patch is active, cargo rewrites `Cargo.lock` to path sources. Before commit, confirm three git sources remain:
+Local override: copy `.cargo/config.toml.example` to `.cargo/config.toml` (gitignored) to patch those crates to a local `quip-solver-core` checkout. While the patch is active, cargo rewrites `Cargo.lock` to path sources. Before commit, confirm the lock is unchanged:
 
 ```bash
-rg -c 'source = "git\+https://gitlab.com/quip.network/quip-solver' Cargo.lock
-# expect 3
+git diff --stat Cargo.lock
+# expect no output
 ```
 
 Prefer deleting `.cargo/config.toml` when you are not co-developing upstream.

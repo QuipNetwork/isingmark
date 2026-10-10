@@ -165,21 +165,21 @@ Plot tests need the feature flag:
 ISINGMARK_ALLOW_MISSING_MINERS=1 cargo test --all-targets --features plot
 ```
 
-## Local quip-solver override
+## Local quip-solver-core override
 
-To build against a local checkout of `quip-solver` instead of the pinned git rev:
+To build against a local checkout of `quip-solver-core` instead of the crates.io releases:
 
 1. Copy `.cargo/config.toml.example` to `.cargo/config.toml`.
-2. Edit the three path entries to your checkout.
+2. Edit the three path entries (`[patch.crates-io]`) to your checkout.
 3. Build as usual.
 
-`.cargo/config.toml` is gitignored so the committed `Cargo.lock` keeps recording the pinned git rev for CI and other clones.
+`.cargo/config.toml` is gitignored so the committed `Cargo.lock` keeps recording the crates.io releases for CI and other clones.
 
-**Warning:** while that patch file is present, every `cargo` command rewrites `Cargo.lock` to path sources. Before you commit, check that the lock still has three git sources:
+**Warning:** while that patch file is present, every `cargo` command rewrites `Cargo.lock` to path sources. Before you commit, check that the lock is unchanged:
 
 ```bash
-rg -c 'source = "git\+https://gitlab.com/quip.network/quip-solver' Cargo.lock
-# expect 3
+git diff --stat Cargo.lock
+# expect no output
 ```
 
 Prefer deleting `.cargo/config.toml` when you are not co-developing upstream.

@@ -76,6 +76,7 @@ fn small_target() -> SetTarget {
         num_reads: 8,
         num_sweeps: 50,
         anneal_time_us: 30,
+        ..Default::default()
     }
 }
 
@@ -171,12 +172,12 @@ fn expected_energy_for_spins(spec: &TopologySpec, job: &Job, spins: &[i8]) -> i6
         .ising
         .as_ref()
         .expect("drawn jobs always carry an ising problem");
-    let h: Vec<f64> = decode_i32_le(&ising.h_milli_le32)
+    let h: Vec<f64> = decode_i32_le(&ising.h)
         .expect("h decodes")
         .iter()
         .map(|&v| f64::from(v) / 1000.0)
         .collect();
-    let j: Vec<f64> = decode_i32_le(&ising.j_milli_le32)
+    let j: Vec<f64> = decode_i32_le(&ising.j)
         .expect("j decodes")
         .iter()
         .map(|&v| f64::from(v) / 1000.0)
@@ -190,7 +191,7 @@ fn all_plus_one(job: &Job) -> Vec<i8> {
         .ising
         .as_ref()
         .expect("drawn jobs always carry an ising problem");
-    let n = decode_i32_le(&ising.h_milli_le32).expect("h decodes").len();
+    let n = decode_i32_le(&ising.h).expect("h decodes").len();
     flipped_spins(n, 0)
 }
 
@@ -353,6 +354,7 @@ async fn fake_miner_with_zero_set_target_records_requested_params_as_some_zero()
         num_reads: 0,
         num_sweeps: 0,
         anneal_time_us: 0,
+        ..Default::default()
     };
 
     let report = run_session(RunParams {
@@ -988,7 +990,7 @@ async fn fake_miner_bad_protocol_version_fails_handshake_and_dispatches_nothing(
     let jobs = draw_jobs(&spec, 5, 2);
     let dir = tempfile::tempdir().expect("create temp dir");
     let sock_path = dir.path().join("coordinator.sock");
-    let backend = fake_miner_backend(vec!["--protocol-version".to_string(), "2".to_string()]);
+    let backend = fake_miner_backend(vec!["--protocol-version".to_string(), "1".to_string()]);
 
     let report = run_with(&backend, &spec, jobs, &sock_path).await;
 

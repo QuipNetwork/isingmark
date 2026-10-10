@@ -4,15 +4,16 @@
 # command rewrites Cargo.lock to path sources for the three patched crates.
 # Before you commit, run:
 #
-#   rg -c 'source = "git\+https://gitlab.com/quip.network/quip-solver' Cargo.lock
+#   git diff --stat Cargo.lock
 #
-# and expect 3. Prefer deleting .cargo/config.toml when you are not
-# co-developing upstream so the committed lock keeps the pinned git rev.
+# and expect no output (or restore the lock with `git checkout Cargo.lock`).
+# Prefer deleting .cargo/config.toml when you are not co-developing upstream
+# so the committed lock keeps the crates.io releases.
 #
 # Copy this file to .cargo/config.toml (gitignored) to build against a local
-# quip-solver checkout instead of the pinned git rev. Adjust the paths to your
-# checkout location.
-[patch."https://gitlab.com/quip.network/quip-solver.git"]
-quip-proto = { path = "/path/to/quip-solver/crates/quip-proto" }
-quip-protocol = { path = "/path/to/quip-solver/crates/quip-protocol" }
-quip-miner-core = { path = "/path/to/quip-solver/crates/quip-miner-core" }
+# quip-solver-core checkout instead of the crates.io releases. Adjust the
+# paths to your checkout location.
+[patch.crates-io]
+quip-proto = { path = "/path/to/quip-solver-core/crates/quip-proto" }
+quip-protocol = { path = "/path/to/quip-solver-core/crates/quip-protocol" }
+quip-solver-core = { path = "/path/to/quip-solver-core/crates/quip-solver-core" }

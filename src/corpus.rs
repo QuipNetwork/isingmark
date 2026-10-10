@@ -24,12 +24,13 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use quip_proto::v1::{ising_problem, IsingProblem, Job, JobKind, Provenance};
+use quip_proto::v1::{ising_problem, CoefficientEncoding, IsingProblem, Job, JobKind, Provenance};
 use quip_protocol::chacha8::draw_ising_milli;
 use quip_protocol::wire::encode_i32_le;
 use serde::Deserialize;
 
 use crate::modes::hex_encode;
+use crate::problem::MILLI_SCALE;
 use crate::topology::TopologySpec;
 
 /// Bundled corpora, each paired with the fixture whose `topology_hash` its
@@ -372,16 +373,17 @@ fn draw_job(nonce: &[u8; 32], spec: &TopologySpec, generation: usize) -> Option<
         deadline_ms: 0,
         ising: Some(IsingProblem {
             graph: Some(ising_problem::Graph::TopologyHash(spec.topology_hash())),
-            h_milli_le32: encode_i32_le(&h),
-            j_milli_le32: encode_i32_le(&j),
-            num_reads: 0,
-            num_sweeps: 0,
-            anneal_time_us: 0,
+            encoding: CoefficientEncoding::I32 as i32,
+            scale: MILLI_SCALE,
+            h: encode_i32_le(&h),
+            j: encode_i32_le(&j),
+            ..IsingProblem::default()
         }),
         provenance: Some(Provenance {
             is_pow: true,
             order_id: vec![],
         }),
+        generator: None,
     })
 }
 
@@ -418,8 +420,8 @@ mod tests {
         let text = format!(r#"{{"nonce":"{NONCE_A}"}}"#);
         let mut src = CorpusSource::parse("inline", &text, &spec).expect("parses");
         let ising = src.next_job().expect("one job").ising.expect("ising");
-        let h = decode_i32_le(&ising.h_milli_le32).expect("h decodes");
-        let j = decode_i32_le(&ising.j_milli_le32).expect("j decodes");
+        let h = decode_i32_le(&ising.h).expect("h decodes");
+        let j = decode_i32_le(&ising.j).expect("j decodes");
         assert_eq!(h.len(), spec.nodes.len());
         assert_eq!(j.len(), spec.edges.len());
         assert!(
@@ -438,18 +440,8 @@ mod tests {
         let ternary = load_fixture("chain-ternary").expect("fixture parses");
         let mut a = CorpusSource::parse("inline", &text, &h0_spec).expect("parses");
         let mut b = CorpusSource::parse("inline", &text, &ternary).expect("parses");
-        let ha = a
-            .next_job()
-            .expect("job")
-            .ising
-            .expect("ising")
-            .h_milli_le32;
-        let hb = b
-            .next_job()
-            .expect("job")
-            .ising
-            .expect("ising")
-            .h_milli_le32;
+        let ha = a.next_job().expect("job").ising.expect("ising").h;
+        let hb = b.next_job().expect("job").ising.expect("ising").h;
         assert_ne!(ha, hb);
     }
 
