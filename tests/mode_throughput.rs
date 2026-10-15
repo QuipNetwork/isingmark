@@ -37,6 +37,7 @@ fn base_config(output_dir: PathBuf) -> ThroughputConfig {
         duration_s: 1.2,
         seed: 42,
         corpus: None,
+        instances: None,
         output_dir,
         backend_bin_override: Some(fake_miner_bin()),
         backend_args_override: None,
@@ -486,6 +487,75 @@ async fn hermetic_throughput_corpus_run_records_its_source_in_the_summary() {
         Some(corpus.display().to_string().as_str())
     );
     assert_eq!(summary.config["corpus_instances"].as_u64(), Some(2));
+}
+
+fn smoke_instances_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("corpora")
+        .join("structured")
+        .join("smoke-ice-glass.jsonl")
+}
+
+/// An instance-file run must dispatch exactly the file's instances, once
+/// each in file order, and the summary must say where they came from.
+#[tokio::test]
+async fn hermetic_throughput_instances_run_replays_the_file_and_records_its_source() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = smoke_instances_path();
+    let cfg = ThroughputConfig {
+        duration_s: 60.0,
+        instances: Some(path.clone()),
+        ..base_config(dir.path().to_path_buf())
+    };
+
+    let report = run_throughput(&cfg).await.expect("instances run succeeds");
+
+    let ids: Vec<&str> = report.records.iter().map(|r| r.job_id.as_str()).collect();
+    assert_eq!(ids, vec![format!("{:0>64}", "1"), format!("{:0>64}", "2")]);
+    assert!(
+        report.run_wall_ms < 60_000,
+        "the run must end on exhausting the file, not on the 60s duration"
+    );
+    let summary = read_summary(dir.path());
+    assert!(summary.config["corpus"].is_null());
+    assert_eq!(
+        summary.config["job_source"].as_str(),
+        Some(format!("instances:{}", path.display()).as_str())
+    );
+    assert_eq!(summary.config["corpus_instances"].as_u64(), Some(2));
+}
+
+/// Setting both finite sources through the library API fails before any job
+/// runs.
+#[tokio::test]
+async fn hermetic_throughput_rejects_a_corpus_and_instances_together() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = ThroughputConfig {
+        corpus: Some("chain-h0".to_string()),
+        instances: Some(smoke_instances_path()),
+        ..base_config(dir.path().to_path_buf())
+    };
+    let msg = run_throughput(&cfg)
+        .await
+        .err()
+        .map_or_else(String::new, |e| e.to_string());
+    assert!(msg.contains("mutually exclusive"), "{msg}");
+}
+
+/// An instance file built for another topology fails before any job runs.
+#[tokio::test]
+async fn hermetic_throughput_rejects_an_instance_file_on_the_wrong_topology() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = ThroughputConfig {
+        topology: TopologyRef::Preset("chain-ternary".to_string()),
+        instances: Some(smoke_instances_path()),
+        ..base_config(dir.path().to_path_buf())
+    };
+    let msg = run_throughput(&cfg)
+        .await
+        .err()
+        .map_or_else(String::new, |e| e.to_string());
+    assert!(msg.contains("--topology-preset"), "{msg}");
 }
 
 /// A seeded run must keep reporting a null corpus, so an older summary and a

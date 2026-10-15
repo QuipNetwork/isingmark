@@ -49,6 +49,7 @@ fn base_config(output_dir: PathBuf) -> SweepConfig {
         num_jobs: 3,
         seed: 42,
         corpus: None,
+        instances: None,
         output_dir,
         backend_bin_override: Some(fake_miner_bin()),
         backend_args_override: None,

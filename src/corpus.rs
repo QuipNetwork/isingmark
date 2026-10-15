@@ -170,7 +170,7 @@ fn bundled_path(name: &str) -> Option<PathBuf> {
     )
 }
 
-fn decode_nonce(hex: &str) -> Result<[u8; 32], String> {
+pub(crate) fn decode_nonce(hex: &str) -> Result<[u8; 32], String> {
     let hex = hex.trim();
     if hex.len() != 64 {
         return Err(format!("expected 64 hex chars, got {}", hex.len()));
