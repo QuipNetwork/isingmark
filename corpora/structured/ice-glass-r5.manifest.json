@@ -1,0 +1,610 @@
+{
+  "family": "ice-glass-r5",
+  "code": "F11",
+  "tier": 1,
+  "params": {
+    "background_milli": 200
+  },
+  "nonce_rule": "make_nonces(24, 20260920)",
+  "nonces": [
+    "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+    "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+    "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+    "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+    "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+    "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+    "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+    "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+    "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+    "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+    "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+    "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+    "4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef",
+    "8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0",
+    "c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c",
+    "13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0",
+    "08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c",
+    "be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30",
+    "bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20",
+    "f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862",
+    "6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37",
+    "3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2",
+    "6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a",
+    "f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1"
+  ],
+  "generator": "tools/structured",
+  "port_module": "isingmark_structured/families/ice_glass.py",
+  "port_sha256": "d84b3da57e29040205f645f17c788fb657a93214e6abbf04320c6de10c9ea00c",
+  "suite_source": "qpu-suite/work/ice.py",
+  "exact": true,
+  "topology_fixture": "chain-h0",
+  "topology_hash": "e66d3dfa3c9c6afb15efe29891cf9412498d94692ab5956af3ad98ba3693a02d",
+  "suite_topology_sha256": "65ef58bdfff7ecebadf041e77f2c8ae4b12763fa76190f7cd507a14145e747be",
+  "verdict": "provisional",
+  "suite_generator_sha256": "9f70674400eae8cb07e53cf37417d94a3f62028db6806d6a8f1fbad741f38061",
+  "census": {
+    "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4104,
+      "strong_component_sizes": [
+        4092,
+        4,
+        4,
+        4
+      ],
+      "strong_cycle_rank": 6610,
+      "fundamental_frustrated_cycles": 4224,
+      "fundamental_frustrated_fraction": 0.6390317700453858,
+      "series_reduced_spins": 4104,
+      "min_degree_treewidth_upper_bound": 181,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 471,
+        "1": 1068,
+        "2": 3036
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1255,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4104,
+      "strong_component_sizes": [
+        4092,
+        4,
+        4,
+        4
+      ],
+      "strong_cycle_rank": 6610,
+      "fundamental_frustrated_cycles": 4198,
+      "fundamental_frustrated_fraction": 0.6350983358547655,
+      "series_reduced_spins": 4104,
+      "min_degree_treewidth_upper_bound": 256,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 471,
+        "1": 1068,
+        "2": 3036
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1255,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4100,
+      "strong_component_sizes": [
+        4096,
+        4
+      ],
+      "strong_cycle_rank": 6612,
+      "fundamental_frustrated_cycles": 4188,
+      "fundamental_frustrated_fraction": 0.6333938294010889,
+      "series_reduced_spins": 4100,
+      "min_degree_treewidth_upper_bound": 270,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 475,
+        "1": 1060,
+        "2": 3040
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1257,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4111,
+      "strong_component_sizes": [
+        4107,
+        4
+      ],
+      "strong_cycle_rank": 6601,
+      "fundamental_frustrated_cycles": 4229,
+      "fundamental_frustrated_fraction": 0.6406605059839419,
+      "series_reduced_spins": 4111,
+      "min_degree_treewidth_upper_bound": 258,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 464,
+        "1": 1082,
+        "2": 3029
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1246,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4111,
+      "strong_component_sizes": [
+        4096,
+        7,
+        4,
+        4
+      ],
+      "strong_cycle_rank": 6603,
+      "fundamental_frustrated_cycles": 4169,
+      "fundamental_frustrated_fraction": 0.6313796759048917,
+      "series_reduced_spins": 4111,
+      "min_degree_treewidth_upper_bound": 246,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 464,
+        "1": 1082,
+        "2": 3029
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1248,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4113,
+      "strong_component_sizes": [
+        4105,
+        4,
+        4
+      ],
+      "strong_cycle_rank": 6600,
+      "fundamental_frustrated_cycles": 4246,
+      "fundamental_frustrated_fraction": 0.6433333333333333,
+      "series_reduced_spins": 4113,
+      "min_degree_treewidth_upper_bound": 211,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 462,
+        "1": 1086,
+        "2": 3027
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1245,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4111,
+      "strong_component_sizes": [
+        4111
+      ],
+      "strong_cycle_rank": 6600,
+      "fundamental_frustrated_cycles": 4232,
+      "fundamental_frustrated_fraction": 0.6412121212121212,
+      "series_reduced_spins": 4111,
+      "min_degree_treewidth_upper_bound": 173,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 464,
+        "1": 1082,
+        "2": 3029
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1245,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4104,
+      "strong_component_sizes": [
+        4100,
+        4
+      ],
+      "strong_cycle_rank": 6608,
+      "fundamental_frustrated_cycles": 4220,
+      "fundamental_frustrated_fraction": 0.6386198547215496,
+      "series_reduced_spins": 4104,
+      "min_degree_treewidth_upper_bound": 224,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 471,
+        "1": 1068,
+        "2": 3036
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1253,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4108,
+      "strong_component_sizes": [
+        4104,
+        4
+      ],
+      "strong_cycle_rank": 6604,
+      "fundamental_frustrated_cycles": 4216,
+      "fundamental_frustrated_fraction": 0.6384009691096305,
+      "series_reduced_spins": 4108,
+      "min_degree_treewidth_upper_bound": 214,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 467,
+        "1": 1076,
+        "2": 3032
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1249,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4103,
+      "strong_component_sizes": [
+        4099,
+        4
+      ],
+      "strong_cycle_rank": 6609,
+      "fundamental_frustrated_cycles": 4191,
+      "fundamental_frustrated_fraction": 0.634135270086246,
+      "series_reduced_spins": 4103,
+      "min_degree_treewidth_upper_bound": 185,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 472,
+        "1": 1066,
+        "2": 3037
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1254,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4104,
+      "strong_component_sizes": [
+        4096,
+        4,
+        4
+      ],
+      "strong_cycle_rank": 6609,
+      "fundamental_frustrated_cycles": 4229,
+      "fundamental_frustrated_fraction": 0.6398850052958087,
+      "series_reduced_spins": 4104,
+      "min_degree_treewidth_upper_bound": 183,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 471,
+        "1": 1068,
+        "2": 3036
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1254,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4116,
+      "strong_component_sizes": [
+        4116
+      ],
+      "strong_cycle_rank": 6595,
+      "fundamental_frustrated_cycles": 4269,
+      "fundamental_frustrated_fraction": 0.647308567096285,
+      "series_reduced_spins": 4116,
+      "min_degree_treewidth_upper_bound": 206,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 459,
+        "1": 1092,
+        "2": 3024
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1240,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4111,
+      "strong_component_sizes": [
+        4107,
+        4
+      ],
+      "strong_cycle_rank": 6601,
+      "fundamental_frustrated_cycles": 4229,
+      "fundamental_frustrated_fraction": 0.6406605059839419,
+      "series_reduced_spins": 4111,
+      "min_degree_treewidth_upper_bound": 218,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 464,
+        "1": 1082,
+        "2": 3029
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1246,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4103,
+      "strong_component_sizes": [
+        4095,
+        4,
+        4
+      ],
+      "strong_cycle_rank": 6610,
+      "fundamental_frustrated_cycles": 4180,
+      "fundamental_frustrated_fraction": 0.632375189107413,
+      "series_reduced_spins": 4103,
+      "min_degree_treewidth_upper_bound": 215,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 472,
+        "1": 1066,
+        "2": 3037
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1255,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4098,
+      "strong_component_sizes": [
+        4094,
+        4
+      ],
+      "strong_cycle_rank": 6614,
+      "fundamental_frustrated_cycles": 4220,
+      "fundamental_frustrated_fraction": 0.63804052010886,
+      "series_reduced_spins": 4098,
+      "min_degree_treewidth_upper_bound": 170,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 477,
+        "1": 1056,
+        "2": 3042
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1259,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4105,
+      "strong_component_sizes": [
+        4101,
+        4
+      ],
+      "strong_cycle_rank": 6607,
+      "fundamental_frustrated_cycles": 4197,
+      "fundamental_frustrated_fraction": 0.6352353564401393,
+      "series_reduced_spins": 4105,
+      "min_degree_treewidth_upper_bound": 261,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 470,
+        "1": 1070,
+        "2": 3035
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1252,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4097,
+      "strong_component_sizes": [
+        4089,
+        4,
+        4
+      ],
+      "strong_cycle_rank": 6616,
+      "fundamental_frustrated_cycles": 4176,
+      "fundamental_frustrated_fraction": 0.6311970979443773,
+      "series_reduced_spins": 4097,
+      "min_degree_treewidth_upper_bound": 191,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 478,
+        "1": 1054,
+        "2": 3043
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1261,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4095,
+      "strong_component_sizes": [
+        4091,
+        4
+      ],
+      "strong_cycle_rank": 6617,
+      "fundamental_frustrated_cycles": 4161,
+      "fundamental_frustrated_fraction": 0.628834819404564,
+      "series_reduced_spins": 4095,
+      "min_degree_treewidth_upper_bound": 217,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 480,
+        "1": 1050,
+        "2": 3045
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1262,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4100,
+      "strong_component_sizes": [
+        4092,
+        4,
+        4
+      ],
+      "strong_cycle_rank": 6613,
+      "fundamental_frustrated_cycles": 4219,
+      "fundamental_frustrated_fraction": 0.6379857855738696,
+      "series_reduced_spins": 4100,
+      "min_degree_treewidth_upper_bound": 216,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 475,
+        "1": 1060,
+        "2": 3040
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1258,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4105,
+      "strong_component_sizes": [
+        4105
+      ],
+      "strong_cycle_rank": 6606,
+      "fundamental_frustrated_cycles": 4248,
+      "fundamental_frustrated_fraction": 0.6430517711171662,
+      "series_reduced_spins": 4105,
+      "min_degree_treewidth_upper_bound": 222,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 470,
+        "1": 1070,
+        "2": 3035
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1251,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4117,
+      "strong_component_sizes": [
+        4105,
+        4,
+        4,
+        4
+      ],
+      "strong_cycle_rank": 6597,
+      "fundamental_frustrated_cycles": 4251,
+      "fundamental_frustrated_fraction": 0.6443838108231014,
+      "series_reduced_spins": 4117,
+      "min_degree_treewidth_upper_bound": 221,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 458,
+        "1": 1094,
+        "2": 3023
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1242,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4103,
+      "strong_component_sizes": [
+        4095,
+        4,
+        4
+      ],
+      "strong_cycle_rank": 6610,
+      "fundamental_frustrated_cycles": 4184,
+      "fundamental_frustrated_fraction": 0.6329803328290469,
+      "series_reduced_spins": 4103,
+      "min_degree_treewidth_upper_bound": 222,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 472,
+        "1": 1066,
+        "2": 3037
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1255,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4110,
+      "strong_component_sizes": [
+        4106,
+        4
+      ],
+      "strong_cycle_rank": 6602,
+      "fundamental_frustrated_cycles": 4228,
+      "fundamental_frustrated_fraction": 0.640411996364738,
+      "series_reduced_spins": 4110,
+      "min_degree_treewidth_upper_bound": 228,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 465,
+        "1": 1080,
+        "2": 3030
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1247,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    },
+    "f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1": {
+      "strong_edges": 10710,
+      "strong_active_spins": 4095,
+      "strong_component_sizes": [
+        4091,
+        4
+      ],
+      "strong_cycle_rank": 6617,
+      "fundamental_frustrated_cycles": 4163,
+      "fundamental_frustrated_fraction": 0.6291370711802932,
+      "series_reduced_spins": 4095,
+      "min_degree_treewidth_upper_bound": 230,
+      "tetrahedra": 1785,
+      "spin_membership_counts": {
+        "0": 480,
+        "1": 1050,
+        "2": 3045
+      },
+      "tetra_network_bipartite": true,
+      "tetra_network_cycle_rank": 1262,
+      "coupling_rms_milli": 536.5675273303876,
+      "smallest_magnitude_milli": 200
+    }
+  }
+}
