@@ -42,9 +42,9 @@ Generate a topology in memory for `cuda-msa` (`quip-cuda-msa` on
 `$PATH`):
 
 ```bash
-isingmark throughput --backend cuda-msa --topology-generate complete:2000 \
+isingmark throughput --backend cuda-msa --topology-generate complete:1410 \
   --couplings binary --duration 2m
-isingmark throughput --backend cuda-msa --topology-generate circulant:50000:60 \
+isingmark throughput --backend cuda-msa --topology-generate circulant:26260:60 \
   --couplings int8 --duration 2m
 ```
 

@@ -89,16 +89,22 @@ IsingMark passes `--max-nodes` from the topology size when it starts the miner.
 The miner uses one SM per instance. Turing uses 64 reads. Devices with larger
 shared-memory budgets use 128 reads.
 
-The miner routes degree greater than 62 to its dense kernel. `complete:2000` uses
-that path. The sparse path accepts `circulant:50000:60` and
-`circulant:200000:20`. Limits depend on free device memory, coefficient
+The miner routes degree greater than 62 to its dense kernel. `complete:1410` uses
+that path. The sparse path accepts `circulant:26260:60` and
+`circulant:65797:20`. Limits depend on free device memory, coefficient
 precision, and schedule length. Each model must pass the miner's memory check.
 Shared memory controls how many spins stay on chip. The remaining spins use
 device memory.
 
-The miner session in `quip-solver-core` 0.0.3 rejects messages larger than
-4 MiB. Large generated graphs exceed this transport limit before sampling
-starts. A higher device-memory limit does not raise the session message limit.
+The miner session rejects topology messages larger than 4 MiB (4,194,304 bytes).
+This transport limit caps generated topologies near these three sizes.
+With `int8` coefficients, their messages use 3,797,256, 3,799,885, and
+3,799,996 bytes, respectively. Binary messages use 1,452 fewer bytes.
+These sizes leave at least 394,308 bytes below the session limit.
+Measure larger models through `quip-cuda-msa bench`.
+
+The throughput command exits nonzero if it completes zero jobs and rejects
+at least one job. It still writes the records and summary for diagnosis.
 
 ## cuopt (quip-cuopt-milp)
 
