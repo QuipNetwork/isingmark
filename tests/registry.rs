@@ -19,6 +19,24 @@ use isingmark::backend::{
 };
 use isingmark::params::BackendKind;
 
+#[test]
+fn cuda_msa_registered() {
+    let backend = builtin_registry()
+        .into_iter()
+        .find(|spec| spec.name == "cuda-msa")
+        .expect("cuda-msa is registered");
+    assert_eq!(
+        backend.bin.file_name().and_then(|name| name.to_str()),
+        Some("quip-cuda-msa")
+    );
+    assert_eq!(backend.kind, BackendKind::Sweeping);
+    assert_eq!(backend.node_capacity_flag.as_deref(), Some("--max-nodes"));
+    assert_eq!(
+        backend.with_node_capacity(200_000).args,
+        vec!["--max-nodes", "200000"]
+    );
+}
+
 /// A `BackendSpec` pointing at a path with no file at all never spawns
 /// anything real, so probing it must fail with `NotFound` rather than
 /// panicking (e.g. on an `unwrap`-ed spawn error).
@@ -41,10 +59,10 @@ fn missing_binary_probe_returns_not_found_and_never_panics() {
     assert!(matches!(check_err, ProbeError::NotFound(_)));
 }
 
-/// The built-in registry produces exactly the twenty-two documented backends,
+/// The built-in registry produces exactly the twenty-three documented backends,
 /// in order — no more, no fewer, and none renamed.
 #[test]
-fn builtin_registry_contains_exactly_the_twenty_two_documented_backends_in_order() {
+fn builtin_registry_contains_exactly_the_twenty_three_documented_backends_in_order() {
     let registry = builtin_registry();
     let names: Vec<&str> = registry.iter().map(|spec| spec.name.as_str()).collect();
     assert_eq!(
@@ -68,6 +86,7 @@ fn builtin_registry_contains_exactly_the_twenty_two_documented_backends_in_order
             "cpu-flatiron",
             "cuda",
             "cuda-gibbs",
+            "cuda-msa",
             "metal",
             "dwave",
             "beit",

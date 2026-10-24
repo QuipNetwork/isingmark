@@ -24,6 +24,7 @@ use crate::modes::throughput::{
 use crate::modes::ttt::{self, TttConfig};
 use crate::modes::TopologyRef;
 use crate::params::ParamCurve;
+use crate::topology::Couplings;
 
 /// `isingmark`: an annealer-agnostic Ising model benchmarking tool.
 #[derive(Debug, Parser)]
@@ -93,7 +94,7 @@ pub struct CommonArgs {
     /// set of names this maps to. Required from `--backend` or `--config`.
     #[arg(long, value_parser = parse_backend)]
     pub backend: Option<String>,
-    /// Topology source: at most one of the two flags; required from a flag
+    /// Topology source: at most one of the three flags; required from a flag
     /// or from `--config` after merge.
     #[command(flatten)]
     pub topology_source: TopologySource,
@@ -123,41 +124,60 @@ pub struct CommonArgs {
     pub verbosity: u8,
 }
 
-/// Topology source: a bundled fixture name, or a spec file path. At most
-/// one may be set on the CLI (`multiple = false`). Neither is required at
-/// clap parse time (`required = false`) because a `--config` file may
+/// Topology source: a bundled fixture, a spec file, or a generated graph.
+/// At most one may be set on the CLI. None is required at
+/// clap parse time because a `--config` file may
 /// supply the topology instead; after merge, exactly one source must
 /// resolve or `into_config` errors.
 #[derive(Debug, Args)]
-#[group(required = false, multiple = false)]
+#[group(skip)]
 pub struct TopologySource {
     /// Bundled fixture name (e.g. `"smoke"`).
-    #[arg(long)]
+    #[arg(long, group = "topology_source")]
     pub topology_preset: Option<String>,
     /// Path to a topology-spec JSON file.
-    #[arg(long)]
+    #[arg(long, group = "topology_source")]
     pub topology_file: Option<PathBuf>,
+    /// Generate complete:N or circulant:N:D in memory (D must be even and < N).
+    #[arg(long, group = "topology_source", value_name = "SPEC")]
+    pub topology_generate: Option<String>,
+    /// Coefficient sets for generated topologies (default: binary).
+    #[arg(long, value_enum, requires = "topology_generate", conflicts_with_all = ["topology_preset", "topology_file"])]
+    pub couplings: Option<Couplings>,
 }
 
 impl TopologySource {
-    /// Resolve to a [`TopologyRef`] from this flag pair alone (no config
+    /// Resolve to a [`TopologyRef`] from these flags alone (no config
     /// file). Prefer [`resolve_topology`] when a config file may also
     /// supply the topology.
     ///
     /// # Errors
     ///
-    /// Returns a message naming the problem if both or neither field is
-    /// set.
+    /// Returns a message if the topology source is missing or ambiguous,
+    /// or couplings are set without a generated topology.
     pub fn to_ref(&self) -> Result<TopologyRef, String> {
-        match (&self.topology_preset, &self.topology_file) {
-            (Some(name), None) => Ok(TopologyRef::Preset(name.clone())),
-            (None, Some(path)) => Ok(TopologyRef::File(path.clone())),
-            (Some(_), Some(_)) => {
-                Err("--topology-preset and --topology-file are mutually exclusive".to_string())
-            }
-            (None, None) => {
-                Err("one of --topology-preset or --topology-file is required".to_string())
-            }
+        if self.couplings.is_some() && self.topology_generate.is_none() {
+            return Err("--couplings requires --topology-generate".to_string());
+        }
+        match (
+            &self.topology_preset,
+            &self.topology_file,
+            &self.topology_generate,
+        ) {
+            (Some(name), None, None) => Ok(TopologyRef::Preset(name.clone())),
+            (None, Some(path), None) => Ok(TopologyRef::File(path.clone())),
+            (None, None, Some(description)) => Ok(TopologyRef::Generated {
+                description: description.clone(),
+                couplings: self.couplings.unwrap_or(Couplings::Binary),
+            }),
+            (None, None, None) => Err(
+                "one of --topology-preset, --topology-file or --topology-generate is required"
+                    .to_string(),
+            ),
+            _ => Err(
+                "--topology-preset, --topology-file and --topology-generate are mutually exclusive"
+                    .to_string(),
+            ),
         }
     }
 }
@@ -201,25 +221,25 @@ fn resolve_topology(
     file: &FileConfig,
     config_path: Option<&Path>,
 ) -> Result<TopologyRef, String> {
-    match (&flag.topology_preset, &flag.topology_file) {
+    if flag.topology_preset.is_some()
+        || flag.topology_file.is_some()
+        || flag.topology_generate.is_some()
+        || flag.couplings.is_some()
+    {
+        return flag.to_ref();
+    }
+    match (&file.topology_preset, &file.topology_file) {
         (Some(name), None) => Ok(TopologyRef::Preset(name.clone())),
         (None, Some(path)) => Ok(TopologyRef::File(path.clone())),
-        (Some(_), Some(_)) => {
-            Err("--topology-preset and --topology-file are mutually exclusive".to_string())
-        }
-        (None, None) => match (&file.topology_preset, &file.topology_file) {
-            (Some(name), None) => Ok(TopologyRef::Preset(name.clone())),
-            (None, Some(path)) => Ok(TopologyRef::File(path.clone())),
-            (Some(_), Some(_)) => Err(
-                "config file sets both topology_preset and topology_file; only one is allowed"
-                    .to_string(),
-            ),
-            (None, None) => Err(missing_required(
-                "topology",
-                "--topology-preset/--topology-file",
-                config_path,
-            )),
-        },
+        (Some(_), Some(_)) => Err(
+            "config file sets both topology_preset and topology_file; only one is allowed"
+                .to_string(),
+        ),
+        (None, None) => Err(missing_required(
+            "topology",
+            "--topology-preset/--topology-file/--topology-generate",
+            config_path,
+        )),
     }
 }
 
@@ -324,7 +344,7 @@ pub struct SweepArgs {
     /// `'{"num_reads":[64,128],"num_sweeps":[100,500]}'`. Which fields
     /// apply depends on `--backend`'s execution model: `num_reads` +
     /// `num_sweeps` for a sweeping backend (cpu-sa, cpu-gibbs, cuda,
-    /// cuda-gibbs, metal, beit), or `num_reads` + `anneal_time_us` for an
+    /// cuda-gibbs, cuda-msa, metal, beit), or `num_reads` + `anneal_time_us` for an
     /// annealing one
     /// (dwave, cuopt). `--hardness` (from `CommonArgs`) is not used by this mode
     /// — cell parameters come entirely from this grid instead of a

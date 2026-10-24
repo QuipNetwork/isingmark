@@ -38,6 +38,23 @@ Jobs per minute at fixed hardness for a fixed duration.
 isingmark throughput --backend cpu-sa --topology-preset smoke --duration 30s
 ```
 
+Generate a topology in memory for `cuda-msa` (`quip-cuda-msa` on
+`$PATH`):
+
+```bash
+isingmark throughput --backend cuda-msa --topology-generate complete:2000 \
+  --couplings binary --duration 2m
+isingmark throughput --backend cuda-msa --topology-generate circulant:50000:60 \
+  --couplings int8 --duration 2m
+```
+
+`complete:N` connects every pair of nodes. `circulant:N:D` connects each node
+to `D/2` neighbors in each direction, with even `D < N` and `N > 0`.
+`--topology-generate`, `--topology-preset`, and `--topology-file` are mutually
+exclusive. `--couplings` applies only to generated topologies and defaults to
+`binary`. See [coefficient sets and miner limits](docs/backend-notes.md).
+Use `param_curve` in a YAML `--config` file to set reads and sweeps.
+
 Replay problems the chain actually posed, instead of deriving them from a
 seed:
 

@@ -56,6 +56,50 @@ Measured behaviour of each registered backend. The registry in
 what each backend does in practice, including limits that the backend's own
 `--capabilities` output does not report.
 
+## Generated topologies
+
+`--topology-generate complete:N` builds a complete graph with `N` nodes and
+`N*(N-1)/2` edges. `--topology-generate circulant:N:D` builds a regular ring
+with `N` nodes and `N*D/2` edges. Each node connects to `D/2` neighbors in
+each direction. `N` must be positive. `D` must be even, nonnegative, and less
+than `N`. Node ids start at zero. Generation needs no topology file.
+
+Choose one of `--topology-generate`, `--topology-preset`, and `--topology-file`.
+An explicit source flag overrides the topology source in a YAML config file.
+The generator uses the same topology hash as a file containing the same model.
+The hash includes the allowed coefficient sets.
+
+`--couplings` applies only with `--topology-generate`:
+
+| Value | Allowed J, milli | Allowed h, milli |
+|---|---|---|
+| `binary` (default) | `[-1000, 1000]` | `[-1000, 0, 1000]` |
+| `int8` | Multiples of 16 from −992 to 992, excluding 0 | The same values, including 0 (125 levels) |
+| `int32` | Every integer from −1000 to 1000, excluding 0 | Every integer from −1000 to 1000 |
+
+All generated specs use spins `[-1000, 1000]`. Jobs carry exact milli values.
+Float models cannot travel as milli jobs. Test float coefficients with the
+miner's `bench run --model` interface.
+
+## Multi-spin annealing
+
+`cuda-msa` runs `quip-cuda-msa` with the sweeping interface.
+Reads and sweeps control each job.
+IsingMark passes `--max-nodes` from the topology size when it starts the miner.
+The miner uses one SM per instance. Turing uses 64 reads. Devices with larger
+shared-memory budgets use 128 reads.
+
+The miner routes degree greater than 62 to its dense kernel. `complete:2000` uses
+that path. The sparse path accepts `circulant:50000:60` and
+`circulant:200000:20`. Limits depend on free device memory, coefficient
+precision, and schedule length. Each model must pass the miner's memory check.
+Shared memory controls how many spins stay on chip. The remaining spins use
+device memory.
+
+The miner session in `quip-solver-core` 0.0.3 rejects messages larger than
+4 MiB. Large generated graphs exceed this transport limit before sampling
+starts. A higher device-memory limit does not raise the session message limit.
+
 ## cuopt (quip-cuopt-milp)
 
 `cuopt` is not competitive on this problem class, and it fails on some jobs
