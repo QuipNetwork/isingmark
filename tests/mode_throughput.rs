@@ -54,7 +54,7 @@ fn read_summary(output_dir: &std::path::Path) -> Summary {
 fn throughput_cli_fails_only_when_every_job_is_rejected_and_keeps_evidence() {
     use std::os::unix::fs::PermissionsExt;
 
-    for (miner_args, jobs, rejected, passed, success) in [
+    for (miner_args, jobs_per_batch, rejected_per_batch, passed_per_batch, success) in [
         ("--disconnect-after 1", 1, 1, 0, false),
         ("--reject-job 2", 8, 1, 7, true),
         ("--energy-lie-milli 1000", 8, 0, 0, true),
@@ -91,12 +91,27 @@ fn throughput_cli_fails_only_when_every_job_is_rejected_and_keeps_evidence() {
             "throughput must save its summary: {output:?}"
         );
         let summary = read_summary(&output_dir);
-        assert_eq!(summary.totals.jobs, jobs, "{miner_args}");
-        assert_eq!(summary.totals.rejected, rejected, "{miner_args}");
-        assert_eq!(summary.totals.passed, passed, "{miner_args}");
+        // The duration can admit more than one complete batch.
+        let batches = summary.totals.jobs / jobs_per_batch;
+        assert!(batches > 0, "{miner_args}");
+        assert_eq!(
+            summary.totals.jobs,
+            jobs_per_batch * batches,
+            "{miner_args}"
+        );
+        assert_eq!(
+            summary.totals.rejected,
+            rejected_per_batch * batches,
+            "{miner_args}"
+        );
+        assert_eq!(
+            summary.totals.passed,
+            passed_per_batch * batches,
+            "{miner_args}"
+        );
         let records = read_jsonl(&output_dir.join(RECORDS_FILENAME)).expect("read records");
         assert_eq!(records.skipped_lines, 0);
-        assert_eq!(records.records.len(), jobs);
+        assert_eq!(records.records.len(), summary.totals.jobs);
         assert_eq!(
             output.status.success(),
             success,
