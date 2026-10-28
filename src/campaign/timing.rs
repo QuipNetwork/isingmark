@@ -57,7 +57,8 @@ impl DeviceLedger {
     }
 
     /// Charge a complete submission and resolve its pending launch, if recorded.
-    /// An overflowing charge still records the ID and permanently exceeds all budgets.
+    /// An overflowing charge still records the ID. Lower-bound overflow exceeds all budgets.
+    /// Upper-only overflow retains the lower sum without a finite upper bound.
     ///
     /// # Errors
     /// Returns `CampaignError::InvalidRun` for an already charged ID, without mutation.
@@ -68,18 +69,44 @@ impl DeviceLedger {
                 "submission {submission_id:?} is already charged"
             )));
         }
-        self.charged.insert(submission_id.to_owned());
-        self.uncharged.remove(submission_id);
-        match self.total.add(cost) {
+        let result = match self.total.add(cost) {
             Ok(total) => {
                 self.total = total;
                 Ok(())
             }
-            Err(error) => {
-                self.overflowed = true;
-                Err(error)
+            Err(CampaignError::Overflow) => {
+                if let Some(lower_ns) = self.total.lower_ns.checked_add(cost.lower_ns) {
+                    let upper_ns = self
+                        .total
+                        .upper_ns
+                        .zip(cost.upper_ns)
+                        .and_then(|(left, right)| left.checked_add(right));
+                    let status = if self.total.status == TimingStatus::Missing
+                        || cost.status == TimingStatus::Missing
+                    {
+                        TimingStatus::Missing
+                    } else if self.total.status == TimingStatus::ConservativeEstimate
+                        || cost.status == TimingStatus::ConservativeEstimate
+                    {
+                        TimingStatus::ConservativeEstimate
+                    } else {
+                        TimingStatus::Complete
+                    };
+                    self.total = DeviceTime {
+                        lower_ns,
+                        upper_ns,
+                        status,
+                    };
+                } else {
+                    self.overflowed = true;
+                }
+                Err(CampaignError::Overflow)
             }
-        }
+            Err(error) => return Err(error),
+        };
+        self.charged.insert(submission_id.to_owned());
+        self.uncharged.remove(submission_id);
+        result
     }
 
     /// Record a launched submission whose cost is not yet known.
@@ -98,7 +125,7 @@ impl DeviceLedger {
     }
 
     /// Return the sum of charged costs, excluding pending launches.
-    /// After overflow, this retains only additions that fit. Use `outcome` for budgets.
+    /// Lower-bound overflow retains only additions that fit. Use `outcome` for budgets.
     #[must_use]
     pub fn total(&self) -> DeviceTime {
         self.total

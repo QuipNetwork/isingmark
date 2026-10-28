@@ -281,7 +281,7 @@ fn lower_bound_overflow_stays_exceeded_and_the_ledger_remains_usable() {
 }
 
 #[test]
-fn upper_bound_overflow_is_explicit_even_when_the_lower_bound_fits() {
+fn upper_bound_overflow_keeps_the_fitting_lower_bound_unresolved() {
     let mut ledger = DeviceLedger::new();
     let initial = DeviceTime {
         lower_ns: 0,
@@ -298,14 +298,73 @@ fn upper_bound_overflow_is_explicit_even_when_the_lower_bound_fits() {
         ledger.charge("overflow-2", DeviceTime::from_exact_ns(1)),
         Err(CampaignError::Overflow)
     ));
-    assert_eq!(ledger.total(), initial);
-    for budget in [0, 30_000_000_000, u64::MAX] {
-        assert_eq!(ledger.outcome(budget), BudgetOutcome::Exceeded);
+    assert_eq!(
+        ledger.total(),
+        DeviceTime {
+            lower_ns: 1,
+            upper_ns: None,
+            status: TimingStatus::ConservativeEstimate,
+        }
+    );
+    assert_eq!(ledger.outcome(0), BudgetOutcome::Exceeded);
+    for budget in [1, 30_000_000_000, u64::MAX] {
+        assert_eq!(ledger.outcome(budget), BudgetOutcome::Unresolved);
     }
+    assert!(matches!(
+        ledger.charge("overflow-2", DeviceTime::from_exact_ns(1)),
+        Err(CampaignError::InvalidRun(_))
+    ));
     assert!(matches!(
         ledger.launched_uncharged("overflow-2"),
         Err(CampaignError::InvalidRun(_))
     ));
+
+    ledger
+        .charge("batch-3", DeviceTime::from_exact_ns(1))
+        .expect("continue charging after upper-only overflow");
+    assert_eq!(ledger.total().lower_ns, 2);
+    assert_eq!(ledger.total().upper_ns, None);
+    assert_eq!(ledger.outcome(1), BudgetOutcome::Exceeded);
+    assert_eq!(ledger.outcome(2), BudgetOutcome::Unresolved);
+}
+
+#[test]
+fn upper_bound_overflow_keeps_the_worst_timing_status() {
+    use TimingStatus::{Complete, ConservativeEstimate, Missing};
+
+    for (initial_status, cost_status, expected) in [
+        (Complete, Complete, Complete),
+        (ConservativeEstimate, Complete, ConservativeEstimate),
+        (Complete, ConservativeEstimate, ConservativeEstimate),
+        (Missing, ConservativeEstimate, Missing),
+        (ConservativeEstimate, Missing, Missing),
+    ] {
+        let mut ledger = DeviceLedger::new();
+        ledger
+            .charge(
+                "batch-1",
+                DeviceTime {
+                    lower_ns: 0,
+                    upper_ns: Some(u64::MAX),
+                    status: initial_status,
+                },
+            )
+            .expect("charge initial timing status");
+
+        assert!(matches!(
+            ledger.charge(
+                "overflow-2",
+                DeviceTime {
+                    lower_ns: 1,
+                    upper_ns: Some(1),
+                    status: cost_status,
+                }
+            ),
+            Err(CampaignError::Overflow)
+        ));
+        assert_eq!(ledger.total().status, expected);
+        assert_eq!(ledger.outcome(u64::MAX), BudgetOutcome::Unresolved);
+    }
 }
 
 #[test]
