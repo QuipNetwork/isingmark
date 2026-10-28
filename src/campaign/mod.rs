@@ -9,6 +9,7 @@ pub mod analysis;
 pub mod contracts;
 pub mod families;
 pub mod instance;
+pub mod trace;
 
 /// A campaign input, arithmetic, or evaluation failure.
 #[derive(Debug)]
