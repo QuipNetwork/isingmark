@@ -27,7 +27,7 @@
 //! [`JobRecord`] has no separate field for the miner's claimed value, so
 //! only the verified, recomputed energy is persisted.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Stdio;
@@ -233,6 +233,37 @@ pub struct RunReport {
     pub run_wall_ms: u64,
 }
 
+/// A complete result batch, captured before reducing it to a [`JobRecord`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BatchCapture {
+    pub job_id: Vec<u8>,
+    /// Monotonic time from this job's dispatch to receipt of its result.
+    pub received_after_dispatch: Duration,
+    /// Every returned read, in the miner's order.
+    pub solutions: Vec<CapturedSolution>,
+    /// Absent metadata remains `None`, including for device-time accounting.
+    pub meta: Option<CapturedMeta>,
+}
+
+/// One read with both the reported energy and the locally recomputed energy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapturedSolution {
+    pub spins: Vec<i8>,
+    pub reported_energy_milli: i64,
+    pub recomputed_energy_milli: i64,
+}
+
+/// Unmodified sampler measurements for the complete batch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapturedMeta {
+    pub reads: u32,
+    pub sweeps: u32,
+    pub device_access_time_us: u64,
+    pub qpu_access_us: u64,
+    /// Raw metadata text, including sub-microsecond timing values.
+    pub extra: BTreeMap<String, String>,
+}
+
 /// Errors from [`run_session`] itself (setup failures outside the protocol
 /// loop; protocol-level failures are reported through [`RunReport`]
 /// instead, since a miner that misbehaves mid-session is an expected,
@@ -270,6 +301,24 @@ pub async fn run_session(p: RunParams<'_>) -> Result<RunReport, SessionError> {
     run_session_inner(p, MAX_MISSED_PINGS).await
 }
 
+/// Drive a session and retain each complete result batch before reduction.
+///
+/// Rejected and abandoned jobs remain in [`RunReport::records`] without
+/// producing a capture. Orphan results remain counted and discarded.
+///
+/// # Errors
+///
+/// Same as [`run_session`].
+pub async fn run_session_with_capture(
+    p: RunParams<'_>,
+) -> Result<(RunReport, Vec<BatchCapture>), SessionError> {
+    let captures = Arc::new(Mutex::new(Vec::new()));
+    let report =
+        run_session_inner_with_capture(p, MAX_MISSED_PINGS, Some(Arc::clone(&captures))).await?;
+    let batches = std::mem::take(&mut *captures.lock().unwrap_or_else(PoisonError::into_inner));
+    Ok((report, batches))
+}
+
 /// Identical to [`run_session`], except with the liveness threshold
 /// overridable, so `tests/session_conformance.rs` can exercise the
 /// unresponsive-detection path without waiting out the production
@@ -299,11 +348,22 @@ async fn run_session_inner(
     p: RunParams<'_>,
     max_missed_pings: u32,
 ) -> Result<RunReport, SessionError> {
+    run_session_inner_with_capture(p, max_missed_pings, None).await
+}
+
+async fn run_session_inner_with_capture(
+    p: RunParams<'_>,
+    max_missed_pings: u32,
+    captures: Option<Arc<Mutex<Vec<BatchCapture>>>>,
+) -> Result<RunReport, SessionError> {
     let start = Instant::now();
     let listener = UnixListener::bind(p.sock_path).map_err(SessionError::Bind)?;
     let incoming = UnixListenerStream::new(listener);
 
-    let progress = Arc::new(SessionProgress::default());
+    let progress = Arc::new(SessionProgress {
+        captures,
+        ..SessionProgress::default()
+    });
     let stderr_tail = Arc::new(StderrTail::default());
     let (finish_tx, mut finish_rx) = oneshot::channel();
     let svc = CoordinatorSvc::new(
@@ -483,6 +543,7 @@ struct SessionProgress {
     miner_unresponsive: AtomicBool,
     orphan_results: AtomicU64,
     records: Mutex<Vec<JobRecord>>,
+    captures: Option<Arc<Mutex<Vec<BatchCapture>>>>,
 }
 
 impl SessionProgress {
@@ -790,9 +851,22 @@ async fn drive_session(
                         }
                     }
                     Some(miner_msg::Msg::Result(result)) => {
+                        let received = Instant::now();
                         if let Some((start, job)) =
                             take_front_in_flight(&mut in_flight, &result.job_id)
                         {
+                            if let Some(captures) = &progress.captures {
+                                let capture = build_batch_capture(
+                                    &job,
+                                    &result,
+                                    &edges,
+                                    received.duration_since(start),
+                                );
+                                captures
+                                    .lock()
+                                    .unwrap_or_else(PoisonError::into_inner)
+                                    .push(capture);
+                            }
                             progress.push_record(build_result_record(
                                 backend_name,
                                 &job,
@@ -1050,6 +1124,42 @@ fn decode_milli_f64(bytes: &[u8]) -> Vec<f64> {
         .unwrap_or_default()
 }
 
+fn build_batch_capture(
+    job: &Job,
+    result: &JobResult,
+    edges: &[(usize, usize)],
+    received_after_dispatch: Duration,
+) -> BatchCapture {
+    let ising = job.ising.clone().unwrap_or_default();
+    let h = decode_milli_f64(&ising.h);
+    let j = decode_milli_f64(&ising.j);
+    let mut solutions = Vec::with_capacity(result.solutions.len());
+    for solution in &result.solutions {
+        let spins = decode_spins_packed(&solution.spins, h.len()).unwrap_or_default();
+        solutions.push(CapturedSolution {
+            recomputed_energy_milli: energy_milli(&spins, &h, &j, edges),
+            spins,
+            reported_energy_milli: solution.energy_milli,
+        });
+    }
+    BatchCapture {
+        job_id: result.job_id.clone(),
+        received_after_dispatch,
+        solutions,
+        meta: result.meta.as_ref().map(|meta| CapturedMeta {
+            reads: meta.reads,
+            sweeps: meta.sweeps,
+            device_access_time_us: meta.device_access_time_us,
+            qpu_access_us: meta.qpu_access_us,
+            extra: meta
+                .extra
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
+        }),
+    }
+}
+
 /// Build the [`JobRecord`] for a completed `Result`. Recomputes energy
 /// locally per solution with [`energy_milli`] and compares it against the
 /// miner's own reported `Solution.energy_milli`; any mismatch clears
@@ -1243,6 +1353,36 @@ mod tests {
             job_id: job_id.to_vec(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn batch_capture_keeps_missing_meta() {
+        let job = Job {
+            ising: Some(quip_proto::v1::IsingProblem {
+                h: quip_protocol::wire::encode_i32_le(&[1000, -1000]),
+                j: quip_protocol::wire::encode_i32_le(&[500]),
+                ..Default::default()
+            }),
+            ..dummy_job(&[1])
+        };
+        let result = quip_proto::v1::Result {
+            job_id: job.job_id.clone(),
+            solutions: vec![quip_proto::v1::Solution {
+                spins: quip_protocol::wire::encode_spins_packed(&[-1, 1]),
+                energy_milli: -2500,
+            }],
+            meta: None,
+            ..Default::default()
+        };
+        let elapsed = Duration::from_nanos(123_456_789);
+        let capture = super::build_batch_capture(&job, &result, &[(0, 1)], elapsed);
+        assert_eq!(capture.job_id, [1]);
+        assert_eq!(capture.received_after_dispatch, elapsed);
+        assert_eq!(capture.meta, None);
+        assert_eq!(capture.solutions.len(), 1);
+        assert_eq!(capture.solutions[0].spins, [-1, 1]);
+        assert_eq!(capture.solutions[0].reported_energy_milli, -2500);
+        assert_eq!(capture.solutions[0].recomputed_energy_milli, -2500);
     }
 
     fn sample_record() -> JobRecord {

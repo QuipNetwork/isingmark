@@ -80,6 +80,15 @@ struct Cli {
     /// something non-degenerate to compute over.
     #[arg(long, default_value_t = 1)]
     num_solutions: u32,
+    /// QPU access time in microseconds to report for each complete batch.
+    #[arg(long, default_value_t = 0)]
+    qpu_access_us: u64,
+    /// Raw sampler metadata entry. Repeat to add keys. The last value for a key wins.
+    #[arg(long, value_name = "KEY=VALUE", value_parser = parse_meta_extra)]
+    meta_extra: Vec<(String, String)>,
+    /// Delay before sending each result, in milliseconds.
+    #[arg(long, default_value_t = 0)]
+    result_delay_ms: u64,
     /// Amount (milli-units) added to a solution's reported `energy_milli`
     /// on top of the true value, so the coordinator's local re-score catches
     /// the lie. `0` (default) always reports the true value.
@@ -152,6 +161,13 @@ struct Cli {
     /// duplicate terminal messages) without changing coordinator dispatch.
     #[arg(long)]
     stray_result_after: Option<u32>,
+}
+
+fn parse_meta_extra(text: &str) -> Result<(String, String), String> {
+    let (key, value) = text
+        .split_once('=')
+        .ok_or_else(|| "expected KEY=VALUE".to_owned())?;
+    Ok((key.to_owned(), value.to_owned()))
 }
 
 /// Map a session/CLI failure to a documented exit code (64/69/70/77).
@@ -620,12 +636,22 @@ async fn run() -> Result<(), ExitCode> {
                             meta: None,
                             ..Default::default()
                         };
+                        if cli.result_delay_ms > 0 {
+                            tokio::time::sleep(Duration::from_millis(cli.result_delay_ms)).await;
+                        }
                         tx.send(miner(miner_msg::Msg::Result(stray)))
                             .await
                             .map_err(|_| ExitCode::InternalFatal)?;
                     }
-                    let result =
+                    let mut result =
                         solve(&job, topo.as_ref(), cli.energy_lie_milli, cli.num_solutions);
+                    if let Some(meta) = &mut result.meta {
+                        meta.qpu_access_us = cli.qpu_access_us;
+                        meta.extra = cli.meta_extra.iter().cloned().collect();
+                    }
+                    if cli.result_delay_ms > 0 {
+                        tokio::time::sleep(Duration::from_millis(cli.result_delay_ms)).await;
+                    }
                     tx.send(miner(miner_msg::Msg::Result(result)))
                         .await
                         .map_err(|_| ExitCode::InternalFatal)?;
