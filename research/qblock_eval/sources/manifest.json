@@ -1,0 +1,40 @@
+{
+  "sources": [
+    {
+      "id": "R1",
+      "url": "https://app.notion.com/p/3d9db8c6a088814bb184fa1cf2829f1c",
+      "revision_utc": "2026-09-15T03:37:25.857Z",
+      "export_sha256": "1819ce9b53d529c7f9df50478c1c803e41e8942731485eed0e2edd3878eb1814",
+      "retrieved_at": "2026-10-28T21:47:57Z",
+      "reproduced": false,
+      "input_hashes": []
+    },
+    {
+      "id": "R2",
+      "url": "https://app.notion.com/p/37fdb8c6a088811fa8ddf4029cff8709",
+      "revision_utc": "2026-07-07T19:05:51.429Z",
+      "export_sha256": "7506c2ed1570082e1efc632e76c61adc556e6b172e977722c9462898c58ae18e",
+      "retrieved_at": "2026-10-28T21:47:57Z",
+      "reproduced": false,
+      "input_hashes": []
+    },
+    {
+      "id": "R3",
+      "url": "https://app.notion.com/p/342db8c6a088811e96fecec58edbb184",
+      "revision_utc": "2026-09-12T21:36:15.863Z",
+      "export_sha256": "ecd907f1998e70db5da1db003d9e065643dadf4dfd3db9d91edc8fe4ac5f483a",
+      "retrieved_at": "2026-10-28T21:47:57Z",
+      "reproduced": false,
+      "input_hashes": []
+    },
+    {
+      "id": "Tier-1",
+      "url": "https://app.notion.com/p/406db8c6a088817d81c4cc9bf3f404a9",
+      "revision_utc": "2026-10-27T21:34:15.145Z",
+      "export_sha256": "31aa621c2a64c2551dcf6eb5bd872e17c79afae0bd0bd55fac787c21da4cc959",
+      "retrieved_at": "2026-10-28T21:47:57Z",
+      "reproduced": false,
+      "input_hashes": []
+    }
+  ]
+}
