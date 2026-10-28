@@ -34,16 +34,31 @@ impl FamilyEvaluator for FixedIsing {
         Ok(EncodingOutcome::Exact(fixed_encoding(instance)?))
     }
 
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "Integer energy decides acceptance; the score has a separate rounding bound."
-    )]
     fn evaluate(
         &self,
         instance: &Instance,
         witness: &Witness,
         _context: &EvaluationContext,
     ) -> Result<Evaluation, EvalError> {
+        Self::evaluate_with_energy(instance, witness).map(|(evaluation, _)| evaluation)
+    }
+
+    fn canonicalize(&self, instance: &Instance, witness: &Witness) -> Result<Vec<u8>, EvalError> {
+        checked_witness(instance, witness)?;
+        canonical_bytes(witness)
+    }
+}
+
+impl FixedIsing {
+    /// Keep the exact energy alongside the evaluation's floating-point score.
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "Integer energy decides acceptance; the score has a separate rounding bound."
+    )]
+    pub(crate) fn evaluate_with_energy(
+        instance: &Instance,
+        witness: &Witness,
+    ) -> Result<(Evaluation, i64), EvalError> {
         let encoding = checked_witness(instance, witness)?;
         let threshold = instance
             .objective
@@ -77,7 +92,7 @@ impl FamilyEvaluator for FixedIsing {
         } else {
             score.abs() * f64::EPSILON
         };
-        Ok(Evaluation {
+        let evaluation = Evaluation {
             valid,
             score: Some(score),
             units: encoding.units,
@@ -93,12 +108,8 @@ impl FamilyEvaluator for FixedIsing {
             } else {
                 vec!["energy_not_below_threshold".to_owned()]
             },
-        })
-    }
-
-    fn canonicalize(&self, instance: &Instance, witness: &Witness) -> Result<Vec<u8>, EvalError> {
-        checked_witness(instance, witness)?;
-        canonical_bytes(witness)
+        };
+        Ok((evaluation, energy))
     }
 }
 
