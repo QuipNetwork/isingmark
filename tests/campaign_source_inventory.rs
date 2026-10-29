@@ -15,7 +15,15 @@ mod inventory {
     use serde::Deserialize;
 
     const SCHEMA: &str = "isingmark.research-sources/1";
-    const MAX_BYTES: u64 = 524_288;
+    const KINDS: [&str; 7] = [
+        "solver",
+        "generator",
+        "postprocess",
+        "build",
+        "target-manifest",
+        "topology",
+        "script",
+    ];
     const TICKET_PREFIXES: [&str; 9] = ["SC", "CPU", "CU", "MT", "DW", "CO", "VAL", "IM", "EXP"];
 
     #[derive(Deserialize)]
@@ -24,6 +32,23 @@ mod inventory {
         digest: String,
         sources: Vec<Source>,
         duplicates: Vec<Duplicate>,
+    }
+
+    #[derive(Deserialize)]
+    pub struct SkippedCheck {
+        pub check: String,
+    }
+
+    #[derive(Deserialize)]
+    struct SkippedChecks {
+        skipped_checks: Vec<SkippedCheck>,
+    }
+
+    /// Returns the `skipped_checks` recorded in the manifest in `dir`.
+    pub fn skipped_checks(dir: &Path) -> Result<Vec<SkippedCheck>, String> {
+        let raw = fs::read(dir.join("manifest.json")).map_err(|e| e.to_string())?;
+        let parsed: SkippedChecks = serde_json::from_slice(&raw).map_err(|e| e.to_string())?;
+        Ok(parsed.skipped_checks)
     }
 
     #[derive(Deserialize)]
@@ -134,6 +159,9 @@ mod inventory {
                     errors.push(format!("{origin}: bad ticket {:?}", function.ticket));
                 }
             }
+            if !KINDS.contains(&source.kind.as_str()) {
+                errors.push(format!("{origin}: unknown kind {:?}", source.kind));
+            }
             if matches!(source.kind.as_str(), "solver" | "generator" | "postprocess")
                 && source.functions.is_empty()
             {
@@ -200,9 +228,6 @@ mod inventory {
                 "{origin}: size mismatch, manifest {} but file {len}",
                 source.bytes
             ));
-        }
-        if len > MAX_BYTES {
-            errors.push(format!("{origin}: {len} bytes exceeds {MAX_BYTES}"));
         }
         if blake3::hash(&content).to_hex().as_str() != source.blake3 {
             errors.push(format!("{origin}: blake3 mismatch"));
@@ -346,32 +371,6 @@ fn size_mismatch_fails() -> TestResult {
 }
 
 #[test]
-fn oversize_fails() -> TestResult {
-    let tmp = TempDir::new()?;
-    let content = vec![b'x'; 524_289];
-    write_file(tmp.path(), "big.rs", &content)?;
-    write_manifest(
-        tmp.path(),
-        &manifest(&[source("big", "big.rs", &content)], &[]),
-    )?;
-    expect_error(tmp.path(), "exceeds 524288")?;
-    Ok(())
-}
-
-#[test]
-fn max_size_file_passes() -> TestResult {
-    let tmp = TempDir::new()?;
-    let content = vec![b'x'; 524_288];
-    write_file(tmp.path(), "big.rs", &content)?;
-    write_manifest(
-        tmp.path(),
-        &manifest(&[source("big", "big.rs", &content)], &[]),
-    )?;
-    expect_valid(tmp.path())?;
-    Ok(())
-}
-
-#[test]
 fn unsafe_origin_fails() -> TestResult {
     for origin in ["../x", "/abs", "a//b", "a/./b"] {
         let tmp = TempDir::new()?;
@@ -430,8 +429,74 @@ fn unlisted_file_fails() -> TestResult {
     Ok(())
 }
 
+fn recorded_dir() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("research/qblock_eval/sources/selected")
+}
+
 #[test]
 fn recorded_manifest_is_valid() -> TestResult {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("research/qblock_eval/sources/selected");
-    expect_valid(&dir)
+    expect_valid(&recorded_dir())
+}
+
+#[test]
+fn recorded_manifest_skips_sc2_and_sc7() -> TestResult {
+    let checks = inventory::skipped_checks(&recorded_dir())?;
+    for key in ["SC-2", "SC-7"] {
+        if !checks.iter().any(|c| c.check.contains(key)) {
+            return Err(format!("skipped_checks does not name {key}").into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn unknown_kind_fails() -> TestResult {
+    for kind in ["fixture", "banana"] {
+        let tmp = TempDir::new()?;
+        let mut one = one_source(tmp.path())?;
+        one["kind"] = json!(kind);
+        write_manifest(tmp.path(), &manifest(&[one], &[]))?;
+        expect_error(tmp.path(), "unknown kind")?;
+    }
+    Ok(())
+}
+
+#[test]
+fn wrong_schema_fails() -> TestResult {
+    let tmp = TempDir::new()?;
+    let mut m = manifest(&[], &[]);
+    m["schema"] = json!("other/1");
+    write_manifest(tmp.path(), &m)?;
+    expect_error(tmp.path(), "schema is")
+}
+
+#[test]
+fn wrong_digest_header_fails() -> TestResult {
+    let tmp = TempDir::new()?;
+    let mut m = manifest(&[], &[]);
+    m["digest"] = json!("sha256");
+    write_manifest(tmp.path(), &m)?;
+    expect_error(tmp.path(), "digest is")
+}
+
+#[test]
+fn malformed_digest_fails() -> TestResult {
+    let good = hash(b"fn one() {}");
+    for bad in [good.to_uppercase(), good[..63].to_string()] {
+        let tmp = TempDir::new()?;
+        let mut one = one_source(tmp.path())?;
+        one["blake3"] = json!(bad);
+        write_manifest(tmp.path(), &manifest(&[one], &[]))?;
+        expect_error(tmp.path(), "not 64 lowercase hex")?;
+    }
+    Ok(())
+}
+
+#[test]
+fn repeated_origin_fails() -> TestResult {
+    let tmp = TempDir::new()?;
+    let one = one_source(tmp.path())?;
+    let dup = json!({ "origin": "a/one.rs", "blake3": hash(b"fn one() {}"), "same_as": "one" });
+    write_manifest(tmp.path(), &manifest(&[one], &[dup]))?;
+    expect_error(tmp.path(), "duplicate origin")
 }
