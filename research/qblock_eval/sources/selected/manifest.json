@@ -11,7 +11,7 @@
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "functions": [],
       "provenance": {
-        "rng": "rand 0.8 (small_rng feature)",
+        "rng": "rand 0.8 dependency (small_rng feature); no seeding",
         "matching_library": null,
         "topology": null,
         "postprocess": null,
@@ -57,7 +57,7 @@
         }
       ],
       "provenance": {
-        "rng": "initial words per 64-lane block: read_rng(params.seed, read) with read stepping by LANES (dimer_weighted.rs lines 332-333), where read_rng(base, read_idx) = SmallRng::seed_from_u64(base.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(read_idx as u64).wrapping_add(1)) (sa_sampler.rs lines 524-529). Move streams, once per anneal (lines 353-355): SmallRng::seed_from_u64(params.seed ^ SALT) with SINGLE_SALT = 0x5745_4947_4854_3031, GROUP_SALT = 0x4752_4f55_5053_3031, ICE_SALT = 0x4943_454c_4f4f_5031. threshold draws u from Open01 and returns floor(-ln(u) * SCALE / (2 beta)) capped at i32::MAX",
+        "rng": "rand 0.8 SmallRng; per 64-lane block, then three move streams once per anneal; seeds: src/dimer_weighted.rs:332-333 (per LANES block, read_rng defined at src/sa_sampler.rs:524-529), :353-355 (once per anneal: SINGLE_SALT, GROUP_SALT, ICE_SALT)",
         "matching_library": null,
         "topology": "ice, path, and frustrated-block topologies through IsingGraph groups",
         "postprocess": null,
@@ -91,7 +91,7 @@
         }
       ],
       "provenance": {
-        "rng": "no seed of its own: draws from the SmallRng that dimer_weighted.rs passes in (ice_rng, seeded with params.seed ^ ICE_SALT)",
+        "rng": "none: no own seeding call in non-test code (grep found seed_from_u64 only after the test module at src/dimer_weighted/ice.rs:348). It draws from the &mut SmallRng parameters at src/dimer_weighted/ice.rs:123, :192, :306, passed by src/dimer_weighted.rs",
         "matching_library": null,
         "topology": "ice, path, and frustrated-block topologies through IsingGraph groups",
         "postprocess": null,
@@ -117,7 +117,7 @@
         }
       ],
       "provenance": {
-        "rng": "no seed of its own in non-test code: draws from the SmallRng that dimer_weighted.rs passes in",
+        "rng": "none: no seeding call in non-test code (only src/dimer_weighted/paths.rs:178, inside the test module at :148)",
         "matching_library": null,
         "topology": "ice, path, and frustrated-block topologies through IsingGraph groups",
         "postprocess": null,
@@ -155,7 +155,7 @@
         }
       ],
       "provenance": {
-        "rng": "initial state: read_rng(params.seed, 0) (tempering.rs line 408), where read_rng(base, read_idx) = SmallRng::seed_from_u64(base.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(read_idx as u64).wrapping_add(1)) (sa_sampler.rs lines 524-529). Move streams (lines 422-425): single_rng = SmallRng::seed_from_u64(params.seed ^ 0x5054_5349_4e47_4c45), loop_rng = SmallRng::seed_from_u64(params.seed ^ 0x5054_4943_454c_4f4f), swap_rng = SmallRng::seed_from_u64(params.seed ^ 0x5054_5357_4150_3031), cluster_rng = SmallRng::seed_from_u64(params.seed ^ 0x5054_434c_5553_5445)",
+        "rng": "rand 0.8 SmallRng; once per anneal for the initial state and four move streams; seeds: src/dimer_weighted/tempering.rs:408 (read_rng, initial state), :422-425 (single_rng, loop_rng, swap_rng, cluster_rng, each salted with a literal constant)",
         "matching_library": null,
         "topology": "ice, path, and frustrated-block topologies through IsingGraph groups",
         "postprocess": null,
@@ -197,7 +197,7 @@
         }
       ],
       "provenance": {
-        "rng": "no seed of its own except the cluster path, which passes &mut read_rng(params.seed, read) (dimer_research.rs line 374); read_rng(base, read_idx) = SmallRng::seed_from_u64(base.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(read_idx as u64).wrapping_add(1)) (sa_sampler.rs lines 524-529)",
+        "rng": "rand 0.8 SmallRng through read_rng; per 64-lane block (cluster path); seeds: src/dimer_research.rs:371 (loop stepping by LANES), :374 (read_rng). The unit and fractional arms seed in sa_sampler.rs and dimer_fractional.rs",
         "matching_library": null,
         "topology": "ice, path, and frustrated-block topologies through IsingGraph groups",
         "postprocess": null,
@@ -219,7 +219,7 @@
         }
       ],
       "provenance": {
-        "rng": null,
+        "rng": "none: no seeding call in non-test code (grep for seed_from_u64, read_rng, from_entropy found none before the test module)",
         "matching_library": null,
         "topology": null,
         "postprocess": null,
@@ -253,14 +253,14 @@
         }
       ],
       "provenance": {
-        "rng": "read_rng for initial words, SmallRng seeded with params.seed ^ THRESHOLD_SALT (0x4D53_415F_4636_3401) for thresholds, scheme shared-node-threshold-v1",
+        "rng": "rand 0.8 SmallRng; per 64-lane block for initial words, once per anneal for thresholds; seeds: src/sa_msc_f64.rs:345-346 (loop stepping by LANES, read_rng), :403 (THRESHOLD_SALT)",
         "matching_library": null,
         "topology": null,
         "postprocess": null,
         "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
         "redistribution": "granted"
       },
-      "notes": "Dependency of research.rs and dimer_weighted.rs. Initial words come from read_rng(params.seed, read) (line 346). The anneal threshold stream is SmallRng::seed_from_u64(params.seed ^ THRESHOLD_SALT) (line 403) with THRESHOLD_SALT = 0x4D53_415F_4636_3401 (line 80) and RNG_SCHEME shared-node-threshold-v1 (lines 76-77). MAX_READS (4096), MAX_BETA (1e100), and check_beta bound the inputs in validate_common. energy_f64 is the parity oracle used by the dimer_weighted and dimer_research tests."
+      "notes": "Dependency of research.rs and dimer_weighted.rs. Seeding sites are listed in the rng field. THRESHOLD_SALT is defined at line 80 and the scheme name RNG_SCHEME at lines 76-77. MAX_READS (4096), MAX_BETA (1e100), and check_beta bound the inputs in validate_common. energy_f64 is the parity oracle used by the dimer_weighted and dimer_research tests."
     },
     {
       "id": "cpu-sa-int",
@@ -283,14 +283,14 @@
         }
       ],
       "provenance": {
-        "rng": "no seed of its own in non-test code: fill_threshold_row takes a caller-provided &mut SmallRng",
+        "rng": "none: no seeding call in non-test code (grep for seed_from_u64, read_rng, from_entropy found none before the test module) (only seed_from_u64 hits are in src/sa_int.rs:477 onward, inside the test module at :468); fill_threshold_row takes a caller &mut SmallRng",
         "matching_library": null,
         "topology": null,
         "postprocess": null,
         "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
         "redistribution": "granted"
       },
-      "notes": "Dependency of dimer_research.rs (unit arm of sample_dimer: IntGraph), sa_msc.rs, and dimer_fractional.rs (draw_row, fill_threshold_row). Integer-weight SA core that CPU-1 reconciles."
+      "notes": "Dependency of dimer_research.rs (unit arm of sample_dimer: IntGraph), sa_msc.rs (draw_row, fill_threshold_row), and dimer_fractional.rs (draw_row). Integer-weight SA core that CPU-1 reconciles. dimer_fractional.rs imports only draw_row from this file and defines its own fill_threshold_row (dimer_fractional.rs:139). fill_threshold_row is used by sa_msc.rs (import at line 83)."
     },
     {
       "id": "cpu-dimer-fractional",
@@ -305,7 +305,7 @@
         }
       ],
       "provenance": {
-        "rng": "initial words: read_rng(params.seed, read) (dimer_fractional.rs line 287), where read_rng(base, read_idx) = SmallRng::seed_from_u64(base.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(read_idx as u64).wrapping_add(1)) (sa_sampler.rs lines 524-529). Streams (lines 338-339): SmallRng::seed_from_u64(params.seed ^ SINGLE_SALT) and (params.seed ^ PAIR_SALT) with SINGLE_SALT = 0x5341_5F54_424C_4531 and PAIR_SALT = 0x4449_4D45_525F_3031. Sweep offsets use sweep_offset(params.seed ^ PAIR_SALT, beta_index, sweep) (line 361)",
+        "rng": "rand 0.8 SmallRng; per 64-lane block for initial words, then move streams once per anneal; seeds: src/dimer_fractional.rs:286-287 (loop stepping by LANES, read_rng), :338-339 (single_rng with SINGLE_SALT, pair_rng with PAIR_SALT), :354 (single-spin sweep offset from params.seed, no PAIR_SALT), :361 (pair pass offset with PAIR_SALT)",
         "matching_library": null,
         "topology": "ice, path, and frustrated-block topologies through IsingGraph groups",
         "postprocess": null,
@@ -331,7 +331,7 @@
         }
       ],
       "provenance": {
-        "rng": "MscState::random and MscState::seeded take a caller-provided rng. anneal_words_with_clusters seeds SmallRng with params.seed ^ 0x5341_5F54_424C_4531 and pair_rng with params.seed ^ PAIR_SALT = 0x4449_4D45_525F_3031 (sa_msc.rs lines 229-234)",
+        "rng": "rand 0.8 SmallRng; once per anneal; seeds: src/sa_msc.rs:229 (threshold stream, literal salt), :233-234 (pair_rng, PAIR_SALT); MscState::random and MscState::seeded take a caller &mut rng",
         "matching_library": null,
         "topology": null,
         "postprocess": null,
@@ -353,7 +353,7 @@
         }
       ],
       "provenance": {
-        "rng": "read_rng(base, read_idx) = SmallRng::seed_from_u64(base.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(read_idx as u64).wrapping_add(1)) (sa_sampler.rs lines 524-529)",
+        "rng": "rand 0.8 SmallRng; per read and per 64-lane block, plus a table stream once per anneal; seeds: src/sa_sampler.rs:426 (table_rng, literal salt), :430 and :436 (per read, read_rng), :470 and :476 (per LANES block, read_rng); read_rng defined at :524-529",
         "matching_library": null,
         "topology": null,
         "postprocess": null,
@@ -383,7 +383,7 @@
         }
       ],
       "provenance": {
-        "rng": "no seed of its own: random_spins and the anneal helpers take a caller-provided rng",
+        "rng": "rand 0.8 SmallRng; per read; seeds: src/sampler_core.rs:402 (loop over reads), :409-413 (seed mixed from base_seed and read_idx, then seed_from_u64)",
         "matching_library": null,
         "topology": null,
         "postprocess": null,
@@ -405,7 +405,7 @@
         }
       ],
       "provenance": {
-        "rng": null,
+        "rng": "none: no seeding call in non-test code or tests (grep found none)",
         "matching_library": null,
         "topology": null,
         "postprocess": null,
@@ -447,7 +447,7 @@
         }
       ],
       "provenance": {
-        "rng": "SmallRng::seed_from_u64(job.seed.wrapping_add(args.seed_offset)) (pair_bench.rs lines 1016-1017); read_rng is not used",
+        "rng": "rand 0.8 SmallRng; per job; seeds: examples/pair_bench.rs:1016-1017 (job.seed combined with args.seed_offset); read_rng is not used",
         "matching_library": null,
         "topology": "ice-twisted pair cell (Otsuka tile bonds with -1000 milli pair bonds)",
         "postprocess": "exact strip polish is not in this file; see fast_bench",
@@ -473,7 +473,7 @@
         }
       ],
       "provenance": {
-        "rng": "takes a caller-provided &mut SmallRng; fast_bench.rs line 840 seeds it with seed_from_u64(base_seed ^ 0x9e37_79b9_7f4a_7c15)",
+        "rng": "rand 0.8 SmallRng. No seeding of its own in non-test code. StripTopology::sweep takes a caller &mut SmallRng (examples/cluster/strips.rs:139). The caller seeds it at examples/fast_bench.rs:840",
         "matching_library": null,
         "topology": "ice-twisted pair cell (Otsuka tile bonds with -1000 milli pair bonds)",
         "postprocess": "exact strip polish",
@@ -519,7 +519,7 @@
         }
       ],
       "provenance": {
-        "rng": "rand 0.8 SmallRng; per-replica seed_from_u64(base_seed + id), exchange seed base_seed ^ sweep ^ (ids[0] << 32), polish seed base_seed ^ 0x9e3779b97f4a7c15",
+        "rng": "rand 0.8 SmallRng; per replica, per exchange step, and once for the polish; seeds: examples/fast_bench.rs:701 (per replica id), :729 (exchange step), :840 (polish stream)",
         "matching_library": null,
         "topology": "ice-twisted pair cell (Otsuka tile bonds with -1000 milli pair bonds)",
         "postprocess": "exact strip polish (StripTopology)",
@@ -553,7 +553,7 @@
         }
       ],
       "provenance": {
-        "rng": "tag 'dimer': rng_for(nonce, tag) = default_rng(int.from_bytes(sha256(tag.encode() + bytes.fromhex(nonce)).digest()[:8], 'little')), so the seed is sha256(b'dimer' + bytes.fromhex(nonce)); one permutation of weak edge indices",
+        "rng": "NumPy default_rng (PCG64); per nonce and tag; seeds: qpu-f17/generate2.py:36-38 (rng_for, sha256 of tag and nonce), used at :53 (tag dimer), :110 (tag loop), :140 (tag random-k4)",
         "matching_library": "none (greedy walk over a NumPy permutation)",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
@@ -579,7 +579,7 @@
         }
       ],
       "provenance": {
-        "rng": "as generate2.py (set_pair_strength draws nothing)",
+        "rng": "none: no seeding call in the file (grep for default_rng, Random(, sha256, rng_for found none); set_pair_strength draws nothing",
         "matching_library": "none",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
@@ -621,14 +621,14 @@
         }
       ],
       "provenance": {
-        "rng": "as generate2.py; nonce_for uses sha256",
+        "rng": "NumPy default_rng; per nonce; seeds: new-pow/models-100/gen100.py:54 (nonce_for hashes the cohort index with sha256), :226 (rng_for from generate3.py, per nonce and cell), :263 (default_rng for the parity cell)",
         "matching_library": "scipy.sparse.csgraph.maximum_bipartite_matching (tile matching) through ice.py",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
         "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
         "redistribution": "unrecorded"
       },
-      "notes": "Extends the cohorts to 100 nonces and checks that saved models regenerate array for array. nonce_for(i) = sha256(b'new-pow/models-100/' + str(i)) for i >= 13."
+      "notes": "Extends the cohorts to 100 nonces and checks that saved models regenerate array for array. nonce_for (line 54) derives the extension nonces from a counter that starts at 13."
     },
     {
       "id": "f17-generate3",
@@ -655,7 +655,7 @@
         }
       ],
       "provenance": {
-        "rng": "rng_for(nonce, cell) = NumPy default_rng(int.from_bytes(sha256(cell.encode() + bytes.fromhex(nonce)).digest()[:8], 'little')), as generate3.py lines 61-63",
+        "rng": "NumPy default_rng (PCG64); per nonce and cell; seeds: qpu-f17/generate3.py:61-63 (rng_for), :113 (rng_for with cell name)",
         "matching_library": "none",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
@@ -681,7 +681,7 @@
         }
       ],
       "provenance": {
-        "rng": "NumPy default_rng(int.from_bytes(sha256(bytes.fromhex(nonce)).digest(), 'big')) for tiles and gauges (ice.py); weak-layer signs from quip_msa.draw_ising (production protocol stream)",
+        "rng": "NumPy default_rng (PCG64) for tiles and gauges, plus regimes.draw_couplings for weak-layer signs; per nonce; seeds: qpu-suite/work/ice.py:56-58 (default_rng from sha256 of the nonce), :100 (regimes.draw_couplings, outside this file)",
         "matching_library": "scipy.sparse.csgraph.maximum_bipartite_matching (tile matching)",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
@@ -703,7 +703,7 @@
         }
       ],
       "provenance": {
-        "rng": "NumPy default_rng(int.from_bytes(sha256(bytes.fromhex(nonce)).digest(), 'big')) for tiles and gauges (ice.py); weak-layer signs from quip_msa.draw_ising (production protocol stream)",
+        "rng": "NumPy default_rng (PCG64); per nonce; seeds: qpu-suite/work/ice_twisted.py:24-26 (default_rng from sha256 of the nonce)",
         "matching_library": "scipy.sparse.csgraph.maximum_bipartite_matching (tile matching)",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
@@ -729,7 +729,7 @@
         }
       ],
       "provenance": {
-        "rng": "NumPy default_rng(int.from_bytes(sha256(bytes.fromhex(nonce)).digest(), 'big')) for tiles and gauges (ice.py); weak-layer signs from quip_msa.draw_ising (production protocol stream); field magnitudes from regimes.draw_couplings with nonce sha256(bytes.fromhex(nonce) + FIELD_DOMAIN).hexdigest(), FIELD_DOMAIN = b'ice-fields-v1' (ice_fields.py line 44)",
+        "rng": "NumPy default_rng (PCG64) plus regimes.draw_couplings; per nonce; seeds: qpu-suite/work/ice_fields.py:24-26 (default_rng), :44-45 (field nonce from sha256 and FIELD_DOMAIN, then regimes.draw_couplings)",
         "matching_library": "scipy.sparse.csgraph.maximum_bipartite_matching (tile matching)",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
@@ -767,7 +767,7 @@
         }
       ],
       "provenance": {
-        "rng": null,
+        "rng": "none: no own seeding call. dwave_sa forwards a seed argument to dimod (new-pow/postprocess/descent.py:211, :218) and GreedyC.descend forwards a seed to greedy.c (:319, :331)",
         "matching_library": null,
         "topology": null,
         "postprocess": "natural-move descent of all 48 reads",
@@ -789,7 +789,7 @@
         }
       ],
       "provenance": {
-        "rng": null,
+        "rng": "xs64 generator (greedy.c:75); per call; seeds: new-pow/postprocess/greedy.c:105 (seed argument), :111 (state from seed, fixed default constant if 0)",
         "matching_library": null,
         "topology": null,
         "postprocess": "natural-move descent kernel",
@@ -811,7 +811,7 @@
         }
       ],
       "provenance": {
-        "rng": null,
+        "rng": "none: no seeding call in the file",
         "matching_library": null,
         "topology": null,
         "postprocess": "group extraction for descent",
@@ -833,7 +833,7 @@
         }
       ],
       "provenance": {
-        "rng": null,
+        "rng": "none of its own: forwards the caller seed to pairworm.c (new-pow/postprocess/optimizers/ice-pairs/pairs.py:47, :58)",
         "matching_library": null,
         "topology": null,
         "postprocess": "pair worm",
@@ -863,7 +863,7 @@
         }
       ],
       "provenance": {
-        "rng": null,
+        "rng": "xs64 generator; per call; seeds: new-pow/postprocess/optimizers/ice-pairs/pairworm.c:344 (seed argument), :364 (state from seed, fixed default constant if 0)",
         "matching_library": null,
         "topology": null,
         "postprocess": "pair worm descent, crossover",
@@ -897,7 +897,7 @@
         }
       ],
       "provenance": {
-        "rng": null,
+        "rng": "none of its own beyond nonce-derived seed; seeds: new-pow/postprocess/optimizers/ice-pairs/run.py:208 (seed from the nonce prefix), :93, :134, :144, :159 (seed plus an offset forwarded to the worm)",
         "matching_library": null,
         "topology": null,
         "postprocess": "pw schedule, 0.76 s CPU budget per QPU call",
@@ -923,7 +923,7 @@
         }
       ],
       "provenance": {
-        "rng": null,
+        "rng": "none of its own: forwards the caller seed to icetiles.c (new-pow/postprocess/optimizers/ice-tiles/icetiles.py:116, :136)",
         "matching_library": null,
         "topology": null,
         "postprocess": "tile worm",
@@ -945,7 +945,7 @@
         }
       ],
       "provenance": {
-        "rng": null,
+        "rng": "xs64 generator; per call; seeds: new-pow/postprocess/optimizers/ice-tiles/icetiles.c:282 (state from seed, fixed default constant if 0)",
         "matching_library": null,
         "topology": null,
         "postprocess": "tile worm",
@@ -975,7 +975,7 @@
         }
       ],
       "provenance": {
-        "rng": null,
+        "rng": "none of its own: forwards seed plus an offset to the worm (new-pow/postprocess/optimizers/ice-tiles/method.py:59, :84, :86, :90)",
         "matching_library": null,
         "topology": null,
         "postprocess": "anneal and worm method strings",
@@ -1026,7 +1026,7 @@
       "blake3": "6c089a7dc8cd71418d328200612aa53015c4555ff508ed36040f9341bcf661c5",
       "functions": [],
       "provenance": {
-        "rng": null,
+        "rng": "none: no seeding call in the file",
         "matching_library": null,
         "topology": null,
         "postprocess": "integer milli rescoring",
@@ -1043,7 +1043,7 @@
       "blake3": "758083178c1a75afd03a68835be973d3c45855c05cece8377a5c4a13e58f320b",
       "functions": [],
       "provenance": {
-        "rng": null,
+        "rng": "none: no seeding call in the file",
         "matching_library": null,
         "topology": null,
         "postprocess": "target assembly",

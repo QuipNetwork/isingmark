@@ -198,32 +198,60 @@ Extended cohorts. The master list has 24 nonces (`qpu-suite/work/cells/ice-twist
 nonces. The `record.json` file of each cell in `new-pow/models-100/` holds the `index_map` and the reproduction check. The README cohort table is
 incomplete, so use the `record.json` files. These fixtures are cited here and are not imported.
 
-| Cell | Saved models | Extension counters | Total |
-|---|---|---|---|
-| w62-dimer1200 | 24 | 13 to 88 | 100 |
-| w62-dimer1350 | 24 | 13 to 88 | 100 |
-| w45-dimer1200 | 12 | 13 to 100 | 100 |
-| ice-charge | 12 | 13 to 100 | 100 |
-| ice-fields-h500 | 24 | 13 to 88 | 100 |
-| ice-fields-h1000 | 12 | 13 to 100 | 100 |
+| Cell | Saved models | Master-list positions | Extension counters | Extension positions | Total |
+|---|---|---|---|---|---|
+| w62-dimer1200 | 24 | 1 to 24 | 13 to 88 | 25 to 100 | 100 |
+| w62-dimer1350 | 24 | 1 to 24 | 13 to 88 | 25 to 100 | 100 |
+| w45-dimer1200 | 12 | 1 to 12 | 13 to 100 | 13 to 100 | 100 |
+| ice-charge | 12 | 1 to 12 | 13 to 100 | 13 to 100 | 100 |
+| ice-fields-h500 | 24 | 1 to 24 | 13 to 88 | 25 to 100 | 100 |
+| ice-fields-h1000 | 12 | 1 to 12 | 13 to 100 | 13 to 100 | 100 |
+
+Positions count from 1. They match the `position` and `index` fields in the `index_map` of each `record.json`.
 
 ## Provenance
 
-RNG. Each file seeds its own streams. All CPU kernels use `rand` 0.8 `SmallRng`. The manifest `rng` field of each file holds the exact expressions, and these are the main ones.
-The shared helper is `read_rng(base, read_idx)` in `sa_sampler.rs` (lines 524 to 529): `SmallRng::seed_from_u64(base.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(read_idx as u64).wrapping_add(1))`.
-`dimer_weighted.rs` takes its initial words per 64-lane block from `read_rng(params.seed, read)` (lines 332 to 333).
-It then makes three move streams once per anneal, `SmallRng::seed_from_u64(params.seed ^ SALT)` (lines 353 to 355).
-The salts, copied from `dimer_weighted.rs` lines 22 to 24, are `SINGLE_SALT` `0x5745_4947_4854_3031`, `GROUP_SALT` `0x4752_4f55_5053_3031`, and `ICE_SALT`
-`0x4943_454c_4f4f_5031`. `threshold` draws u from `Open01` and returns `floor(-ln(u) * SCALE / (2 beta))`, capped at `i32::MAX`, as an `i32` (`SCALE` = 1000).
-The tempering variant uses `read_rng(params.seed, 0)` and four salted streams (`tempering.rs` lines 408 and 422 to 425). `dimer_fractional.rs` and `sa_msc.rs` have their own salts. `pair_bench.rs` uses `SmallRng::seed_from_u64(job.seed.wrapping_add(args.seed_offset))` (lines 1016 to 1017) and no `read_rng`.
-The Python generators use NumPy `default_rng` (PCG64). Tile order and gauges use
-`default_rng(int.from_bytes(sha256(bytes.fromhex(nonce)).digest(), "big"))` (`ice.py`). Dimer choice
-and charge draws use `rng_for(nonce, tag)`, which is
-`default_rng(int.from_bytes(sha256(tag.encode() + bytes.fromhex(nonce)).digest()[:8], "little"))`.
-The tag is `"dimer"` for `add_dimers` and the cell name for `generate3.py`. Weak-layer signs come from the production stream
-`quip_msa.draw_ising` (package `quip-msa` 0.1.0, source not read). SC-9 historical parity needs a pinned build.
-Field ice draws its magnitudes through `regimes.draw_couplings` with the nonce `sha256(bytes.fromhex(nonce) + FIELD_DOMAIN).hexdigest()`, where `FIELD_DOMAIN` is `b"ice-fields-v1"` (`ice_fields.py` line 44).
-The float kernel `sa_msc_f64.rs` takes initial words from `read_rng` and thresholds from `SmallRng` seeded with `params.seed ^ THRESHOLD_SALT` (`0x4D53_415F_4636_3401`, scheme `shared-node-threshold-v1`). The strip polish in `strips.rs` uses the caller `SmallRng`, which `fast_bench.rs` seeds with `base_seed ^ 0x9e37_79b9_7f4a_7c15`.
+RNG. The copied sources are authoritative, and the manifest digests bind them. This table only points to the seeding sites. It does not restate formulas or salt values. Paths for Rust files are relative to the `cpu/` tree root or the `fast_bench` crate root. Paths for Python and C files are relative to the research root.
+
+| Source id | Family and seeding unit | Seeding sites |
+|---|---|---|
+| `cpu-cargo-toml` | rand 0.8 dependency (small_rng feature); no seeding | - |
+| `cpu-dimer-weighted` | rand 0.8 SmallRng; per 64-lane block, then three move streams once per anneal | src/dimer_weighted.rs:332-333 (per LANES block, read_rng defined at src/sa_sampler.rs:524-529), :353-355 (once per anneal: SINGLE_SALT, GROUP_SALT, ICE_SALT) |
+| `cpu-dimer-weighted-ice` | none: no own seeding call in non-test code (grep found seed_from_u64 only after the test module at src/dimer_weighted/ice.rs:348). It draws from the &mut SmallRng parameters at src/dimer_weighted/ice.rs:123, :192, :306, passed by src/dimer_weighted.rs | - |
+| `cpu-dimer-weighted-paths` | none: no seeding call in non-test code (only src/dimer_weighted/paths.rs:178, inside the test module at :148) | - |
+| `cpu-dimer-weighted-tempering` | rand 0.8 SmallRng; once per anneal for the initial state and four move streams | src/dimer_weighted/tempering.rs:408 (read_rng, initial state), :422-425 (single_rng, loop_rng, swap_rng, cluster_rng, each salted with a literal constant) |
+| `cpu-dimer-research` | rand 0.8 SmallRng through read_rng; per 64-lane block (cluster path) | src/dimer_research.rs:371 (loop stepping by LANES), :374 (read_rng). The unit and fractional arms seed in sa_sampler.rs and dimer_fractional.rs |
+| `cpu-research` | none: no seeding call in non-test code (grep for seed_from_u64, read_rng, from_entropy found none before the test module) | - |
+| `cpu-sa-msc-f64` | rand 0.8 SmallRng; per 64-lane block for initial words, once per anneal for thresholds | src/sa_msc_f64.rs:345-346 (loop stepping by LANES, read_rng), :403 (THRESHOLD_SALT) |
+| `cpu-sa-int` | none: no seeding call in non-test code (grep for seed_from_u64, read_rng, from_entropy found none before the test module) (only seed_from_u64 hits are in src/sa_int.rs:477 onward, inside the test module at :468); fill_threshold_row takes a caller &mut SmallRng | - |
+| `cpu-dimer-fractional` | rand 0.8 SmallRng; per 64-lane block for initial words, then move streams once per anneal | src/dimer_fractional.rs:286-287 (loop stepping by LANES, read_rng), :338-339 (single_rng with SINGLE_SALT, pair_rng with PAIR_SALT), :354 (single-spin sweep offset from params.seed, no PAIR_SALT), :361 (pair pass offset with PAIR_SALT) |
+| `cpu-sa-msc` | rand 0.8 SmallRng; once per anneal | src/sa_msc.rs:229 (threshold stream, literal salt), :233-234 (pair_rng, PAIR_SALT); MscState::random and MscState::seeded take a caller &mut rng |
+| `cpu-sa-sampler` | rand 0.8 SmallRng; per read and per 64-lane block, plus a table stream once per anneal | src/sa_sampler.rs:426 (table_rng, literal salt), :430 and :436 (per read, read_rng), :470 and :476 (per LANES block, read_rng); read_rng defined at :524-529 |
+| `cpu-sampler-core` | rand 0.8 SmallRng; per read | src/sampler_core.rs:402 (loop over reads), :409-413 (seed mixed from base_seed and read_idx, then seed_from_u64) |
+| `cpu-coloring` | none: no seeding call in non-test code or tests (grep found none) | - |
+| `cpu-pair-bench` | rand 0.8 SmallRng; per job | examples/pair_bench.rs:1016-1017 (job.seed combined with args.seed_offset); read_rng is not used |
+| `cpu-strips` | rand 0.8 SmallRng. No seeding of its own in non-test code. StripTopology::sweep takes a caller &mut SmallRng (examples/cluster/strips.rs:139). The caller seeds it at examples/fast_bench.rs:840 | - |
+| `cpu-fast-bench` | rand 0.8 SmallRng; per replica, per exchange step, and once for the polish | examples/fast_bench.rs:701 (per replica id), :729 (exchange step), :840 (polish stream) |
+| `f17-generate2` | NumPy default_rng (PCG64); per nonce and tag | qpu-f17/generate2.py:36-38 (rng_for, sha256 of tag and nonce), used at :53 (tag dimer), :110 (tag loop), :140 (tag random-k4) |
+| `f17-wave-run` | none: no seeding call in the file (grep for default_rng, Random(, sha256, rng_for found none); set_pair_strength draws nothing | - |
+| `newpow-gen100` | NumPy default_rng; per nonce | new-pow/models-100/gen100.py:54 (nonce_for hashes the cohort index with sha256), :226 (rng_for from generate3.py, per nonce and cell), :263 (default_rng for the parity cell) |
+| `f17-generate3` | NumPy default_rng (PCG64); per nonce and cell | qpu-f17/generate3.py:61-63 (rng_for), :113 (rng_for with cell name) |
+| `suite-ice` | NumPy default_rng (PCG64) for tiles and gauges, plus regimes.draw_couplings for weak-layer signs; per nonce | qpu-suite/work/ice.py:56-58 (default_rng from sha256 of the nonce), :100 (regimes.draw_couplings, outside this file) |
+| `suite-ice-twisted` | NumPy default_rng (PCG64); per nonce | qpu-suite/work/ice_twisted.py:24-26 (default_rng from sha256 of the nonce) |
+| `suite-ice-fields` | NumPy default_rng (PCG64) plus regimes.draw_couplings; per nonce | qpu-suite/work/ice_fields.py:24-26 (default_rng), :44-45 (field nonce from sha256 and FIELD_DOMAIN, then regimes.draw_couplings) |
+| `pp-descent` | none: no own seeding call. dwave_sa forwards a seed argument to dimod (new-pow/postprocess/descent.py:211, :218) and GreedyC.descend forwards a seed to greedy.c (:319, :331) | - |
+| `pp-greedy-c` | xs64 generator (greedy.c:75); per call | new-pow/postprocess/greedy.c:105 (seed argument), :111 (state from seed, fixed default constant if 0) |
+| `pp-prep-groups` | none: no seeding call in the file | - |
+| `pp-pairs-py` | none of its own: forwards the caller seed to pairworm.c (new-pow/postprocess/optimizers/ice-pairs/pairs.py:47, :58) | - |
+| `pp-pairworm-c` | xs64 generator; per call | new-pow/postprocess/optimizers/ice-pairs/pairworm.c:344 (seed argument), :364 (state from seed, fixed default constant if 0) |
+| `pp-pairs-run` | none of its own beyond nonce-derived seed | new-pow/postprocess/optimizers/ice-pairs/run.py:208 (seed from the nonce prefix), :93, :134, :144, :159 (seed plus an offset forwarded to the worm) |
+| `pp-icetiles-py` | none of its own: forwards the caller seed to icetiles.c (new-pow/postprocess/optimizers/ice-tiles/icetiles.py:116, :136) | - |
+| `pp-icetiles-c` | xs64 generator; per call | new-pow/postprocess/optimizers/ice-tiles/icetiles.c:282 (state from seed, fixed default constant if 0) |
+| `pp-icetiles-method` | none of its own: forwards seed plus an offset to the worm (new-pow/postprocess/optimizers/ice-tiles/method.py:59, :84, :86, :90) | - |
+| `newpow-rescore` | none: no seeding call in the file | - |
+| `pp-write-targets-100` | none: no seeding call in the file | - |
+
+Weak-layer signs in the ice generators come from the production stream `quip_msa.draw_ising` (package `quip-msa` 0.1.0, source not read), reached through `regimes.draw_couplings`. SC-9 historical parity needs a pinned build.
 
 Matching library. Tile matching uses `scipy.sparse.csgraph.maximum_bipartite_matching` (numpy 2.4.6,
 scipy 1.17.1, networkx 3.6.1, recorded in the `ice-twisted` cell manifest). Dimer matching uses no library. It is a greedy
