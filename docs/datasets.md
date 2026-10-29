@@ -19,6 +19,11 @@ suite, replay through `--instances` instead. See `docs/structured-datasets.md`.
 
 ## What ships
 
+`corpora/` holds two kinds of file. The two chain corpora below are bundled and
+replay through `--corpus`. The other files are frozen-model examples, one per
+problem cell, and replay through `--instances`. They are not bundled. The
+cells are listed in `problems/README.md`.
+
 | Corpus | Instances | Paired topology | Nodes | Edges | `allowed_h_milli` |
 | --- | --- | --- | --- | --- | --- |
 | `chain-h0` | 4658 | `chain-h0` | 4577 | 41515 | `[0]` |

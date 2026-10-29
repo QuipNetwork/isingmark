@@ -68,6 +68,9 @@ Two chain corpora ship with the crate: `chain-h0` (4658 instances) and
 same name, and isingmark refuses a mismatched pair rather than replaying the
 wrong problems. See `docs/datasets.md`.
 
+`corpora/` also holds one frozen-model example for each problem cell. The
+families, their cells, and their results are listed in `problems/README.md`.
+
 Replay explicit coefficients, such as the structured families, from an
 instance file. The header names the topology the file was built for, and
 isingmark refuses a different `--topology-preset`. `--instances` and
