@@ -83,6 +83,9 @@ struct Cli {
     /// QPU access time in microseconds to report for each complete batch.
     #[arg(long, default_value_t = 0)]
     qpu_access_us: u64,
+    /// Omit sampler metadata so a complete batch has unknown device timing.
+    #[arg(long)]
+    omit_meta: bool,
     /// Raw sampler metadata entry. Repeat to add keys. The last value for a key wins.
     #[arg(long, value_name = "KEY=VALUE", value_parser = parse_meta_extra)]
     meta_extra: Vec<(String, String)>,
@@ -645,7 +648,9 @@ async fn run() -> Result<(), ExitCode> {
                     }
                     let mut result =
                         solve(&job, topo.as_ref(), cli.energy_lie_milli, cli.num_solutions);
-                    if let Some(meta) = &mut result.meta {
+                    if cli.omit_meta {
+                        result.meta = None;
+                    } else if let Some(meta) = &mut result.meta {
                         meta.qpu_access_us = cli.qpu_access_us;
                         meta.extra = cli.meta_extra.iter().cloned().collect();
                     }

@@ -114,6 +114,28 @@ async fn multiple_batches_accumulate_device_cost() {
 }
 
 #[tokio::test]
+async fn accepted_trial_without_qpu_timing_has_unresolved_device_outcome() {
+    let (_dir, trial) = run(&instance(), &["--omit-meta"], Duration::from_secs(5)).await;
+    assert_eq!(trial.terminal, TerminalReason::Accepted);
+    assert!(trial.accepted_wall.is_some());
+    assert_eq!(trial.device_total.status, TimingStatus::Missing);
+    assert_eq!(trial.device_total.upper_ns, None);
+    let trace = events(&trial);
+    let receipt = trace
+        .iter()
+        .find(|event| event.kind == EventKind::BatchReceipt)
+        .expect("receipt");
+    assert!(receipt.payload["meta"].is_null());
+    assert_eq!(
+        receipt.device.expect("missing timing").status,
+        TimingStatus::Missing
+    );
+    let termination = trace.last().expect("termination");
+    assert_eq!(termination.payload["terminal"], "accepted");
+    assert_eq!(termination.payload["device_outcome"], "Unresolved");
+}
+
+#[tokio::test]
 async fn no_valid_witness_ends_as_timeout() {
     let mut input = instance();
     input.objective["max_energy_milli"] = json!(-1001);

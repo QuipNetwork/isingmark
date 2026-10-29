@@ -83,6 +83,62 @@ fn batch(state: &mut TrialState, id: &str, meta: Option<u64>, spins: &[Vec<i8>])
     capture
 }
 
+fn session_channels() -> (
+    LiveSession,
+    mpsc::Receiver<SessionCommand>,
+    mpsc::Sender<SessionEvent>,
+) {
+    let (commands, receiver) = mpsc::channel(4);
+    let (sender, events) = mpsc::channel(32);
+    let task = tokio::spawn(async {
+        Err(SessionError::Spawn(std::io::Error::other(
+            "test transport ended",
+        )))
+    });
+    (
+        LiveSession {
+            id: "session".into(),
+            commands,
+            events,
+            failed: Arc::new(AtomicBool::new(false)),
+            task,
+            ready: false,
+            trials: 0,
+        },
+        receiver,
+        sender,
+    )
+}
+
+async fn drive_to_terminal(
+    session: &mut LiveSession,
+    state: &mut TrialState,
+    instance: &Instance,
+    policy: &PolicyManifest,
+    rules: &RuleSet,
+) {
+    let encoding = encoding(instance).expect("encoding");
+    let spec = topology(&encoding).expect("topology");
+    let target = target_from_objective(instance).expect("target");
+    let terminal = drive_trial(
+        session, state, instance, policy, rules, &spec, &encoding, &target, &mut None,
+    )
+    .await
+    .expect("trial loop");
+    state.terminate(terminal).expect("termination");
+}
+
+fn assert_terminal(state: &TrialState, expected: &str) {
+    assert_eq!(
+        serde_json::to_value(state.trial.terminal).expect("terminal JSON"),
+        expected
+    );
+    let trace = read_trace(&state.trial.events).expect("trace");
+    let termination = trace.events.last().expect("termination");
+    assert_eq!(termination.kind, EventKind::TrialTermination);
+    assert_eq!(termination.payload["terminal"], expected);
+}
+
 #[test]
 fn three_full_batches_accumulate_and_validate_through_the_pinned_rule() {
     let dir = tempfile::tempdir().expect("directory");
@@ -138,6 +194,35 @@ fn missing_batch_metadata_cannot_certify_device_success() {
     assert_eq!(
         state.ledger.outcome(30_000_000_000),
         BudgetOutcome::Unresolved
+    );
+}
+
+#[test]
+fn accepted_proof_with_missing_device_timing_stays_unresolved() {
+    let dir = tempfile::tempdir().expect("directory");
+    let (instance, policy, budget, rules) = inputs();
+    let target = target_from_objective(&instance).expect("target");
+    let mut state = state(dir.path(), &instance, &policy, &budget);
+    let capture = batch(&mut state, "missing", None, &[vec![1, 1]]);
+    state
+        .evaluate(&instance, &policy, &rules, &target, &capture)
+        .expect("pinned verification");
+    assert!(state.trial.accepted_wall.is_some());
+    state
+        .terminate(TerminalReason::Accepted)
+        .expect("termination");
+    assert_eq!(state.trial.terminal, TerminalReason::Accepted);
+    assert_eq!(state.trial.device_total.status, TimingStatus::Missing);
+    assert_eq!(state.trial.device_total.upper_ns, None);
+    assert_eq!(
+        state.ledger.outcome(30_000_000_000),
+        BudgetOutcome::Unresolved
+    );
+    assert_terminal(&state, "accepted");
+    let trace = read_trace(&state.trial.events).expect("trace");
+    assert_eq!(
+        trace.events.last().expect("termination").payload["device_outcome"],
+        "Unresolved"
     );
 }
 
@@ -269,4 +354,186 @@ fn policy_host_compute_limit_prevents_late_acceptance() {
         .evaluate(&instance, &policy, &rules, &target, &capture)
         .expect("exhausted evaluation");
     assert!(state.trial.accepted_wall.is_none());
+}
+
+#[tokio::test]
+async fn host_limit_stop_ends_host_compute_limit() {
+    let dir = tempfile::tempdir().expect("directory");
+    let (instance, mut policy, budget, rules) = inputs();
+    policy.host_compute_limit_s = 0.0;
+    let mut state = state(dir.path(), &instance, &policy, &budget);
+    let (mut session, _commands, _events) = session_channels();
+    drive_to_terminal(&mut session, &mut state, &instance, &policy, &rules).await;
+    assert_eq!(state.trial.terminal, TerminalReason::HostComputeLimit);
+    assert_terminal(&state, "host_compute_limit");
+    assert!(state.trial.accepted_wall.is_none());
+}
+
+#[tokio::test]
+async fn evaluation_limit_stop_ends_evaluation_limit() {
+    let dir = tempfile::tempdir().expect("directory");
+    let (instance, mut policy, budget, rules) = inputs();
+    policy.evaluation_limit = 0;
+    let mut state = state(dir.path(), &instance, &policy, &budget);
+    let (mut session, _commands, _events) = session_channels();
+    drive_to_terminal(&mut session, &mut state, &instance, &policy, &rules).await;
+    assert_eq!(state.trial.terminal, TerminalReason::EvaluationLimit);
+    assert_terminal(&state, "evaluation_limit");
+    assert!(state.trial.accepted_wall.is_none());
+}
+
+#[tokio::test]
+async fn proof_validated_while_crossing_host_limit_ends_accepted() {
+    let dir = tempfile::tempdir().expect("directory");
+    let (instance, mut policy, budget, rules) = inputs();
+    policy.host_compute_limit_s = 0.000_000_001;
+    let mut state = state(dir.path(), &instance, &policy, &budget);
+    // Previously scored candidates leave only pinned proof validation to time.
+    state.witnesses.push(Witness {
+        instance_id: instance.instance_id.clone(),
+        spins: vec![1, 1],
+        design: None,
+        route: None,
+        controls: None,
+    });
+    state.energies.push(-1000);
+    let (mut session, mut commands, events) = session_channels();
+    let transport = async {
+        let submission = match commands.recv().await.expect("submission") {
+            SessionCommand::Submit(submission) => Some(submission),
+            SessionCommand::Finish => None,
+        }
+        .expect("job submission");
+        let job_id = submission.job.job_id;
+        events
+            .send(SessionEvent::Dispatched {
+                job_id: job_id.clone(),
+                at: Instant::now(),
+            })
+            .await
+            .expect("dispatch");
+        events
+            .send(SessionEvent::Batch {
+                capture: BatchCapture {
+                    job_id,
+                    received_after_dispatch: Duration::ZERO,
+                    solutions: Vec::new(),
+                    meta: None,
+                },
+                at: Instant::now(),
+            })
+            .await
+            .expect("batch");
+    };
+    tokio::join!(
+        drive_to_terminal(&mut session, &mut state, &instance, &policy, &rules),
+        transport
+    );
+    assert!(state.host_exhausted(&policy).expect("host limit"));
+    assert_eq!(state.trial.terminal, TerminalReason::Accepted);
+    assert!(state.trial.accepted_wall.is_some());
+    assert_terminal(&state, "accepted");
+}
+
+#[tokio::test]
+async fn startup_failure_writes_no_challenge_release() {
+    for preparation in [Preparation::Warm, Preparation::Amortized { horizon: 2 }] {
+        let dir = tempfile::tempdir().expect("directory");
+        let (instance, mut policy, budget, rules) = inputs();
+        policy.preparation = preparation;
+        let (session, _commands, events) = session_channels();
+        drop(events);
+        let mut runner = TrialRunner::new(
+            resolve_backend(&policy.backend),
+            dir.path().to_owned(),
+            rules,
+        );
+        runner.session = Some(session);
+        let trial = runner
+            .run_trial(&instance, &policy, &budget)
+            .await
+            .expect("failed preparation trial");
+        assert_eq!(trial.terminal, TerminalReason::MinerCrashed);
+        let trace = read_trace(&trial.events).expect("trace");
+        assert!(!trace
+            .events
+            .iter()
+            .any(|event| event.kind == EventKind::ChallengeRelease));
+        let termination = trace.events.last().expect("termination");
+        assert_eq!(termination.kind, EventKind::TrialTermination);
+        assert_eq!(termination.payload["terminal"], "miner_crashed");
+        assert!(runner.session.is_none());
+    }
+}
+
+#[tokio::test]
+async fn preparation_ready_wait_does_not_spend_the_wall_budget() {
+    for preparation in [Preparation::Warm, Preparation::Amortized { horizon: 2 }] {
+        let dir = tempfile::tempdir().expect("directory");
+        let (instance, mut policy, _, rules) = inputs();
+        policy.preparation = preparation;
+        let budget = TrialBudget::new(Some(Duration::ZERO), Some(30_000_000_000))
+            .expect("zero challenge budget");
+        let (session, _commands, events) = session_channels();
+        let ready = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+            events.send(SessionEvent::Ready).await.is_ok()
+        });
+        let mut runner = TrialRunner::new(
+            resolve_backend(&policy.backend),
+            dir.path().to_owned(),
+            rules,
+        );
+        runner.session = Some(session);
+        let trial = runner
+            .run_trial(&instance, &policy, &budget)
+            .await
+            .expect("prepared trial");
+        let ready_sent = ready.await.expect("readiness task");
+        assert_eq!(trial.terminal, TerminalReason::WallTimeout);
+        assert!(ready_sent);
+        assert!(trial.resources["preparation_ns"] >= 25_000_000);
+        let trace = read_trace(&trial.events).expect("trace");
+        let releases: Vec<_> = trace
+            .events
+            .iter()
+            .filter(|event| event.kind == EventKind::ChallengeRelease)
+            .collect();
+        assert_eq!(releases.len(), 1);
+        assert_eq!(releases[0].wall_ns, 0);
+    }
+}
+
+#[tokio::test]
+async fn exact_device_lower_bound_stays_unresolved_and_keeps_submitting() {
+    let dir = tempfile::tempdir().expect("directory");
+    let (instance, policy, budget, rules) = inputs();
+    let mut state = state(dir.path(), &instance, &policy, &budget);
+    batch(&mut state, "exact-bound", Some(30_000_000), &[]);
+    assert_eq!(state.ledger.total().lower_ns, 30_000_000_000);
+    assert_eq!(
+        state.ledger.outcome(30_000_000_000),
+        BudgetOutcome::Unresolved
+    );
+    let (mut session, mut commands, events) = session_channels();
+    events
+        .send(SessionEvent::Failed {
+            reason: "stop after the next submission".into(),
+            at: Instant::now(),
+        })
+        .await
+        .expect("transport ending");
+    drive_to_terminal(&mut session, &mut state, &instance, &policy, &rules).await;
+    assert_eq!(state.trial.terminal, TerminalReason::MinerCrashed);
+    let submission = match commands.try_recv().expect("next submission") {
+        SessionCommand::Submit(submission) => Some(submission),
+        SessionCommand::Finish => None,
+    }
+    .expect("job submission");
+    assert!(!submission.job.job_id.is_empty());
+    assert_eq!(
+        state.ledger.outcome(30_000_000_000),
+        BudgetOutcome::Unresolved
+    );
+    assert_terminal(&state, "miner_crashed");
 }

@@ -50,6 +50,7 @@ pub use serve::serve_campaign;
 mod tests;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+const PREPARATION_TIMEOUT: Duration = Duration::from_mins(2);
 
 #[derive(Debug, Clone)]
 pub struct CampaignConfig {
@@ -86,6 +87,8 @@ pub enum TerminalReason {
     Accepted,
     WallTimeout,
     DeviceBudgetExhausted,
+    HostComputeLimit,
+    EvaluationLimit,
     MinerCrashed,
     Cancelled,
     InvalidRun,
@@ -561,23 +564,13 @@ impl TrialRunner {
         let mut cancellation = cancellation;
         let mut preparation_terminal = None;
         if policy.preparation != Preparation::Cold && !session.ready {
-            let prepare = async {
-                if let Some(limit) = budget.wall_limit {
-                    match tokio::time::timeout(limit, session.next()).await {
-                        Ok(event) => event,
-                        Err(_) => Ok(None),
-                    }
-                } else {
-                    session.next().await
-                }
-            };
             preparation_terminal = tokio::select! {
                 biased;
                 () = cancellation_requested(&mut cancellation) => Some(TerminalReason::Cancelled),
-                result = prepare => match result {
-                    Ok(Some(SessionEvent::Ready)) => None,
-                    Ok(_) => Some(TerminalReason::MinerCrashed),
-                    Err(error) => return Err(error),
+                result = tokio::time::timeout(PREPARATION_TIMEOUT, session.next()) => match result {
+                    Ok(Ok(Some(SessionEvent::Ready))) => None,
+                    Ok(Ok(_)) | Err(_) => Some(TerminalReason::MinerCrashed),
+                    Ok(Err(error)) => return Err(error),
                 },
             };
         }
@@ -588,7 +581,9 @@ impl TrialRunner {
             );
             state.clock = Instant::now();
             state.trial.started = SystemTime::now();
-            state.release(instance, policy, budget)?;
+            if preparation_terminal.is_none() {
+                state.release(instance, policy, budget)?;
+            }
         }
         let terminal = if let Some(terminal) = preparation_terminal {
             Ok(terminal)
@@ -822,15 +817,24 @@ impl TrialState {
             .is_some_and(|limit| self.clock.elapsed() >= limit)
     }
 
-    fn policy_exhausted(&self, policy: &PolicyManifest) -> Result<bool, CampaignError> {
-        Ok(self
+    fn policy_terminal(
+        &self,
+        policy: &PolicyManifest,
+    ) -> Result<Option<TerminalReason>, CampaignError> {
+        if self
             .trial
             .resources
             .get("evaluations")
             .copied()
             .unwrap_or(0)
             >= policy.evaluation_limit
-            || self.host_exhausted(policy)?)
+        {
+            Ok(Some(TerminalReason::EvaluationLimit))
+        } else if self.host_exhausted(policy)? {
+            Ok(Some(TerminalReason::HostComputeLimit))
+        } else {
+            Ok(None)
+        }
     }
 
     fn host_exhausted(&self, policy: &PolicyManifest) -> Result<bool, CampaignError> {
@@ -875,7 +879,7 @@ impl TrialState {
         capture: &BatchCapture,
     ) -> Result<(), CampaignError> {
         for solution in &capture.solutions {
-            if self.expired() || self.policy_exhausted(policy)? {
+            if self.expired() || self.policy_terminal(policy)?.is_some() {
                 break;
             }
             let witness = Witness {
@@ -943,7 +947,7 @@ impl TrialState {
             }
         };
         self.count("host_compute_ns", nanos(started.elapsed())?)?;
-        if self.expired() || self.host_exhausted(policy)? {
+        if self.expired() {
             return Ok(());
         }
         match decision {
@@ -1069,12 +1073,12 @@ async fn drive_trial(
         if state
             .trial
             .device_budget_ns
-            .is_some_and(|limit| state.ledger.total().lower_ns >= limit)
+            .is_some_and(|limit| state.ledger.outcome(limit) == BudgetOutcome::Exceeded)
         {
             return Ok(TerminalReason::DeviceBudgetExhausted);
         }
-        if state.policy_exhausted(policy)? {
-            return Ok(TerminalReason::Cancelled);
+        if let Some(terminal) = state.policy_terminal(policy)? {
+            return Ok(terminal);
         }
         let id = new_id("job");
         let mut submission = submission(spec, encoding, policy, &id);

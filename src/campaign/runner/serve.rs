@@ -96,6 +96,20 @@ async fn collect(running: RunningTrial, cancel: bool) -> Result<Trial, CampaignE
     running.task.await.map_err(invalid)?
 }
 
+async fn cancel_outstanding(
+    active: BTreeMap<String, RunningTrial>,
+    mut result: Result<(), CampaignError>,
+) -> Result<(), CampaignError> {
+    for (_, running) in active {
+        // Preserve termination records even if stdin or stdout fails.
+        let cleanup = collect(running, true).await.map(|_| ());
+        if result.is_ok() {
+            result = cleanup;
+        }
+    }
+    result
+}
+
 /// Serve submit, proof verification, cancellation, and finish commands.
 ///
 /// Submit names a manifest instance and policy, with an optional unique trial ID.
@@ -198,9 +212,44 @@ pub async fn serve_campaign<R: BufRead + Send + 'static, W: Write>(
         }
         Ok(())
     }.await;
-    for (_, running) in active {
-        // Preserve termination records even if stdin or stdout fails.
-        collect(running, true).await?;
+    cancel_outstanding(active, result).await
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn eof_cleanup_awaits_every_trial_and_returns_the_first_error() {
+        for (result, expected) in [
+            (Ok(()), "invalid campaign input: first trial failed"),
+            (
+                Err(invalid("input failed")),
+                "invalid campaign input: input failed",
+            ),
+        ] {
+            let completed = Arc::new(AtomicUsize::new(0));
+            let mut active = BTreeMap::new();
+            for id in ["first", "second"] {
+                let completed = Arc::clone(&completed);
+                let (cancel, cancelled) = oneshot::channel();
+                let task = tokio::spawn(async move {
+                    cancelled.await.expect("EOF cancellation");
+                    completed.fetch_add(1, Ordering::SeqCst);
+                    Err(invalid(format!("{id} trial failed")))
+                });
+                active.insert(id.into(), RunningTrial { cancel, task });
+            }
+            let error = cancel_outstanding(active, result)
+                .await
+                .expect_err("first failure");
+            assert_eq!(completed.load(Ordering::SeqCst), 2);
+            assert_eq!(error.to_string(), expected);
+        }
     }
-    result
 }
