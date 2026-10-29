@@ -237,16 +237,20 @@ mod inventory {
     /// Reports every file under `problems/*/sources/` that no source lists as its `path`.
     fn check_unlisted(root: &Path, paths: &BTreeSet<&str>, errors: &mut Vec<String>) {
         let mut files = BTreeSet::new();
-        if let Ok(families) = fs::read_dir(root.join("problems")) {
-            for family in families.flatten() {
-                let sources = family.path().join("sources");
-                if !sources.is_dir() {
-                    continue;
-                }
-                if let Err(e) = list_files(root, &sources, &mut files) {
-                    errors.push(format!("cannot list {}: {e}", sources.display()));
+        let problems = root.join("problems");
+        match fs::read_dir(&problems) {
+            Ok(families) => {
+                for family in families.flatten() {
+                    let sources = family.path().join("sources");
+                    if !sources.is_dir() {
+                        continue;
+                    }
+                    if let Err(e) = list_files(root, &sources, &mut files) {
+                        errors.push(format!("cannot list {}: {e}", sources.display()));
+                    }
                 }
             }
+            Err(e) => errors.push(format!("cannot list {}: {e}", problems.display())),
         }
         for file in files {
             if !paths.contains(file.as_str()) {
@@ -580,9 +584,29 @@ fn spec_path_outside_problems_is_allowed() -> TestResult {
     let spec = "fixtures/suite-live-2026-09-21.spec.json";
     fs::create_dir_all(tmp.path().join("fixtures"))?;
     fs::write(tmp.path().join(spec), b"{}")?;
-    let mut entry = source("spec", "suite-live-2026-09-21.spec.json", b"{}");
+    let mut entry = source("spec", "topology-live-2026-09-21.spec.json", b"{}");
     entry["path"] = json!(spec);
     entry["kind"] = json!("topology");
     write_manifest(tmp.path(), &manifest(&[entry], &[]))?;
     expect_valid(tmp.path())
+}
+
+#[cfg(unix)]
+#[test]
+fn unlistable_problems_dir_fails() -> TestResult {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = TempDir::new()?;
+    write_manifest(tmp.path(), &manifest(&[], &[]))?;
+    let problems = tmp.path().join("problems");
+    // Execute-only: the manifest stays readable by path, but the directory cannot be listed.
+    fs::set_permissions(&problems, fs::Permissions::from_mode(0o111))?;
+    let listable = fs::read_dir(&problems).is_ok();
+    let result = if listable {
+        Ok(()) // running as a user that ignores permissions; nothing to check
+    } else {
+        expect_error(tmp.path(), "cannot list")
+    };
+    fs::set_permissions(&problems, fs::Permissions::from_mode(0o755))?;
+    result
 }

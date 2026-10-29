@@ -6,9 +6,9 @@ This document records which research sources the repository now holds. It maps e
 `/home/carback1/quip-data/regimes`. It is read-only and is not a git repository. All
 origins below are relative to it.
 
-The repository holds 41 imported files (1826115 bytes) under
+The repository holds 41 imported files (1826115 bytes). Forty sit under
 `problems/<owner>/sources/<origin>`, where `<owner>` is a problem family or `shared`. The
-live topology spec is the one exception and sits at `fixtures/suite-live-2026-09-21.spec.json`.
+live topology spec is the other file and sits at `fixtures/suite-live-2026-09-21.spec.json`.
 The manifest `problems/sources.json` lists each file with its repository path, size, and blake3
 digest. It also lists 248 byte-identical duplicates, 48 retained evidence entries,
 and the skipped checks.
@@ -19,7 +19,7 @@ No fixture is imported. Frozen fixtures belong to EXP-2 (QUI-2002). The maintain
 ## How to verify
 
 Run `cargo test --test campaign_source_inventory`. The test reads the manifest. Each listed file must exist and match the recorded size and blake3 digest. It also
-checks that every file in the directory is listed, that digests and origins are unique, and
+checks that every file under `problems/*/sources/` is listed, that digests and origins are unique, and
 that each duplicate matches its source. A changed byte fails the test.
 
 ## Function to ticket map

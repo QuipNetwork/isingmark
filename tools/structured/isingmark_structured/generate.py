@@ -103,14 +103,17 @@ def suite_record(suite_dir: Path, cell: str, family: Family, nonces: list[str]) 
 def params_file(problems: Path, cell: str, problem_family: str | None) -> Path:
     """The ``problems/<family>/params/<cell>.json`` path for ``cell``.
 
-    The family folder is the one that already holds the cell, else ``problem_family``.
+    ``problem_family`` names the folder when given. Otherwise the folder is the one that
+    already holds the cell; no match or several matches is an error.
     """
+    if problem_family is not None:
+        return problems / problem_family / "params" / f"{cell}.json"
     existing = sorted(problems.glob(f"*/params/{cell}.json"))
-    if existing:
+    if len(existing) == 1:
         return existing[0]
-    if problem_family is None:
+    if not existing:
         raise SystemExit(f"{cell}: no problems/*/params/{cell}.json yet; pass --problem-family")
-    return problems / problem_family / "params" / f"{cell}.json"
+    raise SystemExit(f"{cell}: several params files match ({existing}); pass --problem-family")
 
 
 def build(

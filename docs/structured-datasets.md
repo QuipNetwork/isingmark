@@ -99,8 +99,9 @@ python -m venv .venv
 
 The generator reads the live topology specification. The default path is
 `fixtures/suite-live-2026-09-21.spec.json` in this repository.
-Give another copy with `--suite-spec`. Each run writes `<out>/<cell>.jsonl` and
-`<out>/<cell>.manifest.json`. Git tracks the manifests. The generator produces the instance
+Give another copy with `--suite-spec`. Each run writes `<out>/<cell>.jsonl`
+(default `corpora/`) and the parameters at `problems/<family>/params/<cell>.json`. Git tracks
+the parameter files. The generator produces the instance
 files on demand, and git ignores them, except the two-instance smoke file the tests use.
 
 The port is bit-exact with the suite generators. On 2026-10-15, the verify step matched 24 of

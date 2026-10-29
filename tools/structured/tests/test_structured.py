@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from isingmark_structured import protocol
-from isingmark_structured.generate import read_instances, write_instances
+from isingmark_structured.generate import params_file, read_instances, write_instances
 from isingmark_structured.topology import Fixture, FixtureMap, load_suite_spec
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -128,3 +128,30 @@ def test_writer_rejects_an_out_of_range_value(tmp_path: Path) -> None:
     header = {"format": 1, "family": "tiny"}
     with pytest.raises(ValueError, match="outside"):
         write_instances(tmp_path / "bad.jsonl", header, [{"nonce": "ab" * 32, "j_milli": [1001]}])
+
+
+def _params(problems: Path, family: str, cell: str) -> Path:
+    path = problems / family / "params" / f"{cell}.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("{}")
+    return path
+
+
+def test_params_file_finds_the_single_match(tmp_path: Path) -> None:
+    expected = _params(tmp_path, "ice-glass", "ice-glass-r8")
+    assert params_file(tmp_path, "ice-glass-r8", None) == expected
+
+
+def test_params_file_honors_an_explicit_family(tmp_path: Path) -> None:
+    _params(tmp_path, "ice-glass", "ice-glass-r8")
+    chosen = tmp_path / "other" / "params" / "ice-glass-r8.json"
+    assert params_file(tmp_path, "ice-glass-r8", "other") == chosen
+
+
+def test_params_file_rejects_two_matches(tmp_path: Path) -> None:
+    _params(tmp_path, "a", "cell")
+    _params(tmp_path, "b", "cell")
+    with pytest.raises(SystemExit, match="several"):
+        params_file(tmp_path, "cell", None)
+    with pytest.raises(SystemExit, match="pass --problem-family"):
+        params_file(tmp_path, "missing", None)
