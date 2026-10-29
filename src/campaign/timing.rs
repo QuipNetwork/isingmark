@@ -37,6 +37,20 @@ pub enum BudgetOutcome {
     Unresolved,
 }
 
+/// Resolve a device budget from a full cost and its timing bounds.
+#[must_use]
+pub fn budget_outcome(total: &DeviceTime, budget_ns: u64) -> BudgetOutcome {
+    if total.lower_ns > budget_ns {
+        BudgetOutcome::Exceeded
+    } else if total.status != TimingStatus::Missing
+        && total.upper_ns.is_some_and(|upper| upper <= budget_ns)
+    {
+        BudgetOutcome::Within
+    } else {
+        BudgetOutcome::Unresolved
+    }
+}
+
 #[derive(Debug)]
 pub struct DeviceLedger {
     total: DeviceTime,
@@ -134,15 +148,12 @@ impl DeviceLedger {
     /// Resolve a device budget using full costs, timing bounds, and pending launches.
     #[must_use]
     pub fn outcome(&self, budget_ns: u64) -> BudgetOutcome {
-        if self.overflowed || self.total.lower_ns > budget_ns {
-            BudgetOutcome::Exceeded
-        } else if self.uncharged.is_empty()
-            && self.total.status != TimingStatus::Missing
-            && self.total.upper_ns.is_some_and(|upper| upper <= budget_ns)
-        {
-            BudgetOutcome::Within
-        } else {
-            BudgetOutcome::Unresolved
+        if self.overflowed {
+            return BudgetOutcome::Exceeded;
+        }
+        match budget_outcome(&self.total, budget_ns) {
+            BudgetOutcome::Within if !self.uncharged.is_empty() => BudgetOutcome::Unresolved,
+            outcome => outcome,
         }
     }
 }
