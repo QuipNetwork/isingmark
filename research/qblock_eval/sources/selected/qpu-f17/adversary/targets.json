@@ -1,0 +1,1710 @@
+{
+ "ice-twisted-w62-dimer": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -4543720,
+   "gpu8192": -4477084,
+   "gpu8192_kernel_s": 7.320653808,
+   "gpu32768": -4500940,
+   "gpu32768_kernel_s": 14.566827148000002,
+   "gpu131072": -4522656,
+   "gpu131072_kernel_s": 73.85472656200001,
+   "gpu262144": -4531212,
+   "gpu262144_kernel_s": 120.83863281200001,
+   "gpu524288": -4538248,
+   "gpu524288_kernel_s": 196.378203125,
+   "gpu1048576": -4545580,
+   "gpu1048576_kernel_s": 865.5847500000001
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -4547564,
+   "gpu8192": -4476140,
+   "gpu8192_kernel_s": 3.624533447,
+   "gpu32768": -4506380,
+   "gpu32768_kernel_s": 18.223019531000002,
+   "gpu131072": -4518300,
+   "gpu131072_kernel_s": 109.801640625,
+   "gpu262144": -4533304,
+   "gpu262144_kernel_s": 122.27736718700001,
+   "gpu524288": -4544976,
+   "gpu524288_kernel_s": 366.95056250000005,
+   "gpu1048576": -4543984,
+   "gpu1048576_kernel_s": 487.81615625
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -4542836,
+   "gpu8192": -4472932,
+   "gpu8192_kernel_s": 3.676498779,
+   "gpu32768": -4502520,
+   "gpu32768_kernel_s": 14.757395507000002,
+   "gpu131072": -4526220,
+   "gpu131072_kernel_s": 109.23610937500001,
+   "gpu262144": -4534684,
+   "gpu262144_kernel_s": 242.3615,
+   "gpu524288": -4541256,
+   "gpu524288_kernel_s": 366.39640625000004,
+   "gpu1048576": -4548572,
+   "gpu1048576_kernel_s": 866.5104375000001
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -4547564,
+   "gpu8192": -4477160,
+   "gpu8192_kernel_s": 3.85498706,
+   "gpu32768": -4508364,
+   "gpu32768_kernel_s": 18.819892578,
+   "gpu131072": -4532296,
+   "gpu131072_kernel_s": 58.728128906,
+   "gpu262144": -4533800,
+   "gpu262144_kernel_s": 122.866796875,
+   "gpu524288": -4546448,
+   "gpu524288_kernel_s": 244.463328125,
+   "gpu1048576": -4547796,
+   "gpu1048576_kernel_s": 490.95893750000005
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -4546432,
+   "gpu8192": -4473672,
+   "gpu8192_kernel_s": 3.6896494140000002,
+   "gpu32768": -4502908,
+   "gpu32768_kernel_s": 14.540490234000002,
+   "gpu131072": -4522020,
+   "gpu131072_kernel_s": 62.280542968000006,
+   "gpu262144": -4532792,
+   "gpu262144_kernel_s": 105.855445312,
+   "gpu524288": -4536032,
+   "gpu524288_kernel_s": 367.78200000000004,
+   "gpu1048576": -4547828,
+   "gpu1048576_kernel_s": 499.05187500000005
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -4541860,
+   "gpu8192": -4478712,
+   "gpu8192_kernel_s": 3.6133107910000004,
+   "gpu32768": -4504148,
+   "gpu32768_kernel_s": 14.38915332,
+   "gpu131072": -4523492,
+   "gpu131072_kernel_s": 113.10217187500001,
+   "gpu262144": -4537876,
+   "gpu262144_kernel_s": 122.88869531200001,
+   "gpu524288": -4540868,
+   "gpu524288_kernel_s": 199.39868750000002,
+   "gpu1048576": -4548572,
+   "gpu1048576_kernel_s": 374.06159375000004
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -4544200,
+   "gpu8192": -4469536,
+   "gpu8192_kernel_s": 18.601537109000002,
+   "gpu32768": -4502148,
+   "gpu32768_kernel_s": 15.177493164000001,
+   "gpu131072": -4519028,
+   "gpu131072_kernel_s": 64.385367187,
+   "gpu262144": -4528560,
+   "gpu262144_kernel_s": 121.09482031200001,
+   "gpu524288": -4541132,
+   "gpu524288_kernel_s": 243.817828125,
+   "gpu1048576": -4539860,
+   "gpu1048576_kernel_s": 494.39928125000006
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -4547300,
+   "gpu8192": -4470868,
+   "gpu8192_kernel_s": 62.553515625,
+   "gpu32768": -4501016,
+   "gpu32768_kernel_s": 75.63296093700001,
+   "gpu131072": -4520392,
+   "gpu131072_kernel_s": 59.617402343,
+   "gpu262144": -4523152,
+   "gpu262144_kernel_s": 245.786015625,
+   "gpu524288": -4536792,
+   "gpu524288_kernel_s": 370.52584375000004,
+   "gpu1048576": -4541628,
+   "gpu1048576_kernel_s": 493.01721875000004
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -4540248,
+   "gpu8192": -4476324,
+   "gpu8192_kernel_s": 3.675826416,
+   "gpu32768": -4507992,
+   "gpu32768_kernel_s": 18.725777343,
+   "gpu131072": -4517136,
+   "gpu131072_kernel_s": 51.104117187,
+   "gpu262144": -4524964,
+   "gpu262144_kernel_s": 446.39781250000004,
+   "gpu524288": -4534932,
+   "gpu524288_kernel_s": 488.20234375,
+   "gpu1048576": -4540588,
+   "gpu1048576_kernel_s": 491.0168125
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -4543656,
+   "gpu8192": -4475952,
+   "gpu8192_kernel_s": 3.6259848630000002,
+   "gpu32768": -4493608,
+   "gpu32768_kernel_s": 14.667601562000002,
+   "gpu131072": -4518316,
+   "gpu131072_kernel_s": 50.655957031,
+   "gpu262144": -4532792,
+   "gpu262144_kernel_s": 248.68062500000002,
+   "gpu524288": -4532312,
+   "gpu524288_kernel_s": 352.05475,
+   "gpu1048576": -4540496,
+   "gpu1048576_kernel_s": 1282.9905
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -4541936,
+   "gpu8192": -4466852,
+   "gpu8192_kernel_s": 3.6545581050000004,
+   "gpu32768": -4494632,
+   "gpu32768_kernel_s": 14.740664062,
+   "gpu131072": -4522656,
+   "gpu131072_kernel_s": 50.868785156,
+   "gpu262144": -4529352,
+   "gpu262144_kernel_s": 122.69239843700001,
+   "gpu524288": -4534684,
+   "gpu524288_kernel_s": 243.24089062500002,
+   "gpu1048576": -4539768,
+   "gpu1048576_kernel_s": 497.28906250000006
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -4547920,
+   "gpu8192": -4475520,
+   "gpu8192_kernel_s": 2.9430253900000003,
+   "gpu32768": -4500924,
+   "gpu32768_kernel_s": 14.771610351000001,
+   "gpu131072": -4520608,
+   "gpu131072_kernel_s": 47.003980468,
+   "gpu262144": -4532188,
+   "gpu262144_kernel_s": 121.39225,
+   "gpu524288": -4540512,
+   "gpu524288_kernel_s": 370.61043750000005,
+   "gpu1048576": -4546588,
+   "gpu1048576_kernel_s": 492.16134375
+  }
+ ],
+ "ice-twisted-w62": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -4031032,
+   "gpu8192": -3960352,
+   "gpu8192_kernel_s": 8.199666992000001,
+   "gpu32768": -3990484,
+   "gpu32768_kernel_s": 30.475585937,
+   "gpu131072": -4019004,
+   "gpu131072_kernel_s": 125.15268750000001,
+   "gpu262144": -4030784,
+   "gpu262144_kernel_s": 121.86582812500001,
+   "gpu524288": -4038348,
+   "gpu524288_kernel_s": 243.29406250000002,
+   "gpu1048576": -4044796,
+   "gpu1048576_kernel_s": 912.742875
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -4034364,
+   "gpu8192": -3970396,
+   "gpu8192_kernel_s": 57.269566406,
+   "gpu32768": -3995196,
+   "gpu32768_kernel_s": 32.395886718,
+   "gpu131072": -4020368,
+   "gpu131072_kernel_s": 136.571171875,
+   "gpu262144": -4028552,
+   "gpu262144_kernel_s": 122.244398437,
+   "gpu524288": -4044796,
+   "gpu524288_kernel_s": 371.2615,
+   "gpu1048576": -4046780,
+   "gpu1048576_kernel_s": 516.3785625
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -4034008,
+   "gpu8192": -3976596,
+   "gpu8192_kernel_s": 16.46928125,
+   "gpu32768": -4002016,
+   "gpu32768_kernel_s": 29.945632812000003,
+   "gpu131072": -4020740,
+   "gpu131072_kernel_s": 240.13542187500002,
+   "gpu262144": -4031776,
+   "gpu262144_kernel_s": 123.02462500000001,
+   "gpu524288": -4037108,
+   "gpu524288_kernel_s": 244.66893750000003,
+   "gpu1048576": -4047648,
+   "gpu1048576_kernel_s": 513.57384375
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -4046780,
+   "gpu8192": -3965436,
+   "gpu8192_kernel_s": 8.178315917,
+   "gpu32768": -3993956,
+   "gpu32768_kernel_s": 32.553910156,
+   "gpu131072": -4024832,
+   "gpu131072_kernel_s": 128.473421875,
+   "gpu262144": -4033512,
+   "gpu262144_kernel_s": 246.886875,
+   "gpu524288": -4047152,
+   "gpu524288_kernel_s": 242.93551562500002,
+   "gpu1048576": -4054468,
+   "gpu1048576_kernel_s": 928.4164375
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -4042532,
+   "gpu8192": -3964196,
+   "gpu8192_kernel_s": 16.403048828,
+   "gpu32768": -3995940,
+   "gpu32768_kernel_s": 64.718804687,
+   "gpu131072": -4020368,
+   "gpu131072_kernel_s": 130.309679687,
+   "gpu262144": -4032024,
+   "gpu262144_kernel_s": 123.211757812,
+   "gpu524288": -4040084,
+   "gpu524288_kernel_s": 245.0053125,
+   "gpu1048576": -4045540,
+   "gpu1048576_kernel_s": 374.8551875
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -4035232,
+   "gpu8192": -3971264,
+   "gpu8192_kernel_s": 8.252530273,
+   "gpu32768": -3995196,
+   "gpu32768_kernel_s": 49.052136718,
+   "gpu131072": -4025948,
+   "gpu131072_kernel_s": 239.781703125,
+   "gpu262144": -4033884,
+   "gpu262144_kernel_s": 246.8318125,
+   "gpu524288": -4043680,
+   "gpu524288_kernel_s": 486.988625,
+   "gpu1048576": -4051864,
+   "gpu1048576_kernel_s": 507.70603125
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -4029528,
+   "gpu8192": -3954152,
+   "gpu8192_kernel_s": 8.255432617,
+   "gpu32768": -3989864,
+   "gpu32768_kernel_s": 158.77809375,
+   "gpu131072": -4011564,
+   "gpu131072_kernel_s": 284.1635625,
+   "gpu262144": -4028180,
+   "gpu262144_kernel_s": 122.127171875,
+   "gpu524288": -4038472,
+   "gpu524288_kernel_s": 244.9136875,
+   "gpu1048576": -4047524,
+   "gpu1048576_kernel_s": 511.44100000000003
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -4027172,
+   "gpu8192": -3964320,
+   "gpu8192_kernel_s": 7.906518554000001,
+   "gpu32768": -3996932,
+   "gpu32768_kernel_s": 30.755630859000004,
+   "gpu131072": -4020864,
+   "gpu131072_kernel_s": 129.480929687,
+   "gpu262144": -4028676,
+   "gpu262144_kernel_s": 123.212898437,
+   "gpu524288": -4039712,
+   "gpu524288_kernel_s": 218.28771875,
+   "gpu1048576": -4045292,
+   "gpu1048576_kernel_s": 502.20056250000005
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -4035744,
+   "gpu8192": -3959484,
+   "gpu8192_kernel_s": 2.9836684570000003,
+   "gpu32768": -3990732,
+   "gpu32768_kernel_s": 14.416221679000001,
+   "gpu131072": -4017268,
+   "gpu131072_kernel_s": 57.37126171800001,
+   "gpu262144": -4025452,
+   "gpu262144_kernel_s": 245.05785937500002,
+   "gpu524288": -4039588,
+   "gpu524288_kernel_s": 245.80504687500002,
+   "gpu1048576": -4044796,
+   "gpu1048576_kernel_s": 520.4994375
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -4036844,
+   "gpu8192": -3965312,
+   "gpu8192_kernel_s": 3.67636499,
+   "gpu32768": -3988996,
+   "gpu32768_kernel_s": 14.303356445,
+   "gpu131072": -4023840,
+   "gpu131072_kernel_s": 54.074214843,
+   "gpu262144": -4031404,
+   "gpu262144_kernel_s": 123.71872656200001,
+   "gpu524288": -4040704,
+   "gpu524288_kernel_s": 215.474234375,
+   "gpu1048576": -4050128,
+   "gpu1048576_kernel_s": 506.91593750000004
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -4044672,
+   "gpu8192": -3963080,
+   "gpu8192_kernel_s": 3.635272216,
+   "gpu32768": -3999412,
+   "gpu32768_kernel_s": 14.465255859,
+   "gpu131072": -4021112,
+   "gpu131072_kernel_s": 66.944328125,
+   "gpu262144": -4035868,
+   "gpu262144_kernel_s": 246.52728125000002,
+   "gpu524288": -4038224,
+   "gpu524288_kernel_s": 217.39796875000002,
+   "gpu1048576": -4044300,
+   "gpu1048576_kernel_s": 402.59325
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -4038844,
+   "gpu8192": -3961716,
+   "gpu8192_kernel_s": 3.594172363,
+   "gpu32768": -3994576,
+   "gpu32768_kernel_s": 14.087496093,
+   "gpu131072": -4015904,
+   "gpu131072_kernel_s": 54.630195312000005,
+   "gpu262144": -4033264,
+   "gpu262144_kernel_s": 246.61434375000002,
+   "gpu524288": -4042192,
+   "gpu524288_kernel_s": 245.43018750000002,
+   "gpu1048576": -4051244,
+   "gpu1048576_kernel_s": 510.69590625
+  }
+ ],
+ "ice-twisted-dimer": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-dimer/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -5002000,
+   "gpu8192": -4946250,
+   "gpu8192_kernel_s": 3.841784912,
+   "gpu32768": -4974500,
+   "gpu32768_kernel_s": 28.453416015000002,
+   "gpu131072": -4995000,
+   "gpu131072_kernel_s": 57.750125000000004,
+   "gpu262144": -4999750,
+   "gpu262144_kernel_s": 256.38576562500003,
+   "gpu524288": -5007250,
+   "gpu524288_kernel_s": 245.41348437500002
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-dimer/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -5000750,
+   "gpu8192": -4948750,
+   "gpu8192_kernel_s": 3.8445686030000004,
+   "gpu32768": -4978250,
+   "gpu32768_kernel_s": 21.396072265,
+   "gpu131072": -4995750,
+   "gpu131072_kernel_s": 57.775261718,
+   "gpu262144": -5001750,
+   "gpu262144_kernel_s": 123.198242187,
+   "gpu524288": -5012000,
+   "gpu524288_kernel_s": 246.1928125
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-dimer/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -5004750,
+   "gpu8192": -4949000,
+   "gpu8192_kernel_s": 61.044726562,
+   "gpu32768": -4982500,
+   "gpu32768_kernel_s": 15.34371875,
+   "gpu131072": -5001500,
+   "gpu131072_kernel_s": 59.254199218000004,
+   "gpu262144": -5009250,
+   "gpu262144_kernel_s": 132.411046875,
+   "gpu524288": -5011500,
+   "gpu524288_kernel_s": 389.2290625
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-dimer/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -5003250,
+   "gpu8192": -4951500,
+   "gpu8192_kernel_s": 3.8200969230000004,
+   "gpu32768": -4972250,
+   "gpu32768_kernel_s": 17.349121093,
+   "gpu131072": -4997250,
+   "gpu131072_kernel_s": 55.43376171800001,
+   "gpu262144": -5003500,
+   "gpu262144_kernel_s": 192.17364062500002,
+   "gpu524288": -5010250,
+   "gpu524288_kernel_s": 316.71959375
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-dimer/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -5006000,
+   "gpu8192": -4944000,
+   "gpu8192_kernel_s": 61.073648437,
+   "gpu32768": -4977250,
+   "gpu32768_kernel_s": 17.337083984,
+   "gpu131072": -4997000,
+   "gpu131072_kernel_s": 112.28584375000001,
+   "gpu262144": -5005000,
+   "gpu262144_kernel_s": 122.92384375,
+   "gpu524288": -5007500,
+   "gpu524288_kernel_s": 246.435015625
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-dimer/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -4999500,
+   "gpu8192": -4941250,
+   "gpu8192_kernel_s": 2.9371013180000003,
+   "gpu32768": -4979000,
+   "gpu32768_kernel_s": 17.297685546,
+   "gpu131072": -4991500,
+   "gpu131072_kernel_s": 47.160480468,
+   "gpu262144": -5000000,
+   "gpu262144_kernel_s": 123.09613281200001,
+   "gpu524288": -5006250,
+   "gpu524288_kernel_s": 321.4444375
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-dimer/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -4991500,
+   "gpu8192": -4942000,
+   "gpu8192_kernel_s": 3.6970119620000004,
+   "gpu32768": -4978000,
+   "gpu32768_kernel_s": 15.117545898000001,
+   "gpu131072": -4991000,
+   "gpu131072_kernel_s": 61.63614453100001,
+   "gpu262144": -4997750,
+   "gpu262144_kernel_s": 245.411453125,
+   "gpu524288": -5004500,
+   "gpu524288_kernel_s": 244.12773437500002
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-dimer/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -4993250,
+   "gpu8192": -4942000,
+   "gpu8192_kernel_s": 3.6695383300000004,
+   "gpu32768": -4972250,
+   "gpu32768_kernel_s": 15.802478515,
+   "gpu131072": -4990000,
+   "gpu131072_kernel_s": 52.067437500000004,
+   "gpu262144": -4998500,
+   "gpu262144_kernel_s": 353.38246875000004,
+   "gpu524288": -5005500,
+   "gpu524288_kernel_s": 316.49059375
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-dimer/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -4990500,
+   "gpu8192": -4940250,
+   "gpu8192_kernel_s": 3.637583251,
+   "gpu32768": -4968250,
+   "gpu32768_kernel_s": 14.104637695000001,
+   "gpu131072": -4986250,
+   "gpu131072_kernel_s": 46.990113281000006,
+   "gpu262144": -4998750,
+   "gpu262144_kernel_s": 122.95729687500001,
+   "gpu524288": -5000750,
+   "gpu524288_kernel_s": 321.1895625
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-dimer/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -4985250,
+   "gpu8192": -4942500,
+   "gpu8192_kernel_s": 3.668657714,
+   "gpu32768": -4975000,
+   "gpu32768_kernel_s": 14.179000976000001,
+   "gpu131072": -4985250,
+   "gpu131072_kernel_s": 52.376746093,
+   "gpu262144": -4995750,
+   "gpu262144_kernel_s": 122.434710937,
+   "gpu524288": -4996500,
+   "gpu524288_kernel_s": 521.5466875000001
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-dimer/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -4996500,
+   "gpu8192": -4932000,
+   "gpu8192_kernel_s": 3.604283691,
+   "gpu32768": -4968750,
+   "gpu32768_kernel_s": 14.219999023000002,
+   "gpu131072": -4987750,
+   "gpu131072_kernel_s": 47.1366875,
+   "gpu262144": -4991500,
+   "gpu262144_kernel_s": 244.789375,
+   "gpu524288": -5003250,
+   "gpu524288_kernel_s": 482.58425000000005
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-dimer/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -5005750,
+   "gpu8192": -4941500,
+   "gpu8192_kernel_s": 3.5921552730000004,
+   "gpu32768": -4972000,
+   "gpu32768_kernel_s": 14.247980468000002,
+   "gpu131072": -4996250,
+   "gpu131072_kernel_s": 46.475460937,
+   "gpu262144": -5004250,
+   "gpu262144_kernel_s": 367.04478125,
+   "gpu524288": -5010750,
+   "gpu524288_kernel_s": 482.24209375000004
+  }
+ ],
+ "ice-twisted": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -4592500
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -4593750
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -4594250
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -4609500
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -4602500
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -4601500
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -4591750
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -4591250
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -4592500
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -4599250
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -4600000
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -4599750
+  },
+  {
+   "nonce": "4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef.npz",
+   "qpu80_best": -4596000
+  },
+  {
+   "nonce": "8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0.npz",
+   "qpu80_best": -4594500
+  },
+  {
+   "nonce": "c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c.npz",
+   "qpu80_best": -4610500
+  },
+  {
+   "nonce": "13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0.npz",
+   "qpu80_best": -4606750
+  },
+  {
+   "nonce": "08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c.npz",
+   "qpu80_best": -4598500
+  },
+  {
+   "nonce": "be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30.npz",
+   "qpu80_best": -4602750
+  },
+  {
+   "nonce": "bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20.npz",
+   "qpu80_best": -4598750
+  },
+  {
+   "nonce": "f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862.npz",
+   "qpu80_best": -4598500
+  },
+  {
+   "nonce": "6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37.npz",
+   "qpu80_best": -4606750
+  },
+  {
+   "nonce": "3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2.npz",
+   "qpu80_best": -4605000
+  },
+  {
+   "nonce": "6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a.npz",
+   "qpu80_best": -4601000
+  },
+  {
+   "nonce": "f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1",
+   "model": "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-twisted/models/f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1.npz",
+   "qpu80_best": -4592250
+  }
+ ],
+ "ice-twisted-w90-dimer": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -4748280
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -4750260
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -4751200
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -4751960
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -4759180
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -4754120
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -4746040
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -4749460
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -4741600
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -4739360
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -4744200
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -4751700
+  }
+ ],
+ "ice-twisted-w62-dimer1200": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -5022676
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -5026316
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -5037924
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -5028996
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -5027400
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -5026300
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -5035184
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -5037784
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -5031200
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -5033228
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -5030128
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -5037740
+  }
+ ],
+ "ice-twisted-w62-dimer1200-ext": [
+  {
+   "nonce": "4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef.npz",
+   "qpu80_best": -5030064
+  },
+  {
+   "nonce": "8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0.npz",
+   "qpu80_best": -5032700
+  },
+  {
+   "nonce": "c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c.npz",
+   "qpu80_best": -5034668
+  },
+  {
+   "nonce": "13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0.npz",
+   "qpu80_best": -5038392
+  },
+  {
+   "nonce": "08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c.npz",
+   "qpu80_best": -5024176
+  },
+  {
+   "nonce": "be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30.npz",
+   "qpu80_best": -5036900
+  },
+  {
+   "nonce": "bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20.npz",
+   "qpu80_best": -5029648
+  },
+  {
+   "nonce": "f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862.npz",
+   "qpu80_best": -5035308
+  },
+  {
+   "nonce": "6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37.npz",
+   "qpu80_best": -5024732
+  },
+  {
+   "nonce": "3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2.npz",
+   "qpu80_best": -5025400
+  },
+  {
+   "nonce": "6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a.npz",
+   "qpu80_best": -5029120
+  },
+  {
+   "nonce": "f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1.npz",
+   "qpu80_best": -5035396
+  }
+ ],
+ "ice-twisted-w62-dimer1800": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -5473172
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -5480268
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -5473028
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -5470808
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -5470704
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -5474208
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -5472124
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -5467212
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -5465368
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -5469772
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -5470984
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -5486516
+  }
+ ],
+ "ice-twisted-w62-dimer1200-L9": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L9/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -505322
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L9/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -513494
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L9/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -507198
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L9/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -510966
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L9/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -507106
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L9/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -501106
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L9/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -501548
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L9/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -507904
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L9/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -506982
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L9/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -507974
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L9/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -507780
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L9/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -511160
+  }
+ ],
+ "ice-twisted-w62-dimer1200-L13": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L13/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -1166042
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L13/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -1175018
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L13/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -1174096
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L13/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -1181886
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L13/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -1175848
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L13/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -1171492
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L13/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -1169800
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L13/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -1189196
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L13/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -1175374
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L13/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -1173654
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L13/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -1179660
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L13/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -1169730
+  }
+ ],
+ "ice-twisted-w62-dimer1200-L18": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L18/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -2452374
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L18/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -2473194
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L18/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -2465954
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L18/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -2479226
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L18/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -2478154
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L18/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -2466876
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L18/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -2461420
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L18/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -2474428
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L18/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -2468116
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L18/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -2460844
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L18/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -2481960
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L18/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -2466364
+  }
+ ],
+ "ice-twisted-w62-dimer1800-ext": [
+  {
+   "nonce": "4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef.npz",
+   "qpu80_best": -5477460
+  },
+  {
+   "nonce": "8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0.npz",
+   "qpu80_best": -5460300
+  },
+  {
+   "nonce": "c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c.npz",
+   "qpu80_best": -5465616
+  },
+  {
+   "nonce": "13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0.npz",
+   "qpu80_best": -5462516
+  },
+  {
+   "nonce": "08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c.npz",
+   "qpu80_best": -5470720
+  },
+  {
+   "nonce": "be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30.npz",
+   "qpu80_best": -5478032
+  },
+  {
+   "nonce": "bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20.npz",
+   "qpu80_best": -5472344
+  },
+  {
+   "nonce": "f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862.npz",
+   "qpu80_best": -5474736
+  },
+  {
+   "nonce": "6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37.npz",
+   "qpu80_best": -5470392
+  },
+  {
+   "nonce": "3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2.npz",
+   "qpu80_best": -5462344
+  },
+  {
+   "nonce": "6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a.npz",
+   "qpu80_best": -5472112
+  },
+  {
+   "nonce": "f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1800/models/f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1.npz",
+   "qpu80_best": -5466052
+  }
+ ],
+ "ice-twisted-w62-dimer1500": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1500/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -5251240
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1500/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -5248200
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1500/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -5252228
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1500/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -5249268
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1500/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -5258880
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1500/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -5258464
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1500/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -5257484
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1500/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -5254820
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1500/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -5250464
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1500/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -5263580
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1500/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -5258168
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1500/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -5263452
+  }
+ ],
+ "ice-twisted-w62-dimer1350": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -5146228
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -5137748
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -5147900
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -5143680
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -5144380
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -5146336
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -5140692
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -5148924
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -5140584
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -5146444
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -5144208
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -5142784
+  }
+ ],
+ "ice-twisted-w45-dimer1200": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -4937890
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -4945700
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -4950940
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -4943380
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -4937940
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -4940000
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -4940320
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -4944090
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -4938360
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -4940860
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -4941300
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -4946040
+  }
+ ],
+ "ice-twisted-w90-dimer1200": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer1200/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -5167260
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer1200/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -5175940
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer1200/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -5194560
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer1200/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -5177040
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer1200/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -5187220
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer1200/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -5170360
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer1200/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -5181840
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer1200/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -5185000
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer1200/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -5171440
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer1200/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -5184740
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer1200/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -5181260
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w90-dimer1200/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -5192800
+  }
+ ],
+ "ice-twisted-w62-loop4x300": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-loop4x300/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -5058032
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-loop4x300/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -5048700
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-loop4x300/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -5047492
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-loop4x300/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -5050932
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-loop4x300/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -5051908
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-loop4x300/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -5064372
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-loop4x300/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -5063320
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-loop4x300/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -5068512
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-loop4x300/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -5053880
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-loop4x300/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -5062296
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-loop4x300/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -5063208
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-loop4x300/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -5072280
+  }
+ ],
+ "ice-twisted-w62-dimer1200-p500": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-p500/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -4433780
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-p500/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -4444172
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-p500/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -4450104
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-p500/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -4443808
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-p500/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -4448372
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-p500/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -4440876
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-p500/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -4443956
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-p500/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -4448628
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-p500/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -4440320
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-p500/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -4448988
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-p500/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -4446584
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-p500/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -4451832
+  }
+ ],
+ "ice-twisted-w62-dimer1350-ext": [
+  {
+   "nonce": "4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef.npz",
+   "qpu80_best": -5143824
+  },
+  {
+   "nonce": "8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0.npz",
+   "qpu80_best": -5146704
+  },
+  {
+   "nonce": "c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c.npz",
+   "qpu80_best": -5148024
+  },
+  {
+   "nonce": "13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0.npz",
+   "qpu80_best": -5140444
+  },
+  {
+   "nonce": "08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c.npz",
+   "qpu80_best": -5141716
+  },
+  {
+   "nonce": "be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30.npz",
+   "qpu80_best": -5143696
+  },
+  {
+   "nonce": "bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20.npz",
+   "qpu80_best": -5146612
+  },
+  {
+   "nonce": "f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862.npz",
+   "qpu80_best": -5146288
+  },
+  {
+   "nonce": "6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37.npz",
+   "qpu80_best": -5144520
+  },
+  {
+   "nonce": "3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2.npz",
+   "qpu80_best": -5143048
+  },
+  {
+   "nonce": "6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a.npz",
+   "qpu80_best": -5146272
+  },
+  {
+   "nonce": "f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1350/models/f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1.npz",
+   "qpu80_best": -5145808
+  }
+ ],
+ "ice-twisted-w62-dimer1200-L22": [
+  {
+   "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L22/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+   "qpu80_best": -3793952
+  },
+  {
+   "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L22/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+   "qpu80_best": -3798820
+  },
+  {
+   "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L22/models/44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e.npz",
+   "qpu80_best": -3798988
+  },
+  {
+   "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L22/models/f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb.npz",
+   "qpu80_best": -3812308
+  },
+  {
+   "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L22/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+   "qpu80_best": -3804480
+  },
+  {
+   "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L22/models/6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476.npz",
+   "qpu80_best": -3796060
+  },
+  {
+   "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L22/models/f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18.npz",
+   "qpu80_best": -3787456
+  },
+  {
+   "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L22/models/eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c.npz",
+   "qpu80_best": -3802254
+  },
+  {
+   "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L22/models/82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0.npz",
+   "qpu80_best": -3789084
+  },
+  {
+   "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L22/models/de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457.npz",
+   "qpu80_best": -3796852
+  },
+  {
+   "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L22/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+   "qpu80_best": -3798524
+  },
+  {
+   "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+   "model": "/home/carback1/quip-data/regimes/qpu-f17/work/cells/ice-twisted-w62-dimer1200-L22/models/c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421.npz",
+   "qpu80_best": -3801910
+  }
+ ]
+}
