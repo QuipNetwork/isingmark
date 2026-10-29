@@ -1,0 +1,1046 @@
+{
+  "family": "tri-match-r6",
+  "code": "F1",
+  "tier": 1,
+  "params": {
+    "ratio": 6
+  },
+  "nonce_rule": "make_nonces(24, 20260920)",
+  "nonces": [
+    "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+    "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+    "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+    "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+    "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+    "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+    "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+    "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+    "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+    "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+    "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+    "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+    "4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef",
+    "8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0",
+    "c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c",
+    "13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0",
+    "08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c",
+    "be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30",
+    "bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20",
+    "f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862",
+    "6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37",
+    "3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2",
+    "6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a",
+    "f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1"
+  ],
+  "generator": "tools/structured",
+  "port_module": "isingmark_structured/families/tri_match.py",
+  "port_sha256": "d84b3da57e29040205f645f17c788fb657a93214e6abbf04320c6de10c9ea00c",
+  "suite_source": "qpu-suite/work/trimatch.py",
+  "exact": true,
+  "topology_fixture": "chain-h0",
+  "topology_hash": "e66d3dfa3c9c6afb15efe29891cf9412498d94692ab5956af3ad98ba3693a02d",
+  "suite_topology_sha256": "65ef58bdfff7ecebadf041e77f2c8ae4b12763fa76190f7cd507a14145e747be",
+  "verdict": "provisional",
+  "suite_generator_sha256": "c749a97d303d9baa79bc56460e1fee2fe14b5abae2bd5bf7ff8f68f4e4f4d011",
+  "census": {
+    "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f": {
+      "coupling_rms_milli": 389.4366412528134,
+      "fundamental_frustrated_cycles": 953,
+      "fundamental_frustrated_fraction": 0.4854814060112073,
+      "matching_counts": [
+        {
+          "edges": 2189,
+          "index": 0,
+          "internal_edges": 1726,
+          "same_orientation_edges": 463
+        },
+        {
+          "edges": 2170,
+          "index": 1,
+          "internal_edges": 1729,
+          "same_orientation_edges": 441
+        },
+        {
+          "edges": 2177,
+          "index": 2,
+          "internal_edges": 1728,
+          "same_orientation_edges": 449
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 140,
+      "model_hash": "01e78f14070ca3922d619c85aa6e2b9301d72077430b85c38fc54044ad4271b4",
+      "series_reduced_spins": 3908,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3957,
+      "strong_active_spins": 4574,
+      "strong_component_sizes": [
+        4574,
+        1
+      ],
+      "strong_cycle_rank": 1963,
+      "strong_degree_counts": {
+        "0": 1,
+        "1": 33,
+        "2": 584,
+        "3": 3957
+      },
+      "strong_edges": 6536
+    },
+    "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f": {
+      "coupling_rms_milli": 389.241524056422,
+      "fundamental_frustrated_cycles": 987,
+      "fundamental_frustrated_fraction": 0.5007610350076104,
+      "matching_counts": [
+        {
+          "edges": 2190,
+          "index": 0,
+          "internal_edges": 1731,
+          "same_orientation_edges": 459
+        },
+        {
+          "edges": 2178,
+          "index": 1,
+          "internal_edges": 1678,
+          "same_orientation_edges": 500
+        },
+        {
+          "edges": 2177,
+          "index": 2,
+          "internal_edges": 1724,
+          "same_orientation_edges": 453
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 158,
+      "model_hash": "06c8b4a90d51563136adcb52e4f54094d4d63f5897f2b4a7df7d05d6c1779636",
+      "series_reduced_spins": 3922,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3973,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1971,
+      "strong_degree_counts": {
+        "1": 33,
+        "2": 569,
+        "3": 3973
+      },
+      "strong_edges": 6545
+    },
+    "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e": {
+      "coupling_rms_milli": 390.08733193620577,
+      "fundamental_frustrated_cycles": 958,
+      "fundamental_frustrated_fraction": 0.48555499239736444,
+      "matching_counts": [
+        {
+          "edges": 2191,
+          "index": 0,
+          "internal_edges": 1717,
+          "same_orientation_edges": 474
+        },
+        {
+          "edges": 2179,
+          "index": 1,
+          "internal_edges": 1730,
+          "same_orientation_edges": 449
+        },
+        {
+          "edges": 2177,
+          "index": 2,
+          "internal_edges": 1769,
+          "same_orientation_edges": 408
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 150,
+      "model_hash": "fbe68b6dbea021076b6715e5f7c523b0740651edddceb3002216bf48f6da4593",
+      "series_reduced_spins": 3934,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3968,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1973,
+      "strong_degree_counts": {
+        "1": 24,
+        "2": 583,
+        "3": 3968
+      },
+      "strong_edges": 6547
+    },
+    "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb": {
+      "coupling_rms_milli": 389.8598276927099,
+      "fundamental_frustrated_cycles": 995,
+      "fundamental_frustrated_fraction": 0.5017650025214322,
+      "matching_counts": [
+        {
+          "edges": 2187,
+          "index": 0,
+          "internal_edges": 1778,
+          "same_orientation_edges": 409
+        },
+        {
+          "edges": 2190,
+          "index": 1,
+          "internal_edges": 1741,
+          "same_orientation_edges": 449
+        },
+        {
+          "edges": 2180,
+          "index": 2,
+          "internal_edges": 1718,
+          "same_orientation_edges": 462
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 144,
+      "model_hash": "b85b5747151b105acad542033cf73fafd68ab7e25b44eee87a5a4f74c234b730",
+      "series_reduced_spins": 3948,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3985,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1983,
+      "strong_degree_counts": {
+        "1": 21,
+        "2": 569,
+        "3": 3985
+      },
+      "strong_edges": 6557
+    },
+    "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df": {
+      "coupling_rms_milli": 389.95748884529013,
+      "fundamental_frustrated_cycles": 989,
+      "fundamental_frustrated_fraction": 0.49748490945674045,
+      "matching_counts": [
+        {
+          "edges": 2200,
+          "index": 0,
+          "internal_edges": 1736,
+          "same_orientation_edges": 464
+        },
+        {
+          "edges": 2180,
+          "index": 1,
+          "internal_edges": 1732,
+          "same_orientation_edges": 448
+        },
+        {
+          "edges": 2182,
+          "index": 2,
+          "internal_edges": 1715,
+          "same_orientation_edges": 467
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 130,
+      "model_hash": "8c013377a9b23caaf00f0177825bd8ac096e7f0202a5f0ac81def9c4e8fd9f8f",
+      "series_reduced_spins": 3950,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3996,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1988,
+      "strong_degree_counts": {
+        "1": 22,
+        "2": 557,
+        "3": 3996
+      },
+      "strong_edges": 6562
+    },
+    "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476": {
+      "coupling_rms_milli": 390.0873632432208,
+      "fundamental_frustrated_cycles": 1013,
+      "fundamental_frustrated_fraction": 0.5110998990918264,
+      "matching_counts": [
+        {
+          "edges": 2187,
+          "index": 0,
+          "internal_edges": 1758,
+          "same_orientation_edges": 429
+        },
+        {
+          "edges": 2190,
+          "index": 1,
+          "internal_edges": 1709,
+          "same_orientation_edges": 481
+        },
+        {
+          "edges": 2179,
+          "index": 2,
+          "internal_edges": 1726,
+          "same_orientation_edges": 453
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 159,
+      "model_hash": "12150332ced839f76a16f5c7dc3034ea0bdc943fb7647927cb896acb73453406",
+      "series_reduced_spins": 3948,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3991,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1982,
+      "strong_degree_counts": {
+        "1": 29,
+        "2": 555,
+        "3": 3991
+      },
+      "strong_edges": 6556
+    },
+    "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18": {
+      "coupling_rms_milli": 390.0416854900585,
+      "fundamental_frustrated_cycles": 1018,
+      "fundamental_frustrated_fraction": 0.5178026449643948,
+      "matching_counts": [
+        {
+          "edges": 2185,
+          "index": 0,
+          "internal_edges": 1726,
+          "same_orientation_edges": 459
+        },
+        {
+          "edges": 2182,
+          "index": 1,
+          "internal_edges": 1733,
+          "same_orientation_edges": 449
+        },
+        {
+          "edges": 2173,
+          "index": 2,
+          "internal_edges": 1698,
+          "same_orientation_edges": 475
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 167,
+      "model_hash": "c396023aeb870664fb1331978dfe78b16a2dd12e6b93eb944f96414cdee3ec99",
+      "series_reduced_spins": 3910,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3961,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1966,
+      "strong_degree_counts": {
+        "1": 31,
+        "2": 583,
+        "3": 3961
+      },
+      "strong_edges": 6540
+    },
+    "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c": {
+      "coupling_rms_milli": 390.1949424255379,
+      "fundamental_frustrated_cycles": 979,
+      "fundamental_frustrated_fraction": 0.49444444444444446,
+      "matching_counts": [
+        {
+          "edges": 2192,
+          "index": 0,
+          "internal_edges": 1713,
+          "same_orientation_edges": 479
+        },
+        {
+          "edges": 2176,
+          "index": 1,
+          "internal_edges": 1757,
+          "same_orientation_edges": 419
+        },
+        {
+          "edges": 2186,
+          "index": 2,
+          "internal_edges": 1754,
+          "same_orientation_edges": 432
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 134,
+      "model_hash": "09f655022bbbee7f21b1244d641560ea3dc17267c54f67977e65273a865f43e4",
+      "series_reduced_spins": 3948,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3985,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1980,
+      "strong_degree_counts": {
+        "1": 27,
+        "2": 563,
+        "3": 3985
+      },
+      "strong_edges": 6554
+    },
+    "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0": {
+      "coupling_rms_milli": 389.55380380101826,
+      "fundamental_frustrated_cycles": 988,
+      "fundamental_frustrated_fraction": 0.5022877478393493,
+      "matching_counts": [
+        {
+          "edges": 2187,
+          "index": 0,
+          "internal_edges": 1753,
+          "same_orientation_edges": 434
+        },
+        {
+          "edges": 2181,
+          "index": 1,
+          "internal_edges": 1717,
+          "same_orientation_edges": 464
+        },
+        {
+          "edges": 2172,
+          "index": 2,
+          "internal_edges": 1724,
+          "same_orientation_edges": 448
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 156,
+      "model_hash": "d7dcb2d707eca33e80a2e778498b32bd43a903354d8ebc536db654675a44eb6c",
+      "series_reduced_spins": 3916,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3960,
+      "strong_active_spins": 4574,
+      "strong_component_sizes": [
+        4574,
+        1
+      ],
+      "strong_cycle_rank": 1967,
+      "strong_degree_counts": {
+        "0": 1,
+        "1": 28,
+        "2": 586,
+        "3": 3960
+      },
+      "strong_edges": 6540
+    },
+    "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457": {
+      "coupling_rms_milli": 389.2842033619197,
+      "fundamental_frustrated_cycles": 983,
+      "fundamental_frustrated_fraction": 0.5002544529262086,
+      "matching_counts": [
+        {
+          "edges": 2183,
+          "index": 0,
+          "internal_edges": 1726,
+          "same_orientation_edges": 457
+        },
+        {
+          "edges": 2181,
+          "index": 1,
+          "internal_edges": 1712,
+          "same_orientation_edges": 469
+        },
+        {
+          "edges": 2174,
+          "index": 2,
+          "internal_edges": 1734,
+          "same_orientation_edges": 440
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 141,
+      "model_hash": "20b85f170a13c7928444cbe3304c8f2d1058dcc144658f5a6a82755ce991d431",
+      "series_reduced_spins": 3924,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3957,
+      "strong_active_spins": 4574,
+      "strong_component_sizes": [
+        4574,
+        1
+      ],
+      "strong_cycle_rank": 1965,
+      "strong_degree_counts": {
+        "0": 1,
+        "1": 29,
+        "2": 588,
+        "3": 3957
+      },
+      "strong_edges": 6538
+    },
+    "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0": {
+      "coupling_rms_milli": 389.4617819216241,
+      "fundamental_frustrated_cycles": 945,
+      "fundamental_frustrated_fraction": 0.48067141403865715,
+      "matching_counts": [
+        {
+          "edges": 2190,
+          "index": 0,
+          "internal_edges": 1734,
+          "same_orientation_edges": 456
+        },
+        {
+          "edges": 2181,
+          "index": 1,
+          "internal_edges": 1716,
+          "same_orientation_edges": 465
+        },
+        {
+          "edges": 2168,
+          "index": 2,
+          "internal_edges": 1714,
+          "same_orientation_edges": 454
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 132,
+      "model_hash": "c267823ecd797cc12e22e983d80dc391497a720e462eae44c074ed0ea8e2adab",
+      "series_reduced_spins": 3902,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3951,
+      "strong_active_spins": 4574,
+      "strong_component_sizes": [
+        4574,
+        1
+      ],
+      "strong_cycle_rank": 1966,
+      "strong_degree_counts": {
+        "0": 1,
+        "1": 21,
+        "2": 602,
+        "3": 3951
+      },
+      "strong_edges": 6539
+    },
+    "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421": {
+      "coupling_rms_milli": 389.6168095169738,
+      "fundamental_frustrated_cycles": 936,
+      "fundamental_frustrated_fraction": 0.47536820721178263,
+      "matching_counts": [
+        {
+          "edges": 2183,
+          "index": 0,
+          "internal_edges": 1753,
+          "same_orientation_edges": 430
+        },
+        {
+          "edges": 2188,
+          "index": 1,
+          "internal_edges": 1731,
+          "same_orientation_edges": 457
+        },
+        {
+          "edges": 2171,
+          "index": 2,
+          "internal_edges": 1714,
+          "same_orientation_edges": 457
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 149,
+      "model_hash": "f909826bc10bf7fa8b0e3d1ad64ef7c015f360040cc56354b93460a5405c70e9",
+      "series_reduced_spins": 3922,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3958,
+      "strong_active_spins": 4574,
+      "strong_component_sizes": [
+        4574,
+        1
+      ],
+      "strong_cycle_rank": 1969,
+      "strong_degree_counts": {
+        "0": 1,
+        "1": 22,
+        "2": 594,
+        "3": 3958
+      },
+      "strong_edges": 6542
+    },
+    "4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef": {
+      "coupling_rms_milli": 389.3305732217981,
+      "fundamental_frustrated_cycles": 962,
+      "fundamental_frustrated_fraction": 0.48906964921199797,
+      "matching_counts": [
+        {
+          "edges": 2187,
+          "index": 0,
+          "internal_edges": 1746,
+          "same_orientation_edges": 441
+        },
+        {
+          "edges": 2190,
+          "index": 1,
+          "internal_edges": 1752,
+          "same_orientation_edges": 438
+        },
+        {
+          "edges": 2164,
+          "index": 2,
+          "internal_edges": 1717,
+          "same_orientation_edges": 447
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 138,
+      "model_hash": "ae7b460efe0b76bb7a342f5f1d274f2a4cec7892be5726f8d068dcbdf6504d05",
+      "series_reduced_spins": 3912,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3957,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1967,
+      "strong_degree_counts": {
+        "1": 25,
+        "2": 593,
+        "3": 3957
+      },
+      "strong_edges": 6541
+    },
+    "8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0": {
+      "coupling_rms_milli": 389.4767596513695,
+      "fundamental_frustrated_cycles": 975,
+      "fundamental_frustrated_fraction": 0.491679273827534,
+      "matching_counts": [
+        {
+          "edges": 2191,
+          "index": 0,
+          "internal_edges": 1750,
+          "same_orientation_edges": 441
+        },
+        {
+          "edges": 2193,
+          "index": 1,
+          "internal_edges": 1760,
+          "same_orientation_edges": 433
+        },
+        {
+          "edges": 2172,
+          "index": 2,
+          "internal_edges": 1757,
+          "same_orientation_edges": 415
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 134,
+      "model_hash": "ba4e1b641d9b05654af38deddc91234fd878d546a2ab04545e4454f0b7c267f6",
+      "series_reduced_spins": 3954,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3986,
+      "strong_active_spins": 4574,
+      "strong_component_sizes": [
+        4574,
+        1
+      ],
+      "strong_cycle_rank": 1983,
+      "strong_degree_counts": {
+        "0": 1,
+        "1": 22,
+        "2": 566,
+        "3": 3986
+      },
+      "strong_edges": 6556
+    },
+    "c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c": {
+      "coupling_rms_milli": 390.3718519427564,
+      "fundamental_frustrated_cycles": 979,
+      "fundamental_frustrated_fraction": 0.49419485108531047,
+      "matching_counts": [
+        {
+          "edges": 2186,
+          "index": 0,
+          "internal_edges": 1729,
+          "same_orientation_edges": 457
+        },
+        {
+          "edges": 2183,
+          "index": 1,
+          "internal_edges": 1741,
+          "same_orientation_edges": 442
+        },
+        {
+          "edges": 2186,
+          "index": 2,
+          "internal_edges": 1685,
+          "same_orientation_edges": 501
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 156,
+      "model_hash": "5c16c8d236b26afe3fac9ce45888673a7f03090a2b2aef94f9dcbea00f40f0b8",
+      "series_reduced_spins": 3942,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3986,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1981,
+      "strong_degree_counts": {
+        "1": 26,
+        "2": 563,
+        "3": 3986
+      },
+      "strong_edges": 6555
+    },
+    "13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0": {
+      "coupling_rms_milli": 389.58852694966475,
+      "fundamental_frustrated_cycles": 998,
+      "fundamental_frustrated_fraction": 0.5076297049847406,
+      "matching_counts": [
+        {
+          "edges": 2179,
+          "index": 0,
+          "internal_edges": 1744,
+          "same_orientation_edges": 435
+        },
+        {
+          "edges": 2188,
+          "index": 1,
+          "internal_edges": 1751,
+          "same_orientation_edges": 437
+        },
+        {
+          "edges": 2173,
+          "index": 2,
+          "internal_edges": 1716,
+          "same_orientation_edges": 457
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 138,
+      "model_hash": "c1db318dd5691eff061c7896c4d7b7a204494bc8e5f88af03c3d151b85c35009",
+      "series_reduced_spins": 3916,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3939,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1966,
+      "strong_degree_counts": {
+        "1": 9,
+        "2": 627,
+        "3": 3939
+      },
+      "strong_edges": 6540
+    },
+    "08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c": {
+      "coupling_rms_milli": 389.32409884597286,
+      "fundamental_frustrated_cycles": 969,
+      "fundamental_frustrated_fraction": 0.49113025848960973,
+      "matching_counts": [
+        {
+          "edges": 2189,
+          "index": 0,
+          "internal_edges": 1710,
+          "same_orientation_edges": 479
+        },
+        {
+          "edges": 2182,
+          "index": 1,
+          "internal_edges": 1718,
+          "same_orientation_edges": 464
+        },
+        {
+          "edges": 2176,
+          "index": 2,
+          "internal_edges": 1720,
+          "same_orientation_edges": 456
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 151,
+      "model_hash": "13c38b42858a7113adf359c3a8272b4d51a76df1327748f100a52c1e013d28aa",
+      "series_reduced_spins": 3922,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3977,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1973,
+      "strong_degree_counts": {
+        "1": 33,
+        "2": 565,
+        "3": 3977
+      },
+      "strong_edges": 6547
+    },
+    "be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30": {
+      "coupling_rms_milli": 389.4851304007618,
+      "fundamental_frustrated_cycles": 996,
+      "fundamental_frustrated_fraction": 0.50790413054564,
+      "matching_counts": [
+        {
+          "edges": 2180,
+          "index": 0,
+          "internal_edges": 1699,
+          "same_orientation_edges": 481
+        },
+        {
+          "edges": 2180,
+          "index": 1,
+          "internal_edges": 1723,
+          "same_orientation_edges": 457
+        },
+        {
+          "edges": 2175,
+          "index": 2,
+          "internal_edges": 1699,
+          "same_orientation_edges": 476
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 149,
+      "model_hash": "e6d789f5d58cc39098a887f1cb70441defb75515c8a9312847660a7cb5481f95",
+      "series_reduced_spins": 3898,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3960,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1961,
+      "strong_degree_counts": {
+        "1": 40,
+        "2": 575,
+        "3": 3960
+      },
+      "strong_edges": 6535
+    },
+    "bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20": {
+      "coupling_rms_milli": 389.48665152265113,
+      "fundamental_frustrated_cycles": 991,
+      "fundamental_frustrated_fraction": 0.504582484725051,
+      "matching_counts": [
+        {
+          "edges": 2185,
+          "index": 0,
+          "internal_edges": 1690,
+          "same_orientation_edges": 495
+        },
+        {
+          "edges": 2177,
+          "index": 1,
+          "internal_edges": 1729,
+          "same_orientation_edges": 448
+        },
+        {
+          "edges": 2175,
+          "index": 2,
+          "internal_edges": 1732,
+          "same_orientation_edges": 443
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 156,
+      "model_hash": "b940a8fcfbc72a71144fb8a31f1e911a5b1fc2eb36535ec615f75ece89ad41e7",
+      "series_reduced_spins": 3904,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3957,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4573,
+        2
+      ],
+      "strong_cycle_rank": 1964,
+      "strong_degree_counts": {
+        "1": 33,
+        "2": 585,
+        "3": 3957
+      },
+      "strong_edges": 6537
+    },
+    "f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862": {
+      "coupling_rms_milli": 389.79932592425865,
+      "fundamental_frustrated_cycles": 978,
+      "fundamental_frustrated_fraction": 0.4969512195121951,
+      "matching_counts": [
+        {
+          "edges": 2186,
+          "index": 0,
+          "internal_edges": 1733,
+          "same_orientation_edges": 453
+        },
+        {
+          "edges": 2175,
+          "index": 1,
+          "internal_edges": 1748,
+          "same_orientation_edges": 427
+        },
+        {
+          "edges": 2181,
+          "index": 2,
+          "internal_edges": 1725,
+          "same_orientation_edges": 456
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 134,
+      "model_hash": "fd41a3ee2d88d22271c85784a5afd960046a9355231702ca5e890f7eda44e0de",
+      "series_reduced_spins": 3926,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3958,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1968,
+      "strong_degree_counts": {
+        "1": 24,
+        "2": 593,
+        "3": 3958
+      },
+      "strong_edges": 6542
+    },
+    "6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37": {
+      "coupling_rms_milli": 389.9808192077582,
+      "fundamental_frustrated_cycles": 1001,
+      "fundamental_frustrated_fraction": 0.5055555555555555,
+      "matching_counts": [
+        {
+          "edges": 2184,
+          "index": 0,
+          "internal_edges": 1743,
+          "same_orientation_edges": 441
+        },
+        {
+          "edges": 2192,
+          "index": 1,
+          "internal_edges": 1747,
+          "same_orientation_edges": 445
+        },
+        {
+          "edges": 2178,
+          "index": 2,
+          "internal_edges": 1757,
+          "same_orientation_edges": 421
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 157,
+      "model_hash": "70a11958cae9dc4d8498d6772cc5d53e88f99cf50f012e026b9b44a681d5fcc3",
+      "series_reduced_spins": 3942,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3981,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1980,
+      "strong_degree_counts": {
+        "1": 23,
+        "2": 571,
+        "3": 3981
+      },
+      "strong_edges": 6554
+    },
+    "3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2": {
+      "coupling_rms_milli": 389.7460431550123,
+      "fundamental_frustrated_cycles": 949,
+      "fundamental_frustrated_fraction": 0.48221544715447157,
+      "matching_counts": [
+        {
+          "edges": 2194,
+          "index": 0,
+          "internal_edges": 1768,
+          "same_orientation_edges": 426
+        },
+        {
+          "edges": 2177,
+          "index": 1,
+          "internal_edges": 1731,
+          "same_orientation_edges": 446
+        },
+        {
+          "edges": 2171,
+          "index": 2,
+          "internal_edges": 1729,
+          "same_orientation_edges": 442
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 130,
+      "model_hash": "e519ed6bd24ef59b5e8d49e6bf9bda6c231268f0b905ce1c51a2287524ed22c7",
+      "series_reduced_spins": 3914,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3966,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1968,
+      "strong_degree_counts": {
+        "1": 32,
+        "2": 577,
+        "3": 3966
+      },
+      "strong_edges": 6542
+    },
+    "6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a": {
+      "coupling_rms_milli": 389.6132253915537,
+      "fundamental_frustrated_cycles": 1003,
+      "fundamental_frustrated_fraction": 0.5073343449671219,
+      "matching_counts": [
+        {
+          "edges": 2188,
+          "index": 0,
+          "internal_edges": 1724,
+          "same_orientation_edges": 464
+        },
+        {
+          "edges": 2181,
+          "index": 1,
+          "internal_edges": 1736,
+          "same_orientation_edges": 445
+        },
+        {
+          "edges": 2181,
+          "index": 2,
+          "internal_edges": 1731,
+          "same_orientation_edges": 450
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 153,
+      "model_hash": "80b4f54ec308ffb5d6299f9335097869c04616cb9b56f51f7f48e9029fcee84d",
+      "series_reduced_spins": 3942,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3977,
+      "strong_active_spins": 4574,
+      "strong_component_sizes": [
+        4574,
+        1
+      ],
+      "strong_cycle_rank": 1977,
+      "strong_degree_counts": {
+        "0": 1,
+        "1": 25,
+        "2": 572,
+        "3": 3977
+      },
+      "strong_edges": 6550
+    },
+    "f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1": {
+      "coupling_rms_milli": 390.0238582402676,
+      "fundamental_frustrated_cycles": 1007,
+      "fundamental_frustrated_fraction": 0.509873417721519,
+      "matching_counts": [
+        {
+          "edges": 2191,
+          "index": 0,
+          "internal_edges": 1748,
+          "same_orientation_edges": 443
+        },
+        {
+          "edges": 2175,
+          "index": 1,
+          "internal_edges": 1725,
+          "same_orientation_edges": 450
+        },
+        {
+          "edges": 2183,
+          "index": 2,
+          "internal_edges": 1716,
+          "same_orientation_edges": 467
+        }
+      ],
+      "min_degree_treewidth_upper_bound": 129,
+      "model_hash": "4dda2a0d33ae22cb3158968bcb0d46e71db0b23610b56e2afff0301fd5ba4f4d",
+      "series_reduced_spins": 3938,
+      "smallest_magnitude_milli": 167,
+      "star_blocks": 3973,
+      "strong_active_spins": 4575,
+      "strong_component_sizes": [
+        4575
+      ],
+      "strong_cycle_rank": 1975,
+      "strong_degree_counts": {
+        "1": 25,
+        "2": 577,
+        "3": 3973
+      },
+      "strong_edges": 6549
+    }
+  }
+}

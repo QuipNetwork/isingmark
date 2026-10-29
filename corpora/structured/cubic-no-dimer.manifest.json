@@ -1,0 +1,213 @@
+{
+  "family": "cubic-no-dimer",
+  "code": "F16",
+  "tier": 1,
+  "params": {},
+  "nonce_rule": "make_nonces(24, 20260920)",
+  "nonces": [
+    "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+    "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+    "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+    "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+    "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+    "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+    "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+    "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+    "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+    "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+    "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+    "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+    "4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef",
+    "8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0",
+    "c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c",
+    "13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0",
+    "08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c",
+    "be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30",
+    "bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20",
+    "f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862",
+    "6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37",
+    "3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2",
+    "6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a",
+    "f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1"
+  ],
+  "generator": "tools/structured",
+  "port_module": "isingmark_structured/families/cubic_no_dimer.py",
+  "port_sha256": "d84b3da57e29040205f645f17c788fb657a93214e6abbf04320c6de10c9ea00c",
+  "suite_source": "qpu-suite/work/cubic.py",
+  "exact": true,
+  "topology_fixture": "chain-h0",
+  "topology_hash": "e66d3dfa3c9c6afb15efe29891cf9412498d94692ab5956af3ad98ba3693a02d",
+  "suite_topology_sha256": "65ef58bdfff7ecebadf041e77f2c8ae4b12763fa76190f7cd507a14145e747be",
+  "verdict": "provisional",
+  "suite_generator_sha256": "f3bafe262fd12cc8775a7eded041527f6d1fc16b0bcd40d7876638bcdb5b26de",
+  "census": {
+    "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f": {
+      "fundamental_frustrated_cycles": 931,
+      "fundamental_frustrated_fraction": 0.5068045726728362,
+      "model_hash": "a301bbfd770d42b50ec892d8da6c7aeb5f4c334a32c3056ee906f53c90fb45b2",
+      "negative_intra_pair_bonds": 514,
+      "positive_intra_pair_bonds": 538
+    },
+    "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f": {
+      "fundamental_frustrated_cycles": 926,
+      "fundamental_frustrated_fraction": 0.5040827436037016,
+      "model_hash": "36668cbc7e8088b51b43f29f88185acdf44855bfd584ce8318334dd31c29e47e",
+      "negative_intra_pair_bonds": 505,
+      "positive_intra_pair_bonds": 547
+    },
+    "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e": {
+      "fundamental_frustrated_cycles": 947,
+      "fundamental_frustrated_fraction": 0.5155144256940664,
+      "model_hash": "9dd290a093a078a74d76eef995a2e5bf3309945d120a83ee61c68300e929a3c6",
+      "negative_intra_pair_bonds": 509,
+      "positive_intra_pair_bonds": 543
+    },
+    "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb": {
+      "fundamental_frustrated_cycles": 901,
+      "fundamental_frustrated_fraction": 0.4904735982580294,
+      "model_hash": "1de9990cf9ee1480b2a74c270c0ddd1f83185f822deb941d5c4d9925588a1072",
+      "negative_intra_pair_bonds": 532,
+      "positive_intra_pair_bonds": 520
+    },
+    "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df": {
+      "fundamental_frustrated_cycles": 940,
+      "fundamental_frustrated_fraction": 0.5117038649972782,
+      "model_hash": "e6cc89f3cf10b79c2eb4a1fdce2eaaceb22d5fceabe5e294481e182ae2dd0166",
+      "negative_intra_pair_bonds": 565,
+      "positive_intra_pair_bonds": 487
+    },
+    "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476": {
+      "fundamental_frustrated_cycles": 906,
+      "fundamental_frustrated_fraction": 0.49319542732716387,
+      "model_hash": "5230b95d4158453daaa8e633f710af4c3ebc729048185e19f80c9f12e80ef634",
+      "negative_intra_pair_bonds": 501,
+      "positive_intra_pair_bonds": 551
+    },
+    "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18": {
+      "fundamental_frustrated_cycles": 884,
+      "fundamental_frustrated_fraction": 0.4812193794229722,
+      "model_hash": "c644b76dac65f9da258177d4fcc15266981918429dc14e0aeef1a9211ec348f7",
+      "negative_intra_pair_bonds": 528,
+      "positive_intra_pair_bonds": 524
+    },
+    "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c": {
+      "fundamental_frustrated_cycles": 890,
+      "fundamental_frustrated_fraction": 0.4844855743059336,
+      "model_hash": "004a47a44eb47d74a7a344e47f8be2c154b164c5944bd019b5df080f538a0931",
+      "negative_intra_pair_bonds": 518,
+      "positive_intra_pair_bonds": 534
+    },
+    "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0": {
+      "fundamental_frustrated_cycles": 938,
+      "fundamental_frustrated_fraction": 0.5106151333696244,
+      "model_hash": "1c6cce1a7fbb2b929c3c7a40118274b5de2c1191c7ac321b595698fdf65548fd",
+      "negative_intra_pair_bonds": 503,
+      "positive_intra_pair_bonds": 549
+    },
+    "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457": {
+      "fundamental_frustrated_cycles": 905,
+      "fundamental_frustrated_fraction": 0.492651061513337,
+      "model_hash": "6bd04f5148a5d36247ec3c30353e5b25772a073a5ddc3921789e25458ec37a1d",
+      "negative_intra_pair_bonds": 547,
+      "positive_intra_pair_bonds": 505
+    },
+    "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0": {
+      "fundamental_frustrated_cycles": 910,
+      "fundamental_frustrated_fraction": 0.4953728905824714,
+      "model_hash": "242a10158b13226dbedd359c66275c79380cd7db37bfd23426de43f4ae3ed346",
+      "negative_intra_pair_bonds": 535,
+      "positive_intra_pair_bonds": 517
+    },
+    "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421": {
+      "fundamental_frustrated_cycles": 881,
+      "fundamental_frustrated_fraction": 0.47958628198149156,
+      "model_hash": "0bda4fd55c69fdd9d81728f5f5cb471e7bc3109bd6567c8d0dae9fecb5a811a9",
+      "negative_intra_pair_bonds": 536,
+      "positive_intra_pair_bonds": 516
+    },
+    "4d2132f72ea2a4a2ae8b7a984eff12aa8a7b9f5a7c063d176cfae724bf94c1ef": {
+      "fundamental_frustrated_cycles": 922,
+      "fundamental_frustrated_fraction": 0.5019052803483941,
+      "model_hash": "330fcc5a3c4929bf12851ccf0385bc65dd831129487f4d9dde53bacb8e914158",
+      "negative_intra_pair_bonds": 521,
+      "positive_intra_pair_bonds": 531
+    },
+    "8d5b9446eb9bcb1866adbd53a9bef245be2c7142bb74e82937cdfe6ca2056ef0": {
+      "fundamental_frustrated_cycles": 906,
+      "fundamental_frustrated_fraction": 0.49319542732716387,
+      "model_hash": "01a1dbad17c6f53d13d667f96d1b9d0202a08641cdc4ccf74339c873482369f5",
+      "negative_intra_pair_bonds": 507,
+      "positive_intra_pair_bonds": 545
+    },
+    "c0c20e7e0828742113e62741b532fd6e022f1a3a3f5fdc975a8eee1728974c7c": {
+      "fundamental_frustrated_cycles": 923,
+      "fundamental_frustrated_fraction": 0.502449646162221,
+      "model_hash": "aaf69cc4654c540c6084767b214d38f00da9e6552a1455a1c6516d59337e48c8",
+      "negative_intra_pair_bonds": 538,
+      "positive_intra_pair_bonds": 514
+    },
+    "13d674b7311791f0f6541dcfad2d9b2bafa8495d3afb99e7cd0d1de948becdd0": {
+      "fundamental_frustrated_cycles": 922,
+      "fundamental_frustrated_fraction": 0.5019052803483941,
+      "model_hash": "02c686b2b477f2adf967b6a55c03c54a006235ea74780ead86bc20d2a9638679",
+      "negative_intra_pair_bonds": 533,
+      "positive_intra_pair_bonds": 519
+    },
+    "08fa19668ebb05d24a69695d5068a2777d129d3eea63d2c177829b710b72d36c": {
+      "fundamental_frustrated_cycles": 953,
+      "fundamental_frustrated_fraction": 0.5187806205770278,
+      "model_hash": "a244b46109135cb13fb4c3c16a3eb57cc5cbfa77938af0255c2f4197ef61c9c4",
+      "negative_intra_pair_bonds": 502,
+      "positive_intra_pair_bonds": 550
+    },
+    "be82fa02e8da4e088ec25108087ff2b9bda8f890aceccca9137d1bad1a37ac30": {
+      "fundamental_frustrated_cycles": 913,
+      "fundamental_frustrated_fraction": 0.49700598802395207,
+      "model_hash": "7d16f504bdadbbf1da19b8d2b97510496d5a8e2317bc7caa68dbb36c3ce898f5",
+      "negative_intra_pair_bonds": 534,
+      "positive_intra_pair_bonds": 518
+    },
+    "bb4014019debbe119ce7734219b60d91dc88916538902ed2fa88ae03ef376b20": {
+      "fundamental_frustrated_cycles": 897,
+      "fundamental_frustrated_fraction": 0.48829613500272184,
+      "model_hash": "82581d9131c9eed4409514c9ad7d81dd52cd6c888f7e2a50b6081f9ed6d9af23",
+      "negative_intra_pair_bonds": 518,
+      "positive_intra_pair_bonds": 534
+    },
+    "f35ddce9dad85fd4c64f513d02cd91398f706537bfae8275dec16676bd6dd862": {
+      "fundamental_frustrated_cycles": 916,
+      "fundamental_frustrated_fraction": 0.4986390854654328,
+      "model_hash": "4b5d947f1a8c38e101d191392b18de642ad7a69c4769acbaaba2e0116344c0dc",
+      "negative_intra_pair_bonds": 513,
+      "positive_intra_pair_bonds": 539
+    },
+    "6e61a66a2ffa01da34c303259371519c435e771c755bf7f135320c71210b8d37": {
+      "fundamental_frustrated_cycles": 906,
+      "fundamental_frustrated_fraction": 0.49319542732716387,
+      "model_hash": "2d614de404fd1cbf1e6f8a997978b0fb08d098aaeec3526cf6c4f938b1447853",
+      "negative_intra_pair_bonds": 550,
+      "positive_intra_pair_bonds": 502
+    },
+    "3c54acbbdf96b04d72d0aab94f62601029c49f0cd9dd31db079c0d4d0f6da6f2": {
+      "fundamental_frustrated_cycles": 913,
+      "fundamental_frustrated_fraction": 0.49700598802395207,
+      "model_hash": "64339dae8c1119115e7f7b589e359e2528f77c827a4f68222e8c39ac7bdc8134",
+      "negative_intra_pair_bonds": 533,
+      "positive_intra_pair_bonds": 519
+    },
+    "6ae749868fa9094dda843d15ab7193f93a068fbe792011f599da4cc644494e8a": {
+      "fundamental_frustrated_cycles": 916,
+      "fundamental_frustrated_fraction": 0.4986390854654328,
+      "model_hash": "d6cb2774fa4bf3134013a88c71d815e520d178217c69aa717d15dc658029d562",
+      "negative_intra_pair_bonds": 527,
+      "positive_intra_pair_bonds": 525
+    },
+    "f33d72f98e8dc0ab59b61b1bb02912b5533ba081ce87bb6ddef488d7de8a2fd1": {
+      "fundamental_frustrated_cycles": 904,
+      "fundamental_frustrated_fraction": 0.49210669569951004,
+      "model_hash": "1b7c23fbaac0e8e1d14a6f82da059e0d4a2a4a5ef341d6f8d809ef6ddd309c73",
+      "negative_intra_pair_bonds": 524,
+      "positive_intra_pair_bonds": 528
+    }
+  }
+}

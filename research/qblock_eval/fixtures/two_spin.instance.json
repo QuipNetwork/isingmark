@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "instance_id": "two-spin",
+  "family": "ising-fixed",
+  "model_version": "1",
+  "challenge_id": "fixed-control",
+  "nonce": "0000000000000000",
+  "split": "training",
+  "physical": {
+    "variables": ["s0", "s1"],
+    "h": [0, 0],
+    "j": [-1000],
+    "edges": [[0, 1]],
+    "units": "milli",
+    "offset": 0,
+    "auxiliaries": [],
+    "precision_bound": 0.0,
+    "exact": true
+  },
+  "search_space": {},
+  "objective": {"max_energy_milli": 1000},
+  "constraints": {},
+  "hardness": {},
+  "source_hashes": {}
+}

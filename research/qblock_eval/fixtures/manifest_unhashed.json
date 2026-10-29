@@ -1,0 +1,13 @@
+{
+  "sources": [
+    {
+      "id": "unhashed",
+      "url": "https://example.com/source",
+      "revision_utc": "2026-10-28T00:00:00Z",
+      "export_sha256": "1819ce9b53d529c7f9df50478c1c803e41e8942731485eed0e2edd3878eb1814",
+      "retrieved_at": "2026-10-28T00:00:00Z",
+      "reproduced": true,
+      "input_hashes": []
+    }
+  ]
+}

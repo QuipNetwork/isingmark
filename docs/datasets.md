@@ -14,6 +14,9 @@ isingmark throughput --backend cpu-sa \
 `sweep` accepts the same flag. Every cell reloads the corpus from the start,
 so all cells measure the identical instances and a corpus caps `--num-jobs`.
 
+Explicit-coefficient instances, such as the structured families of the QPU
+suite, replay through `--instances` instead. See `docs/structured-datasets.md`.
+
 ## What ships
 
 | Corpus | Instances | Paired topology | Nodes | Edges | `allowed_h_milli` |

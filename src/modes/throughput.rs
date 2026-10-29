@@ -23,8 +23,7 @@ use std::time::Duration;
 use quip_proto::v1::SetTarget;
 
 use crate::backend::{builtin_registry, run_session, BackendSpec, RunParams, RunReport};
-use crate::corpus::CorpusSource;
-use crate::modes::{hex_encode, JobSource, ModeError, ParseError, TopologyRef};
+use crate::modes::{hex_encode, load_finite_source, JobSource, ModeError, ParseError, TopologyRef};
 use crate::params::{JobParams, ParamCurve};
 use crate::problem::ProblemSource;
 use crate::record::{
@@ -89,8 +88,8 @@ pub struct ThroughputConfig {
     /// How long to keep dispatching jobs, in seconds.
     pub duration_s: f64,
     /// Seed for deterministic problem generation. Ignored when
-    /// [`Self::corpus`] is set, because a corpus names its problems rather
-    /// than deriving them.
+    /// [`Self::corpus`] or [`Self::instances`] is set, because those name
+    /// their problems rather than deriving them.
     pub seed: u64,
     /// Replay a corpus of chain-harvested instances instead of deriving
     /// problems from [`Self::seed`].
@@ -102,6 +101,15 @@ pub struct ThroughputConfig {
     /// A corpus is finite. [`Self::duration_s`] becomes an upper bound: the
     /// run ends at whichever comes first, the duration or the last instance.
     pub corpus: Option<String>,
+    /// Replay explicit instances from a JSONL file instead of deriving
+    /// problems from [`Self::seed`]. Mutually exclusive with
+    /// [`Self::corpus`]; setting both fails with
+    /// [`ModeError::ConflictingSources`].
+    ///
+    /// The file's header must carry the `topology_hash` of the run's
+    /// topology, or loading fails (see [`crate::instances`]). Like a corpus,
+    /// the file is finite and [`Self::duration_s`] becomes an upper bound.
+    pub instances: Option<PathBuf>,
     /// Directory to write [`RECORDS_FILENAME`]/[`SUMMARY_FILENAME`] to.
     /// Created if it does not already exist. Refuses to start (see
     /// [`ModeError::RecordsFileExists`]) if [`RECORDS_FILENAME`] inside it
@@ -212,24 +220,25 @@ pub async fn run_throughput_with_summary(
     Ok((report, summary))
 }
 
-/// Build this run's job source: a corpus replay when `cfg.corpus` is set,
-/// and otherwise problems derived from `cfg.seed`.
+/// Build this run's job source: a corpus replay when `cfg.corpus` is set, an
+/// instance-file replay when `cfg.instances` is set, and otherwise problems
+/// derived from `cfg.seed`.
 ///
 /// The derived source is built with `u32::MAX` jobs, which at this mode's
 /// batch size is effectively endless — the run ends on the duration, not on
-/// running out of problems. A corpus is finite by nature; see
+/// running out of problems. A corpus or instance file is finite by nature; see
 /// [`ThroughputConfig::corpus`].
 fn build_source(cfg: &ThroughputConfig, spec: &TopologySpec) -> Result<JobSource, ModeError> {
-    match &cfg.corpus {
-        Some(name) => Ok(JobSource::Corpus(Box::new(CorpusSource::load(name, spec)?))),
-        None => Ok(JobSource::Derived(Box::new(ProblemSource::new(
+    let finite = load_finite_source(cfg.corpus.as_deref(), cfg.instances.as_deref(), spec)?;
+    Ok(finite.unwrap_or_else(|| {
+        JobSource::Derived(Box::new(ProblemSource::new(
             spec,
             MINER_ACCOUNT,
             cfg.seed,
             u32::MAX,
             NO_DEADLINE_MS,
-        )))),
-    }
+        )))
+    }))
 }
 
 /// Resolve `cfg.backend` against the built-in registry, applying
@@ -336,9 +345,9 @@ async fn dispatch_until_duration(
         }
         if batch.is_empty() {
             // A derived source is built with `count: u32::MAX`, so it never
-            // reaches this. A corpus does: it is finite, and the run ends
-            // here when its last instance has been dispatched, before the
-            // requested duration elapses.
+            // reaches this. A corpus or instance file does: it is finite,
+            // and the run ends here when its last instance has been
+            // dispatched, before the requested duration elapses.
             break;
         }
 
@@ -411,9 +420,11 @@ fn build_summary(
         "measured_wall_ms": agg.total_wall_ms,
         "seed": cfg.seed,
         // Which problems this run actually saw. `corpus` is null for a
-        // seed-derived run; when it is set, `seed` above did not apply and
-        // `corpus_instances` is the corpus size, which bounds the job count
-        // independently of `duration_s`.
+        // seed-derived run and for an instance-file run; when either source
+        // is set, `seed` above did not apply and `corpus_instances` is the
+        // source's size (corpus lines or instance lines), which bounds the
+        // job count independently of `duration_s`. An instance-file run
+        // reports `job_source` as `"instances:<path>"`.
         "corpus": cfg.corpus.clone(),
         "job_source": source_label,
         "corpus_instances": source_instances,
