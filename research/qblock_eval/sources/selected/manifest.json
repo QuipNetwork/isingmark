@@ -226,7 +226,41 @@
         "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
         "redistribution": "granted"
       },
-      "notes": "Dependency of dimer_weighted.rs. Only validate_common is used (input checks before sampling). It also references sa_msc_f64, which is not imported (see import map)."
+      "notes": "Dependency of dimer_weighted.rs. Only validate_common is used (input checks before sampling). It caps the graph at DEFAULT_MAX_NODES = 100000 and DEFAULT_MAX_EDGES = 1000000, both defined in src/lib.rs (not imported), and uses MAX_READS and check_beta from sa_msc_f64.rs."
+    },
+    {
+      "id": "cpu-sa-msc-f64",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_msc_f64.rs",
+      "kind": "solver",
+      "bytes": 38416,
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "functions": [
+        {
+          "name": "MAX_READS",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "MAX_BETA",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "check_beta",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "energy_f64",
+          "ticket": "CPU-2"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng (xoshiro256++), seeded per read through read_rng in src/sa_sampler.rs",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Dependency of research.rs and dimer_weighted.rs. MAX_READS (4096), MAX_BETA (1e100), and check_beta bound the inputs in validate_common. energy_f64 is the parity oracle used by the dimer_weighted and dimer_research tests."
     },
     {
       "id": "cpu-sa-msc",
@@ -371,6 +405,32 @@
       "notes": "Otsuka cluster anneal for the ice-twisted pair cells, newest base (CSR adjacency, incremental boundary sums, init_hex warm start). Also the CUDA cluster kernel reference (CU-1)."
     },
     {
+      "id": "cpu-strips",
+      "origin": "new-pow/diversity/solvers/fast_bench/examples/cluster/strips.rs",
+      "kind": "solver",
+      "bytes": 15517,
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "functions": [
+        {
+          "name": "StripTopology::new",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "StripTopology::sweep",
+          "ticket": "CPU-3"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng (xoshiro256++), seeded per read through read_rng in src/sa_sampler.rs",
+        "matching_library": null,
+        "topology": "ice-twisted pair cell (Otsuka tile bonds with -1000 milli pair bonds)",
+        "postprocess": "exact strip polish",
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Exact strip polish used by fast_bench.rs (mod strips, solve builds StripTopology). Identical in every tree."
+    },
+    {
       "id": "cpu-fast-bench",
       "origin": "new-pow/diversity/solvers/fast_bench/examples/fast_bench.rs",
       "kind": "solver",
@@ -414,7 +474,7 @@
         "license": "AGPL-3.0-or-later, declared in new-pow/diversity/solvers/fast_bench/Cargo.toml (byte-identical to new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml)",
         "redistribution": "granted"
       },
-      "notes": "Tailored Otsuka cluster anneal, same move set as pair_bench in soft pair mode. Needs examples/cluster/strips.rs, which is not imported. Exchange::step (replica population resampling) is a follow-up of CPU-3 and a reference for CU-2."
+      "notes": "Tailored Otsuka cluster anneal, same move set as pair_bench in soft pair mode. Needs examples/cluster/strips.rs, which is imported as cpu-strips. Exchange::step (replica population resampling) is a follow-up of CPU-3 and a reference for CU-2."
     },
     {
       "id": "f17-generate2",
@@ -423,6 +483,10 @@
       "bytes": 8556,
       "blake3": "68e14ee41faa5edc085efc75267b8ad4fad1c94459e8d3b208dfcfebde7f34d8",
       "functions": [
+        {
+          "name": "VARIANTS",
+          "ticket": "SC-9"
+        },
         {
           "name": "add_dimers",
           "ticket": "SC-9"
@@ -437,14 +501,14 @@
         }
       ],
       "provenance": {
-        "rng": "NumPy default_rng(int.from_bytes(sha256(b'dimer' + nonce).digest()[:8], 'little')), one permutation of weak edge indices",
+        "rng": "NumPy default_rng(int.from_bytes(sha256(b'dimer' + nonce).digest()[:8], 'little')), tag 'dimer': rng_for(nonce, tag) = default_rng(int.from_bytes(sha256(tag.encode() + bytes.fromhex(nonce)).digest()[:8], 'little')), one permutation of weak edge indices",
         "matching_library": "none (greedy walk over a NumPy permutation)",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
         "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
         "redistribution": "unrecorded"
       },
-      "notes": "Dimer pair placement and weak-layer rescale for the three twisted-ice dimer recipes. Step order matters: add_dimers before rescale_weak. The docstring claims pairs avoid tetrahedron bonds; the code only filters on |J| == 125."
+      "notes": "Dimer pair placement and weak-layer rescale for the three twisted-ice dimer recipes. Step order matters: add_dimers before rescale_weak. VARIANTS defines the three dimer recipes (w62-dimer1200 at line 165, built as rescale_weak(add_dimers(m, n, 1200), 62)) next to other variants. The docstring claims pairs avoid tetrahedron bonds; the code only filters on |J| == 125."
     },
     {
       "id": "f17-wave-run",
@@ -456,17 +520,21 @@
         {
           "name": "build",
           "ticket": "SC-9"
+        },
+        {
+          "name": "set_pair_strength",
+          "ticket": "SC-9"
         }
       ],
       "provenance": {
-        "rng": "as generate2.py",
+        "rng": "as generate2.py (set_pair_strength draws nothing)",
         "matching_library": "none",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
         "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
         "redistribution": "unrecorded"
       },
-      "notes": "Builds the dimer1350 and w45-dimer1200 cells from CLI pairs and weak values. set_pair_strength is not used at pair_milli -1000."
+      "notes": "Builds the dimer1350 and w45-dimer1200 cells from CLI pairs and weak values. set_pair_strength sets the J of every pair (or loop) edge and is called by gen100.py wave whenever pair_milli != -1000, for example ice-twisted-w62-dimer1200-p500 at -500. The three main recipes keep -1000."
     },
     {
       "id": "newpow-gen100",
@@ -535,7 +603,7 @@
         }
       ],
       "provenance": {
-        "rng": "NumPy default_rng(sha256(nonce + cell tag)[:8] little-endian)",
+        "rng": "rng_for(nonce, cell) = NumPy default_rng(int.from_bytes(sha256(cell.encode() + bytes.fromhex(nonce)).digest()[:8], 'little')), as generate3.py lines 61-63",
         "matching_library": "none",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
@@ -561,7 +629,7 @@
         }
       ],
       "provenance": {
-        "rng": "NumPy default_rng seeded from sha256 of the nonce; weak-layer signs from quip_msa.draw_ising (production protocol stream)",
+        "rng": "NumPy default_rng(int.from_bytes(sha256(bytes.fromhex(nonce)).digest(), 'big')) for tiles and gauges (ice.py); weak-layer signs from quip_msa.draw_ising (production protocol stream)",
         "matching_library": "scipy.sparse.csgraph.maximum_bipartite_matching (tile matching)",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
@@ -583,7 +651,7 @@
         }
       ],
       "provenance": {
-        "rng": "NumPy default_rng seeded from sha256 of the nonce; weak-layer signs from quip_msa.draw_ising (production protocol stream)",
+        "rng": "NumPy default_rng(int.from_bytes(sha256(bytes.fromhex(nonce)).digest(), 'big')) for tiles and gauges (ice.py); weak-layer signs from quip_msa.draw_ising (production protocol stream)",
         "matching_library": "scipy.sparse.csgraph.maximum_bipartite_matching (tile matching)",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
@@ -609,7 +677,7 @@
         }
       ],
       "provenance": {
-        "rng": "NumPy default_rng seeded from sha256 of the nonce; weak-layer signs from quip_msa.draw_ising (production protocol stream); field magnitudes from sha256(nonce + b'ice-fields-v1')",
+        "rng": "NumPy default_rng(int.from_bytes(sha256(bytes.fromhex(nonce)).digest(), 'big')) for tiles and gauges (ice.py); weak-layer signs from quip_msa.draw_ising (production protocol stream); field magnitudes from sha256(nonce + b'ice-fields-v1')",
         "matching_library": "scipy.sparse.csgraph.maximum_bipartite_matching (tile matching)",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
@@ -1048,6 +1116,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/diversity/solvers/fast_bench/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1061,6 +1134,11 @@
       "origin": "new-pow/ice-stack-2/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-stack-2/cpu/examples/pair_bench.rs",
@@ -1108,6 +1186,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/ice-stack-2/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/ice-stack-2/cpu/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1121,6 +1204,11 @@
       "origin": "new-pow/ice-twisted-dimer/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-twisted-dimer/cpu/src/coloring.rs",
@@ -1163,6 +1251,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/ice-twisted-dimer/cpu/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1176,6 +1269,11 @@
       "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/coloring.rs",
@@ -1218,6 +1316,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1231,6 +1334,11 @@
       "origin": "new-pow/ice-twisted-w62-dimer/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/coloring.rs",
@@ -1273,6 +1381,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1286,6 +1399,11 @@
       "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/coloring.rs",
@@ -1328,6 +1446,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1341,6 +1464,11 @@
       "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/coloring.rs",
@@ -1383,6 +1511,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1396,6 +1529,11 @@
       "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/coloring.rs",
@@ -1438,6 +1576,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1451,6 +1594,11 @@
       "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/coloring.rs",
@@ -1493,6 +1641,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1506,6 +1659,11 @@
       "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/coloring.rs",
@@ -1548,6 +1706,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1558,9 +1721,19 @@
       "same_as": "cpu-sampler-core"
     },
     {
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
       "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/coloring.rs",
@@ -1603,6 +1776,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1616,6 +1794,11 @@
       "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/coloring.rs",
@@ -1658,6 +1841,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1671,6 +1859,11 @@
       "origin": "new-pow/ice-twisted-w90-dimer/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/coloring.rs",
@@ -1713,6 +1906,11 @@
       "same_as": "cpu-sa-msc"
     },
     {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
       "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/sa_sampler.rs",
       "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
       "same_as": "cpu-sa-sampler"
@@ -1726,6 +1924,11 @@
       "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/Cargo.toml",
       "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
       "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
     },
     {
       "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/coloring.rs",
@@ -1766,6 +1969,11 @@
       "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/sa_msc.rs",
       "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
       "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
     },
     {
       "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/sa_sampler.rs",
@@ -1893,6 +2101,11 @@
       "same_as": "cpu-cargo-toml"
     },
     {
+      "origin": "qpu-f17/adversary/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
       "origin": "qpu-f17/adversary/cpu/src/coloring.rs",
       "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
       "same_as": "cpu-coloring"
@@ -1931,6 +2144,11 @@
       "origin": "qpu-f17/adversary/cpu/src/sa_msc.rs",
       "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
       "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
     },
     {
       "origin": "qpu-f17/adversary/cpu/src/sa_sampler.rs",
@@ -2127,10 +2345,6 @@
     {
       "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/",
       "reason": "all other kernels, src/bin, and tests of the representative tree; every src and tests file is byte-identical across the 15 trees"
-    },
-    {
-      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/examples/cluster/strips.rs",
-      "reason": "needed by fast_bench.rs (mod strips); identical in every tree and outside the selected set"
     },
     {
       "origin": "new-pow/diversity/solvers/*/",

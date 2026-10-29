@@ -6,10 +6,10 @@ This document records which research sources the repository now holds. It maps e
 `/home/carback1/quip-data/regimes`. It is read-only and is not a git repository. All
 origins below are relative to it.
 
-The repository holds 37 imported files (1729705 bytes) under
+The repository holds 39 imported files (1783638 bytes) under
 `research/qblock_eval/sources/selected/<origin>`. The manifest
 `research/qblock_eval/sources/selected/manifest.json` lists each file with its size and blake3
-digest. It also lists 188 byte-identical duplicates, 49 retained evidence entries,
+digest. It also lists 218 byte-identical duplicates, 48 retained evidence entries,
 and the skipped checks.
 
 Imported kinds: solver, generator, postprocess, build, script, target-manifest, and topology.
@@ -23,16 +23,17 @@ that each duplicate matches its source. A changed byte fails the test.
 
 ## Function to ticket map
 
-Each imported function appears once and maps to exactly one ticket. The 85 entries
-split by ticket as follows: CPU-1 9, CPU-2 23, CPU-3 13, CPU-7 8, CPU-8 7, CPU-9 6, EXP-2 1, IM-2 2, IM-3 2, SC-8 3, SC-9 5, SC-10 5, SC-11 1. Files of kind build, script, target-manifest, and topology
+Each imported function appears once and maps to exactly one ticket. The 93 entries
+split by ticket as follows: CPU-1 9, CPU-2 27, CPU-3 15, CPU-7 8, CPU-8 7, CPU-9 6, EXP-2 1, IM-2 2, IM-3 2, SC-8 3, SC-9 7, SC-10 5, SC-11 1. Files of kind build, script, target-manifest, and topology
 have no functions.
 
 Ticket reasoning:
 
 - CPU-1 reconciles the shared SA core. The `sa_msc`, `sa_sampler`, `sampler_core`, and `coloring` entries, and the `clusters` and `unit_encoding` helpers, belong to it.
-- CPU-2 ports the weighted dimer sampler. `validate_common` goes here because only the dimer sampler calls it in this closure.
+- CPU-2 ports the weighted dimer sampler. `validate_common`, `MAX_READS`, `MAX_BETA`, `check_beta`, and `energy_f64` go here. The first four bound the inputs of the sampler. `energy_f64` is the parity oracle in the tests.
 - CPU-3 ports the Otsuka cluster update and its graph preparation. CPU-4 exposes it as a binary, so no function maps to CPU-4.
 - `Exchange::step` maps to CPU-3. It is also a reference for CU-2. The `pair_bench` kernels are also a reference for CU-1.
+- `VARIANTS` and `set_pair_strength` map to SC-9. `VARIANTS` defines the dimer recipes and `set_pair_strength` sets the pair bond strength of the p500 recipe.
 - SC-8 to SC-11 are the generator tickets. IM-2 and IM-3 are the archive loader and parity gate. CPU-7 to CPU-9 are the postprocess ports. `validate_baseline` maps to EXP-2 because it checks frozen fixtures.
 
 | Function | Source id | Ticket |
@@ -62,6 +63,10 @@ Ticket reasoning:
 | `clusters` | `cpu-dimer-research` | CPU-1 |
 | `unit_encoding` | `cpu-dimer-research` | CPU-1 |
 | `validate_common` | `cpu-research` | CPU-2 |
+| `MAX_READS` | `cpu-sa-msc-f64` | CPU-2 |
+| `MAX_BETA` | `cpu-sa-msc-f64` | CPU-2 |
+| `check_beta` | `cpu-sa-msc-f64` | CPU-2 |
+| `energy_f64` | `cpu-sa-msc-f64` | CPU-2 |
 | `MscState` | `cpu-sa-msc` | CPU-1 |
 | `LANES` | `cpu-sa-msc` | CPU-1 |
 | `read_rng` | `cpu-sa-sampler` | CPU-1 |
@@ -75,6 +80,8 @@ Ticket reasoning:
 | `unit_sweep` | `cpu-pair-bench` | CPU-3 |
 | `single_sweep` | `cpu-pair-bench` | CPU-3 |
 | `houdayer` | `cpu-pair-bench` | CPU-3 |
+| `StripTopology::new` | `cpu-strips` | CPU-3 |
+| `StripTopology::sweep` | `cpu-strips` | CPU-3 |
 | `Graph::new` | `cpu-fast-bench` | CPU-3 |
 | `Work::partition` | `cpu-fast-bench` | CPU-3 |
 | `Work::sweep` | `cpu-fast-bench` | CPU-3 |
@@ -82,10 +89,12 @@ Ticket reasoning:
 | `anneal_group` | `cpu-fast-bench` | CPU-3 |
 | `solve` | `cpu-fast-bench` | CPU-3 |
 | `Exchange::step` | `cpu-fast-bench` | CPU-3 |
+| `VARIANTS` | `f17-generate2` | SC-9 |
 | `add_dimers` | `f17-generate2` | SC-9 |
 | `rescale_weak` | `f17-generate2` | SC-9 |
 | `rng_for` | `f17-generate2` | SC-9 |
 | `build` | `f17-wave-run` | SC-9 |
+| `set_pair_strength` | `f17-wave-run` | SC-9 |
 | `wave` | `newpow-gen100` | SC-9 |
 | `k4_cell` | `newpow-gen100` | SC-10 |
 | `twisted_base` | `newpow-gen100` | IM-2 |
@@ -148,8 +157,8 @@ Non-algorithm deltas: N1 is the older `pair_bench.rs` base without CSR, boundary
 The single-replica move set is the same. This was read, not run. N2 is output-only variants of `fast_bench.rs`. N3 is `sb_bench.rs`, which is unrelated.
 
 `fast_bench.rs` is a separate solver in the same family as `pair_bench` in soft pair mode. It adds a CSR layout, an
-incremental heat bath, replica exchange, and an exact strip polish. It needs `examples/cluster/strips.rs`, which is
-identical in every tree and is not imported.
+incremental heat bath, replica exchange, and an exact strip polish. The strip polish lives in `examples/cluster/strips.rs`, which is
+imported as `cpu-strips` and is identical in every tree.
 
 ## Dimer recipes and extended cohorts
 
@@ -160,13 +169,14 @@ The three recipes are `ice-twisted-w62-dimer1200`, `ice-twisted-w62-dimer1350`, 
 2. Run `add_dimers`: permute the edges with |J| = 125 and place pairs at J = -1000 until the pair count is reached. A pair is skipped if either endpoint is used.
 3. Run `rescale_weak`: set every |J| = 125 edge to the weak value.
 
-Step 2 must run before step 3. After the rescale no |J| = 125 edge is left, so no pair can be placed.
+`VARIANTS` in `generate2.py` (line 165) defines the first recipe as `rescale_weak(add_dimers(m, n, 1200), 62)`. The p500 recipe differs in one step: `wave` calls `set_pair_strength` when `pair_milli` is not -1000, which sets every pair bond to -500. Step 2 must run before step 3. After the rescale no |J| = 125 edge is left, so no pair can be placed.
 
 | Recipe | Weak (milli) | Pairs | Set by |
 |---|---|---|---|
 | w62-dimer1200 | 62 | 1200 | `generate2.py` VARIANTS, `gen100.py` `wave` |
 | w62-dimer1350 | 62 | 1350 | `wave_run.py --pairs 1350 --weak 62` |
 | w45-dimer1200 | 45 | 1200 | `wave_run.py --pairs 1200 --weak 45` |
+| w62-dimer1200-p500 | 62 | 1200 | `wave_run.py build --pairs 1200 --weak 62 --pair-milli -500`, `gen100.py` `wave` |
 
 The code does not check that pairs avoid tetrahedron bonds, although the `generate2.py` docstring says so.
 Pairs can share spins with tiles. SC-9 must not copy the docstring claim as a rule.
@@ -192,16 +202,20 @@ incomplete, so use the `record.json` files. These fixtures are cited here and ar
 ## Provenance
 
 RNG. The CPU kernels use `rand` 0.8 `SmallRng`, seeded per read by `read_rng`. The dimer sampler
-salts are `SINGLE_SALT` 0x5745474854303031, `GROUP_SALT` 0x47524f5550533031, and `ICE_SALT`
-0x49434c4f4f503031. Thresholds are `-ln(u) * SCALE / (2 beta)` from `Open01`, with integer milli weights (`SCALE` = 1000).
-The Python generators use NumPy `default_rng` (PCG64). Tile order and gauges use a 256-bit
-seed from sha256 of the nonce. Dimer choice uses the first 8 bytes of
-sha256(b"dimer" + nonce), little-endian. Weak-layer signs come from the production stream
+salts, copied from `dimer_weighted.rs` lines 22 to 24, are `SINGLE_SALT` 0x5745_4947_4854_3031, `GROUP_SALT` 0x4752_4f55_5053_3031, and `ICE_SALT`
+0x4943_454c_4f4f_5031. `threshold` draws u from `Open01` and returns `floor(-ln(u) * SCALE / (2 beta))`, capped at `i32::MAX`, as an `i32` (`SCALE` = 1000).
+The Python generators use NumPy `default_rng` (PCG64). Tile order and gauges use
+`default_rng(int.from_bytes(sha256(bytes.fromhex(nonce)).digest(), "big"))` (`ice.py`). Dimer choice
+and charge draws use `rng_for(nonce, tag)`, which is
+`default_rng(int.from_bytes(sha256(tag.encode() + bytes.fromhex(nonce)).digest()[:8], "little"))`.
+The tag is `"dimer"` for `add_dimers` and the cell name for `generate3.py`. Weak-layer signs come from the production stream
 `quip_msa.draw_ising` (package `quip-msa` 0.1.0, source not read). SC-9 historical parity needs a pinned build.
 
 Matching library. Tile matching uses `scipy.sparse.csgraph.maximum_bipartite_matching` (numpy 2.4.6,
 scipy 1.17.1, networkx 3.6.1, recorded in the `ice-twisted` cell manifest). Dimer matching uses no library. It is a greedy
 walk over a permutation. No CPU tree uses a matching crate.
+
+Input limits. `validate_common` rejects graphs with more than `DEFAULT_MAX_NODES` = 100000 nodes or `DEFAULT_MAX_EDGES` = 1000000 edges. Both constants are defined in `src/lib.rs` (lines 68 and 69), which is not imported. `sa_msc_f64.rs` supplies `MAX_READS` = 4096 and `MAX_BETA` = 1e100.
 
 Topology. `topology-live-2026-09-21.spec.json` (589231 bytes) holds 4575 nodes and 41474 edges. Every generator loads it. It is imported.
 
@@ -226,11 +240,13 @@ Evidence: `new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml` (license field).
 | `cpu-dimer-weighted-tempering` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_weighted/tempering.rs` |
 | `cpu-dimer-research` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_research.rs` |
 | `cpu-research` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/research.rs` |
+| `cpu-sa-msc-f64` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_msc_f64.rs` |
 | `cpu-sa-msc` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_msc.rs` |
 | `cpu-sa-sampler` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_sampler.rs` |
 | `cpu-sampler-core` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/sampler_core.rs` |
 | `cpu-coloring` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/coloring.rs` |
 | `cpu-pair-bench` | `new-pow/ice-twisted-w62-dimer1200/cpu/examples/pair_bench.rs` |
+| `cpu-strips` | `new-pow/diversity/solvers/fast_bench/examples/cluster/strips.rs` |
 | `cpu-fast-bench` | `new-pow/diversity/solvers/fast_bench/examples/fast_bench.rs` |
 
 ### Redistribution unrecorded (missing rights)
@@ -274,7 +290,7 @@ These items stay in the research root. The manifest lists each under `retained_e
 - CPU fork variants D1 to D4, P1, P2, and N1 to N3, the `src/bin`, `tests`, and other kernels, and the sibling solver directories.
 - QPU capture machinery, classical attack code, and optimizer reports.
 
-The manifest lists 188 duplicate paths point at the imported sources. The `Cargo.toml` and the dimer files appear in all 15 trees.
+The manifest lists 218 duplicate paths. They point at the imported sources. The `Cargo.toml` and the dimer files appear in all 15 trees.
 
 ## Skipped checks
 
@@ -284,6 +300,5 @@ The manifest lists 188 duplicate paths point at the imported sources. The `Cargo
 
 ## Open items
 
-- `research.rs` and the `dimer_weighted` tests reference `sa_msc_f64`, which is not imported. The closure ruling named five files. CPU-2 may need `sa_msc_f64.rs`.
-- `fast_bench.rs` needs `examples/cluster/strips.rs`, which is not imported.
+- `src/lib.rs` is not imported. Only its two limit constants are recorded above.
 - The ticket title list (`tickets.json`) was unreadable, so ticket assignments follow the work plan and the umbrella table. Change them in the manifest if the table differs.
