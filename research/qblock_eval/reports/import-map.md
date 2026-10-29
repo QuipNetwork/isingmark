@@ -33,7 +33,7 @@ Ticket reasoning:
 - CPU-2 ports the weighted dimer sampler. `validate_common`, `MAX_READS`, `MAX_BETA`, `check_beta`, and `energy_f64` go here. The first four bound the inputs of the sampler. `energy_f64` is the parity oracle in the tests.
 - CPU-3 ports the Otsuka cluster update and its graph preparation. CPU-4 exposes it as a binary, so no function maps to CPU-4.
 - `Exchange::step` maps to CPU-3. It is also a reference for CU-2. The `pair_bench` kernels are also a reference for CU-1.
-- `VARIANTS` and `set_pair_strength` map to SC-9. `VARIANTS` defines the dimer recipes and `set_pair_strength` sets the pair bond strength of the p500 recipe.
+- `VARIANTS` and `set_pair_strength` map to SC-9. `VARIANTS` holds the w62-dimer1200 recipe and `set_pair_strength` sets the pair bond strength of the p500 recipe.
 - SC-8 to SC-11 are the generator tickets. IM-2 and IM-3 are the archive loader and parity gate. CPU-7 to CPU-9 are the postprocess ports. `validate_baseline` maps to EXP-2 because it checks frozen fixtures.
 
 | Function | Source id | Ticket |
@@ -147,13 +147,13 @@ The only differences are in `examples/`. Five paths differ: `pair_bench.rs` (six
 Algorithm deltas, none imported:
 
 - D1: `w62-loop4x300` `pair_bench.rs` uses union-find units for closed 4-loops. It serves CPU-3 evidence and CPU-12.
-- D2: `L18`, `L22`, and `p500` `pair_bench.rs` add `Graph::pair_strength` for pair bonds other than -1000 milli. It also holds the knee schedule.
+- D2: `L18`, `L22`, and `p500` `pair_bench.rs` add `Graph::pair_strength` for pair bonds other than `-1000` milli. It also holds the knee schedule.
 - D3: `pair_par.rs` runs threaded replica anneals with synchronization segments. It changes execution, not the single-replica kernel.
 - D4: `l9_fast.rs` is a lean multi-thread Otsuka anneal with a wall-deadline mode. The two variants differ only in state output.
 
 Parameter deltas: P1 adds `--beta-knee` and `--knee-frac` (L9 and L13). P2 adds `--beta-knot` and `--knot-fraction` on the older non-CSR base. Both are off by default.
 
-Non-algorithm deltas: N1 is the older `pair_bench.rs` base without CSR, boundary sums, or `init_hex`.
+Non-algorithm deltas: N1 is the older `pair_bench.rs` base. It has no CSR layout and no incremental boundary sums.
 The single-replica move set is the same. This was read, not run. N2 is output-only variants of `fast_bench.rs`. N3 is `sb_bench.rs`, which is unrelated.
 
 `fast_bench.rs` is a separate solver in the same family as `pair_bench` in soft pair mode. It adds a CSR layout, an
@@ -166,14 +166,14 @@ The three recipes are `ice-twisted-w62-dimer1200`, `ice-twisted-w62-dimer1350`, 
 `ice-twisted-w45-dimer1200`. All use the same steps:
 
 1. Take the `ice-twisted` base model of the nonce (`ice_twisted.py`, `generate_model`).
-2. Run `add_dimers`: permute the edges with |J| = 125 and place pairs at J = -1000 until the pair count is reached. A pair is skipped if either endpoint is used.
-3. Run `rescale_weak`: set every |J| = 125 edge to the weak value.
+2. Run `add_dimers`: permute the edges with |J| = `125` and place pairs at J = `-1000` until the pair count is reached. A pair is skipped if either endpoint is used.
+3. Run `rescale_weak`: set every |J| = `125` edge to the weak value.
 
-`VARIANTS` in `generate2.py` (line 165) defines the first recipe as `rescale_weak(add_dimers(m, n, 1200), 62)`. The p500 recipe differs in one step: `wave` calls `set_pair_strength` when `pair_milli` is not -1000, which sets every pair bond to -500. Step 2 must run before step 3. After the rescale no |J| = 125 edge is left, so no pair can be placed.
+`VARIANTS` in `generate2.py` (lines 149 to 165) holds only the first recipe, built as `rescale_weak(add_dimers(m, n, 1200), 62)`. The p500 recipe differs in one step: `wave` calls `set_pair_strength` when `pair_milli` is not `-1000`, which sets every pair bond to `-500`. Step 2 must run before step 3. After the rescale no |J| = `125` edge is left, so no pair can be placed.
 
 | Recipe | Weak (milli) | Pairs | Set by |
 |---|---|---|---|
-| w62-dimer1200 | 62 | 1200 | `generate2.py` VARIANTS, `gen100.py` `wave` |
+| w62-dimer1200 | 62 | 1200 | `generate2.py` `VARIANTS`, `gen100.py` `wave` |
 | w62-dimer1350 | 62 | 1350 | `wave_run.py --pairs 1350 --weak 62` |
 | w45-dimer1200 | 45 | 1200 | `wave_run.py --pairs 1200 --weak 45` |
 | w62-dimer1200-p500 | 62 | 1200 | `wave_run.py build --pairs 1200 --weak 62 --pair-milli -500`, `gen100.py` `wave` |
@@ -181,8 +181,8 @@ The three recipes are `ice-twisted-w62-dimer1200`, `ice-twisted-w62-dimer1350`, 
 The code does not check that pairs avoid tetrahedron bonds, although the `generate2.py` docstring says so.
 Pairs can share spins with tiles. SC-9 must not copy the docstring claim as a rule.
 
-Later parameter recipes: charged ice (`generate3.py`, scale 250, background +-31, charge q in
-{0, +2, -2} with p = 0.5, 0.25, 0.25) and field ice h500 and h1000 (`ice_fields.py`, 285 field spins).
+Later parameter recipes: charged ice (`generate3.py`, scale `250`, background `+-31`, charge q drawn from
+`{0, +2, -2}` with p = `0.5, 0.25, 0.25`) and field ice h500 and h1000 (`ice_fields.py`, 285 field spins).
 
 Extended cohorts. The master list has 24 nonces (`qpu-suite/work/cells/ice-twisted/nonces.json`, made by
 `default_rng(20260920)`). The screen cohort is its first 12. Nonces from index 13 on are
@@ -202,20 +202,22 @@ incomplete, so use the `record.json` files. These fixtures are cited here and ar
 ## Provenance
 
 RNG. The CPU kernels use `rand` 0.8 `SmallRng`, seeded per read by `read_rng`. The dimer sampler
-salts, copied from `dimer_weighted.rs` lines 22 to 24, are `SINGLE_SALT` 0x5745_4947_4854_3031, `GROUP_SALT` 0x4752_4f55_5053_3031, and `ICE_SALT`
-0x4943_454c_4f4f_5031. `threshold` draws u from `Open01` and returns `floor(-ln(u) * SCALE / (2 beta))`, capped at `i32::MAX`, as an `i32` (`SCALE` = 1000).
+salts, copied from `dimer_weighted.rs` lines 22 to 24, are `SINGLE_SALT` `0x5745_4947_4854_3031`, `GROUP_SALT` `0x4752_4f55_5053_3031`, and `ICE_SALT`
+`0x4943_454c_4f4f_5031`. `threshold` draws u from `Open01` and returns `floor(-ln(u) * SCALE / (2 beta))`, capped at `i32::MAX`, as an `i32` (`SCALE` = 1000).
 The Python generators use NumPy `default_rng` (PCG64). Tile order and gauges use
 `default_rng(int.from_bytes(sha256(bytes.fromhex(nonce)).digest(), "big"))` (`ice.py`). Dimer choice
 and charge draws use `rng_for(nonce, tag)`, which is
 `default_rng(int.from_bytes(sha256(tag.encode() + bytes.fromhex(nonce)).digest()[:8], "little"))`.
 The tag is `"dimer"` for `add_dimers` and the cell name for `generate3.py`. Weak-layer signs come from the production stream
 `quip_msa.draw_ising` (package `quip-msa` 0.1.0, source not read). SC-9 historical parity needs a pinned build.
+Field ice draws its magnitudes through `regimes.draw_couplings` with the nonce `sha256(bytes.fromhex(nonce) + FIELD_DOMAIN).hexdigest()`, where `FIELD_DOMAIN` is `b"ice-fields-v1"` (`ice_fields.py` line 44).
+The float kernel `sa_msc_f64.rs` takes initial words from `read_rng` and thresholds from `SmallRng` seeded with `params.seed ^ THRESHOLD_SALT` (`0x4D53_415F_4636_3401`, scheme `shared-node-threshold-v1`). The strip polish in `strips.rs` uses the caller `SmallRng`, which `fast_bench.rs` seeds with `base_seed ^ 0x9e37_79b9_7f4a_7c15`.
 
 Matching library. Tile matching uses `scipy.sparse.csgraph.maximum_bipartite_matching` (numpy 2.4.6,
 scipy 1.17.1, networkx 3.6.1, recorded in the `ice-twisted` cell manifest). Dimer matching uses no library. It is a greedy
 walk over a permutation. No CPU tree uses a matching crate.
 
-Input limits. `validate_common` rejects graphs with more than `DEFAULT_MAX_NODES` = 100000 nodes or `DEFAULT_MAX_EDGES` = 1000000 edges. Both constants are defined in `src/lib.rs` (lines 68 and 69), which is not imported. `sa_msc_f64.rs` supplies `MAX_READS` = 4096 and `MAX_BETA` = 1e100.
+Input limits. `validate_common` rejects graphs with more than `DEFAULT_MAX_NODES` = `100000` nodes or `DEFAULT_MAX_EDGES` = `1000000` edges. Both constants are defined in `src/lib.rs` (lines 68 and 69), which is not imported. `sa_msc_f64.rs` supplies `MAX_READS` = `4096` and `MAX_BETA` = `1e100`.
 
 Topology. `topology-live-2026-09-21.spec.json` (589231 bytes) holds 4575 nodes and 41474 edges. Every generator loads it. It is imported.
 

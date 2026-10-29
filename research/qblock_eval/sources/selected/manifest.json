@@ -253,14 +253,14 @@
         }
       ],
       "provenance": {
-        "rng": "rand 0.8 SmallRng (xoshiro256++), seeded per read through read_rng in src/sa_sampler.rs",
+        "rng": "read_rng for initial words, SmallRng seeded with params.seed ^ THRESHOLD_SALT (0x4D53_415F_4636_3401) for thresholds, scheme shared-node-threshold-v1",
         "matching_library": null,
         "topology": null,
         "postprocess": null,
         "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
         "redistribution": "granted"
       },
-      "notes": "Dependency of research.rs and dimer_weighted.rs. MAX_READS (4096), MAX_BETA (1e100), and check_beta bound the inputs in validate_common. energy_f64 is the parity oracle used by the dimer_weighted and dimer_research tests."
+      "notes": "Dependency of research.rs and dimer_weighted.rs. Initial words come from read_rng(params.seed, read) (line 346). The anneal threshold stream is SmallRng::seed_from_u64(params.seed ^ THRESHOLD_SALT) (line 403) with THRESHOLD_SALT = 0x4D53_415F_4636_3401 (line 80) and RNG_SCHEME shared-node-threshold-v1 (lines 76-77). MAX_READS (4096), MAX_BETA (1e100), and check_beta bound the inputs in validate_common. energy_f64 is the parity oracle used by the dimer_weighted and dimer_research tests."
     },
     {
       "id": "cpu-sa-msc",
@@ -421,7 +421,7 @@
         }
       ],
       "provenance": {
-        "rng": "rand 0.8 SmallRng (xoshiro256++), seeded per read through read_rng in src/sa_sampler.rs",
+        "rng": "takes a caller-provided &mut SmallRng; fast_bench.rs line 840 seeds it with seed_from_u64(base_seed ^ 0x9e37_79b9_7f4a_7c15)",
         "matching_library": null,
         "topology": "ice-twisted pair cell (Otsuka tile bonds with -1000 milli pair bonds)",
         "postprocess": "exact strip polish",
@@ -501,14 +501,14 @@
         }
       ],
       "provenance": {
-        "rng": "NumPy default_rng(int.from_bytes(sha256(b'dimer' + nonce).digest()[:8], 'little')), tag 'dimer': rng_for(nonce, tag) = default_rng(int.from_bytes(sha256(tag.encode() + bytes.fromhex(nonce)).digest()[:8], 'little')), one permutation of weak edge indices",
+        "rng": "tag 'dimer': rng_for(nonce, tag) = default_rng(int.from_bytes(sha256(tag.encode() + bytes.fromhex(nonce)).digest()[:8], 'little')), so the seed is sha256(b'dimer' + bytes.fromhex(nonce)); one permutation of weak edge indices",
         "matching_library": "none (greedy walk over a NumPy permutation)",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
         "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
         "redistribution": "unrecorded"
       },
-      "notes": "Dimer pair placement and weak-layer rescale for the three twisted-ice dimer recipes. Step order matters: add_dimers before rescale_weak. VARIANTS defines the three dimer recipes (w62-dimer1200 at line 165, built as rescale_weak(add_dimers(m, n, 1200), 62)) next to other variants. The docstring claims pairs avoid tetrahedron bonds; the code only filters on |J| == 125."
+      "notes": "Dimer pair placement and weak-layer rescale for the three twisted-ice dimer recipes. Step order matters: add_dimers before rescale_weak. VARIANTS (lines 149 to 165) holds only the w62-dimer1200 recipe of the three, built as rescale_weak(add_dimers(m, n, 1200), 62), next to other variants. w62-dimer1350 and w45-dimer1200 come from wave_run.py. The docstring claims pairs avoid tetrahedron bonds; the code only filters on |J| == 125."
     },
     {
       "id": "f17-wave-run",
@@ -677,7 +677,7 @@
         }
       ],
       "provenance": {
-        "rng": "NumPy default_rng(int.from_bytes(sha256(bytes.fromhex(nonce)).digest(), 'big')) for tiles and gauges (ice.py); weak-layer signs from quip_msa.draw_ising (production protocol stream); field magnitudes from sha256(nonce + b'ice-fields-v1')",
+        "rng": "NumPy default_rng(int.from_bytes(sha256(bytes.fromhex(nonce)).digest(), 'big')) for tiles and gauges (ice.py); weak-layer signs from quip_msa.draw_ising (production protocol stream); field magnitudes from regimes.draw_couplings with nonce sha256(bytes.fromhex(nonce) + FIELD_DOMAIN).hexdigest(), FIELD_DOMAIN = b'ice-fields-v1' (ice_fields.py line 44)",
         "matching_library": "scipy.sparse.csgraph.maximum_bipartite_matching (tile matching)",
         "topology": "topology-live-2026-09-21.spec.json",
         "postprocess": null,
