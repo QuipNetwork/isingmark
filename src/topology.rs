@@ -21,6 +21,17 @@ const DEFAULT_ALLOWED_SPIN_MILLI: [i32; 2] = [-1000, 1000];
 
 type Blake2b256 = Blake2b<U32>;
 
+/// Allowed coefficient sets for a generated milli-valued problem.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Couplings {
+    /// Unit couplings and ternary fields.
+    Binary,
+    /// Multiples of 16 milli, with 125 field levels.
+    Int8,
+    /// Every milli value from -1000 through 1000.
+    Int32,
+}
+
 /// A validated topology spec: nodes, edges, and the allowed value sets used
 /// to draw an Ising problem over that graph.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +52,8 @@ pub struct TopologySpec {
 /// Errors parsing or validating a topology-spec JSON document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TopologyError {
+    /// The generated topology description or size is invalid.
+    Generate(String),
     /// The file could not be read, or its contents could not be decoded as
     /// the topology-spec JSON shape. The message is the underlying I/O or
     /// serde error.
@@ -63,6 +76,7 @@ pub enum TopologyError {
 impl std::fmt::Display for TopologyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Generate(e) => write!(f, "invalid generated topology: {e}"),
             Self::Json(e) => write!(f, "invalid topology spec: {e}"),
             Self::EmptyNodes => write!(f, "topology spec: nodes must be non-empty"),
             Self::EmptyAllowedH => {
@@ -84,6 +98,79 @@ impl std::fmt::Display for TopologyError {
 }
 
 impl std::error::Error for TopologyError {}
+
+/// Build `complete:N` or `circulant:N:D` without a topology file.
+///
+/// Circulant graphs connect each node to its `D/2` nearest neighbors in
+/// each direction. Node ids are contiguous from zero, and edges have
+/// canonical endpoints with no duplicates or self-loops.
+///
+/// # Errors
+///
+/// Returns [`TopologyError::Generate`] for malformed descriptions, zero
+/// nodes, an odd degree, a degree at least `N`, or an unallocatable edge list.
+pub fn generate_topology(
+    description: &str,
+    couplings: Couplings,
+) -> Result<TopologySpec, TopologyError> {
+    let invalid = || {
+        TopologyError::Generate(
+            "expected complete:N or circulant:N:D with N > 0 and even 0 <= D < N".to_string(),
+        )
+    };
+    let parts: Vec<&str> = description.split(':').collect();
+    let (n, degree) = match parts.as_slice() {
+        ["complete", n] => (n.parse::<u32>().map_err(|_| invalid())?, None),
+        ["circulant", n, d] => (
+            n.parse::<u32>().map_err(|_| invalid())?,
+            Some(d.parse::<u32>().map_err(|_| invalid())?),
+        ),
+        _ => return Err(invalid()),
+    };
+    if n == 0 || degree.is_some_and(|d| d >= n || d % 2 != 0) {
+        return Err(invalid());
+    }
+    let edge_count = u64::from(n) * u64::from(degree.unwrap_or(n - 1)) / 2;
+    let edge_count = usize::try_from(edge_count).map_err(|_| invalid())?;
+    let mut edges = Vec::new();
+    edges
+        .try_reserve_exact(edge_count)
+        .map_err(|e| TopologyError::Generate(format!("cannot allocate {edge_count} edges: {e}")))?;
+    match degree {
+        None => {
+            for u in 0..n {
+                for v in u + 1..n {
+                    edges.push((u, v));
+                }
+            }
+        }
+        Some(d) => {
+            for u in 0..n {
+                for offset in 1..=d / 2 {
+                    let v = if u < n - offset {
+                        u + offset
+                    } else {
+                        u - (n - offset)
+                    };
+                    edges.push((u.min(v), u.max(v)));
+                }
+            }
+        }
+    }
+    let fields: Vec<i32> = match couplings {
+        Couplings::Binary => vec![-1000, 0, 1000],
+        Couplings::Int8 => (-992..=992).step_by(16).collect(),
+        Couplings::Int32 => (-1000..=1000).collect(),
+    };
+    let interactions = fields.iter().copied().filter(|&v| v != 0).collect();
+    Ok(TopologySpec {
+        nodes: (0..n).collect(),
+        edges,
+        allowed_h_milli: fields,
+        allowed_j_milli: interactions,
+        allowed_spin_milli: DEFAULT_ALLOWED_SPIN_MILLI.to_vec(),
+    })
+}
 
 #[derive(Debug, Deserialize)]
 struct TopologySpecJson {

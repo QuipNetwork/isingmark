@@ -103,16 +103,22 @@ pub fn load_finite_source(
     }
 }
 
-/// A topology to benchmark against: a bundled fixture name, or a JSON file
-/// path. Every mode that needs a topology takes one of these rather than a
-/// raw `--topology-preset`/`--topology-file` pair, so the CLI's mutually
-/// exclusive flag group is resolved once, at the CLI boundary.
+/// A topology to benchmark against: a bundled fixture, a JSON file, or a
+/// generated graph. Every mode that needs a topology takes one of these,
+/// so the CLI's mutually exclusive flags resolve once at the CLI boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TopologyRef {
     /// A bundled fixture name, loaded via [`topology::load_fixture`].
     Preset(String),
     /// A topology-spec JSON file, loaded via [`topology::load_topology`].
     File(PathBuf),
+    /// An in-memory graph and its coefficient sets.
+    Generated {
+        /// `complete:N` or `circulant:N:D`.
+        description: String,
+        /// Allowed h and J values.
+        couplings: topology::Couplings,
+    },
 }
 
 impl TopologyRef {
@@ -120,22 +126,26 @@ impl TopologyRef {
     ///
     /// # Errors
     ///
-    /// Returns whatever `topology::load_fixture`/`topology::load_topology`
-    /// returns for an invalid or missing spec.
+    /// Returns the loader or generator error for an invalid or missing spec.
     pub fn load(&self) -> Result<TopologySpec, TopologyError> {
         match self {
             Self::Preset(name) => topology::load_fixture(name),
             Self::File(path) => topology::load_topology(path),
+            Self::Generated {
+                description,
+                couplings,
+            } => topology::generate_topology(description, *couplings),
         }
     }
 
     /// A short human-readable label for `record::TopologyInfo::name`: the
-    /// preset name, or the file's own path text.
+    /// preset name, file path, or generator description.
     #[must_use]
     pub fn label(&self) -> String {
         match self {
             Self::Preset(name) => name.clone(),
             Self::File(path) => path.display().to_string(),
+            Self::Generated { description, .. } => description.clone(),
         }
     }
 }

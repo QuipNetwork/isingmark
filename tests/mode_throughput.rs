@@ -51,6 +51,76 @@ fn read_summary(output_dir: &std::path::Path) -> Summary {
     serde_json::from_str(&text).expect("summary.json parses as Summary")
 }
 
+#[test]
+fn throughput_cli_fails_only_when_every_job_is_rejected_and_keeps_evidence() {
+    use std::os::unix::fs::PermissionsExt;
+
+    for (miner_args, jobs_per_batch, rejected_per_batch, passed_per_batch, success) in [
+        ("--disconnect-after 1", 1, 1, 0, false),
+        ("--reject-job 2", 8, 1, 7, true),
+        ("--energy-lie-milli 1000", 8, 0, 0, true),
+    ] {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let miner = dir.path().join("quip-cpu-sa");
+        std::fs::write(
+            &miner,
+            format!("#!/bin/sh\nexec \"$ISINGMARK_TEST_MINER\" {miner_args} \"$@\"\n"),
+        )
+        .expect("write fake miner wrapper");
+        std::fs::set_permissions(&miner, std::fs::Permissions::from_mode(0o755))
+            .expect("make fake miner wrapper executable");
+        let output_dir = dir.path().join("output");
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_isingmark"))
+            .args([
+                "throughput",
+                "--backend",
+                "cpu-sa",
+                "--topology-preset",
+                "smoke",
+                "--duration",
+                "0.001s",
+                "--output-dir",
+            ])
+            .arg(&output_dir)
+            .env("PATH", dir.path())
+            .env("ISINGMARK_TEST_MINER", fake_miner_bin())
+            .output()
+            .expect("run throughput command");
+
+        assert!(
+            output_dir.join(SUMMARY_FILENAME).is_file(),
+            "throughput must save its summary: {output:?}"
+        );
+        let summary = read_summary(&output_dir);
+        // The duration can admit more than one complete batch.
+        let batches = summary.totals.jobs / jobs_per_batch;
+        assert!(batches > 0, "{miner_args}");
+        assert_eq!(
+            summary.totals.jobs,
+            jobs_per_batch * batches,
+            "{miner_args}"
+        );
+        assert_eq!(
+            summary.totals.rejected,
+            rejected_per_batch * batches,
+            "{miner_args}"
+        );
+        assert_eq!(
+            summary.totals.passed,
+            passed_per_batch * batches,
+            "{miner_args}"
+        );
+        let records = read_jsonl(&output_dir.join(RECORDS_FILENAME)).expect("read records");
+        assert_eq!(records.skipped_lines, 0);
+        assert_eq!(records.records.len(), summary.totals.jobs);
+        assert_eq!(
+            output.status.success(),
+            success,
+            "wrong throughput exit for {miner_args}: {output:?}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn hermetic_throughput_run_against_the_fake_miner_produces_jsonl_and_summary() {
     let dir = tempfile::tempdir().expect("create temp dir");
