@@ -11,6 +11,9 @@ use serde_json::Value;
 /// Chain corpora hold nonces, not explicit instances.
 const NONCE_CORPORA: [&str; 2] = ["chain-h0.jsonl", "chain-ternary.jsonl"];
 
+/// The two-instance smoke file is not a frozen-model example.
+const SMOKE_CORPUS: &str = "smoke-ice-glass.jsonl";
+
 #[test]
 fn every_instance_corpus_loads_against_its_fixture() -> Result<(), String> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("corpora");
@@ -41,6 +44,14 @@ fn every_instance_corpus_loads_against_its_fixture() -> Result<(), String> {
                 "{name}: {lines} instance lines, {} loaded",
                 source.len()
             ));
+        }
+        if name != SMOKE_CORPUS {
+            if lines != 1 {
+                return Err(format!("{name}: {lines} instances, expected 1"));
+            }
+            if header["generator"] != "frozen-model" {
+                return Err(format!("{name}: generator is {}", header["generator"]));
+            }
         }
         checked += 1;
     }

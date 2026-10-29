@@ -1,7 +1,6 @@
 {
   "family": "ice-twisted",
   "code": "F12",
-  "tier": 2,
   "params": {},
   "nonce_rule": "make_nonces(24, 20260920)",
   "nonces": [
@@ -38,7 +37,6 @@
   "topology_fixture": "chain-h0",
   "topology_hash": "e66d3dfa3c9c6afb15efe29891cf9412498d94692ab5956af3ad98ba3693a02d",
   "suite_topology_sha256": "65ef58bdfff7ecebadf041e77f2c8ae4b12763fa76190f7cd507a14145e747be",
-  "verdict": "provisional",
   "suite_generator_sha256": "52aab3ab1e350e98c7ff80e647c0b5b34e1413dcd12787a28bd0039511c820c2",
   "census": {
     "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f": {

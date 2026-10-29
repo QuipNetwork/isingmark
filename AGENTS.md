@@ -97,10 +97,11 @@ problems/
   README.md           index of problem families
   sources.json        blake3 manifest of every copied research source
   <family>/README.md  construction, variants, results, limits, provenance
-  <family>/params/    generation parameters per cell
+  <family>/params/    parameters for the 15 cells tools/structured generates
   <family>/sources/   byte-identical copies of research sources the family owns
   shared/sources/     copies used by more than one family
-corpora/              chain corpora (chain-h0, chain-ternary) plus a
+corpora/              chain corpora (chain-h0, chain-ternary), the smoke
+                      file smoke-ice-glass.jsonl (smoke fixture), plus a
                       frozen-model example per problem cell, except
                       cbfm-p-f17 (no frozen model), sports-break, and
                       paint-shop (own graphs)

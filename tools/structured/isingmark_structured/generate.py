@@ -30,7 +30,7 @@ from isingmark_structured.topology import (
 PACKAGE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PACKAGE_DIR.parents[2]
 DEFAULT_FIXTURE = REPO_ROOT / "fixtures" / "chain-h0.spec.json"
-DEFAULT_OUT = REPO_ROOT / "corpora"
+DEFAULT_OUT = REPO_ROOT / "out" / "structured"
 DEFAULT_PROBLEMS = REPO_ROOT / "problems"
 FORMAT = 1
 MILLI_LIMIT = 1000
@@ -125,11 +125,15 @@ def build(
     fixture_path: Path,
     suite_dir: Path | None,
     references: dict[str, Any],
+    update_params: bool = False,
 ) -> tuple[Path, Path]:
     family = FAMILIES[cell]
     fixture = load_fixture(fixture_path)
     mapping = FixtureMap(suite, fixture)
-    nonces = protocol.make_nonces(count)
+    if params_path.exists() and not update_params:
+        nonces = json.loads(params_path.read_text(encoding="utf-8"))["nonces"]
+    else:
+        nonces = protocol.make_nonces(count)
     port = package_sha256()
     nonce_rule = f"make_nonces({count}, {protocol.NONCE_SEED})"
     header = {
@@ -145,7 +149,6 @@ def build(
         "params": family.params,
         "nonce_rule": nonce_rule,
         "created": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "verdict": "provisional",
     }
 
     def instances() -> Iterable[dict[str, Any]]:
@@ -164,7 +167,6 @@ def build(
     manifest: dict[str, Any] = {
         "family": cell,
         "code": family.code,
-        "tier": family.tier,
         "params": family.params,
         "nonce_rule": nonce_rule,
         "nonces": nonces,
@@ -176,7 +178,6 @@ def build(
         "topology_fixture": fixture.name,
         "topology_hash": fixture.topology_hash(),
         "suite_topology_sha256": suite.sha256,
-        "verdict": "provisional",
     }
     if suite_dir is not None:
         manifest.update(suite_record(suite_dir, cell, family, nonces))
@@ -184,10 +185,10 @@ def build(
         manifest["references"] = {
             nonce: references[nonce] for nonce in nonces if nonce in references
         }
-    manifest_path = params_path
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    return jsonl, manifest_path
+    if update_params or not params_path.exists():
+        params_path.parent.mkdir(parents=True, exist_ok=True)
+        params_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return jsonl, params_path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -200,7 +201,10 @@ def main(argv: list[str] | None = None) -> int:
         help="cell name; repeatable",
     )
     parser.add_argument(
-        "--out", type=Path, default=DEFAULT_OUT, help="directory for <cell>.jsonl (default: corpora/)"
+        "--out",
+        type=Path,
+        default=DEFAULT_OUT,
+        help="directory for <cell>.jsonl (default: out/structured/)",
     )
     parser.add_argument(
         "--problems",
@@ -228,6 +232,11 @@ def main(argv: list[str] | None = None) -> int:
         help="the qpu-suite directory; adds the suite generator hash and census",
     )
     parser.add_argument(
+        "--update-params",
+        action="store_true",
+        help="replace an existing problems/<family>/params/<cell>.json (kept by default)",
+    )
+    parser.add_argument(
         "--references", type=Path, help="JSON object mapping a nonce to its reference energies"
     )
     args = parser.parse_args(argv)
@@ -236,7 +245,15 @@ def main(argv: list[str] | None = None) -> int:
     for cell in args.family:
         params_path = params_file(args.problems, cell, args.problem_family)
         jsonl, manifest = build(
-            cell, args.out, params_path, args.count, suite, args.fixture, args.suite_dir, references
+            cell,
+            args.out,
+            params_path,
+            args.count,
+            suite,
+            args.fixture,
+            args.suite_dir,
+            references,
+            args.update_params,
         )
         print(f"{cell}: wrote {jsonl} and {manifest}", flush=True)
     return 0

@@ -1,7 +1,6 @@
 {
   "family": "fcl-planted-a0.3",
   "code": "F4",
-  "tier": 1,
   "params": {
     "density_tenths": 3
   },
@@ -40,7 +39,6 @@
   "topology_fixture": "chain-h0",
   "topology_hash": "e66d3dfa3c9c6afb15efe29891cf9412498d94692ab5956af3ad98ba3693a02d",
   "suite_topology_sha256": "65ef58bdfff7ecebadf041e77f2c8ae4b12763fa76190f7cd507a14145e747be",
-  "verdict": "provisional",
   "suite_generator_sha256": "8aa0d37e6e34d0a4e8d859651b850015a8906fca40459312221eb78b7c47c0af",
   "census": {
     "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f": {

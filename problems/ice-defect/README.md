@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
-# Twisted ice with reversed-bond defects (F20 to F23)
+# Twisted ice with reversed-bond defects (F20, F21, F23)
 
 This family starts from twisted spin ice (F12) and reverses one strong bond in a chosen fraction of the tetrahedra. A reversed bond leaves two local ground states in that tetrahedron instead of six, so the defects add rigid motifs that single-flip moves cross slowly. Six defect fractions were screened, from half the tetrahedra down to one in 64. The idea was that rare, rigid defects would slow classical solvers. Dense defects did not. Sparse defects did, but signed-block tempering still closed the family.
 

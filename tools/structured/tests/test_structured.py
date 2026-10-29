@@ -9,8 +9,20 @@ import numpy as np
 import pytest
 
 from isingmark_structured import protocol
-from isingmark_structured.generate import params_file, read_instances, write_instances
-from isingmark_structured.topology import Fixture, FixtureMap, load_suite_spec
+from isingmark_structured.generate import (
+    DEFAULT_FIXTURE,
+    DEFAULT_OUT,
+    build,
+    params_file,
+    read_instances,
+    write_instances,
+)
+from isingmark_structured.topology import (
+    DEFAULT_SUITE_SPEC,
+    Fixture,
+    FixtureMap,
+    load_suite_spec,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 SUITE_MANIFEST = Path(
@@ -155,3 +167,42 @@ def test_params_file_rejects_two_matches(tmp_path: Path) -> None:
         params_file(tmp_path, "cell", None)
     with pytest.raises(SystemExit, match="pass --problem-family"):
         params_file(tmp_path, "missing", None)
+
+
+def test_default_out_is_outside_the_tracked_examples() -> None:
+    assert DEFAULT_OUT == ROOT / "out" / "structured"
+
+
+def _build(out: Path, params: Path, update: bool) -> None:
+    build(
+        "ice-glass-r8",
+        out,
+        params,
+        1,
+        load_suite_spec(DEFAULT_SUITE_SPEC),
+        DEFAULT_FIXTURE,
+        None,
+        {},
+        update,
+    )
+
+
+def test_build_writes_params_without_tier_or_verdict(tmp_path: Path) -> None:
+    params = tmp_path / "p" / "params" / "ice-glass-r8.json"
+    _build(tmp_path / "out", params, False)
+    written = json.loads(params.read_text())
+    assert "tier" not in written
+    assert "verdict" not in written
+    assert (tmp_path / "out" / "ice-glass-r8.jsonl").exists()
+
+
+def test_build_keeps_existing_params_unless_asked(tmp_path: Path) -> None:
+    params = tmp_path / "ice-glass-r8.json"
+    nonce = "ab" * 32
+    params.write_text(json.dumps({"nonces": [nonce]}))
+    _build(tmp_path / "out", params, False)
+    assert json.loads(params.read_text()) == {"nonces": [nonce]}
+    _, instances = read_instances(tmp_path / "out" / "ice-glass-r8.jsonl")
+    assert [row["nonce"] for row in instances] == [nonce]
+    _build(tmp_path / "out", params, True)
+    assert "port_sha256" in json.loads(params.read_text())

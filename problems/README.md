@@ -25,7 +25,7 @@ The Code column holds the candidate code of the family. A dash means the family 
 | [`frust-dense`](frust-dense/README.md) | F8 | 2 | 2 of 2 | Closed | 3 |
 | [`kagome-net`](kagome-net/README.md) | F18 | 1 | 1 of 1 | Closed | 4 |
 | [`pair-loop`](pair-loop/README.md) | F3 | 1 | 1 of 1 | Closed | 3 |
-| [`ice-defect`](ice-defect/README.md) | F20-F23 | 6 | 6 of 6 | Closed | 3 |
+| [`ice-defect`](ice-defect/README.md) | F20, F21, F23 | 6 | 6 of 6 | Closed | 3 |
 | [`ice-fields`](ice-fields/README.md) | F24 | 2 | 2 of 2 | Closed | 3 |
 | [`ice-overlap`](ice-overlap/README.md) | F22 | 4 | 4 of 4 | Closed | 3 |
 | [`parity-checks`](parity-checks/README.md) | - | 3 | 3 of 3 | Closed | 3 |
@@ -44,7 +44,7 @@ The index lists 27 families and 87 cells. 84 cells have a frozen-model example i
 Each family folder holds these items:
 
 - `README.md` describes the family. It has the construction, the variants, the generator and postprocess notes, the results, the limits, and the provenance.
-- `params/` holds one generation parameter file per cell. Not every family has this folder.
+- `params/` holds a generation parameter file for each of the 15 cells that `tools/structured` generates. Other families have no such folder.
 - `sources/` holds byte-identical copies of the research files that only this family uses.
 
 Two items sit beside the family folders:

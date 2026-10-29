@@ -1,7 +1,6 @@
 {
   "family": "strong-net-d1.5",
   "code": "F2",
-  "tier": 1,
   "params": {
     "density": 1.5
   },
@@ -40,7 +39,6 @@
   "topology_fixture": "chain-h0",
   "topology_hash": "e66d3dfa3c9c6afb15efe29891cf9412498d94692ab5956af3ad98ba3693a02d",
   "suite_topology_sha256": "65ef58bdfff7ecebadf041e77f2c8ae4b12763fa76190f7cd507a14145e747be",
-  "verdict": "provisional",
   "suite_generator_sha256": "79199544fdfcd45b21e269f005d7f3ee0cea6008f675405edf68bd5378684a65",
   "census": {
     "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f": {
