@@ -31,8 +31,16 @@ fn every_instance_corpus_loads_against_its_fixture() -> Result<(), String> {
         let spec = load_fixture(fixture).map_err(|e| format!("{name}: {e}"))?;
         let source =
             InstanceSource::parse(name, &text, &spec).map_err(|e| format!("{name}: {e}"))?;
-        if source.is_empty() {
-            return Err(format!("{name}: no instances"));
+        let lines = text
+            .lines()
+            .skip(1)
+            .filter(|l| !l.trim().is_empty())
+            .count();
+        if lines == 0 || source.len() != lines {
+            return Err(format!(
+                "{name}: {lines} instance lines, {} loaded",
+                source.len()
+            ));
         }
         checked += 1;
     }

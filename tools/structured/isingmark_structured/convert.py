@@ -6,11 +6,11 @@ qubit id of each spin. The converter carries it onto the fixture by qubit id wit
 ``FixtureMap``, checks every value against the milli range, and writes the instance with the
 model's structure arrays in ``reference``.
 
-Node-group arrays whose entries are dense spin indices (``tetrahedra``, ``clusters``, and
-``pairs`` when every pair is a model coupler) are written as fixture node ids under
-``reference["id_space"] == "chain-h0"``. Every other array is written as the model stores it
-under ``reference["unmapped"]`` with ``id_space`` ``"suite"``: its entries are not known to be
-spin indices, so they stay untouched.
+Node-group arrays whose entries are dense spin indices (``tetrahedra``, ``clusters``,
+``strong_blocks``, and ``pairs`` when every pair is a model coupler) are written as fixture node
+ids. ``reference["id_space"]`` names the fixture. Every other array is written as the model
+stores it under ``reference["unmapped"]`` with ``id_space`` ``"suite"``: its entries are not
+known to be spin indices, so they stay untouched.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from isingmark_structured.topology import (
 # Arrays that are the model itself, not structure.
 COEFFICIENT_ARRAYS = frozenset({"edges", "j_milli", "h_milli", "physical_nodes"})
 # Node-group arrays that are dense spin indices wherever they occur.
-SPIN_GROUPS = frozenset({"tetrahedra", "clusters"})
+SPIN_GROUPS = frozenset({"tetrahedra", "clusters", "strong_blocks"})
 INTEGRALITY_TOLERANCE = 1e-9
 
 
@@ -88,9 +88,11 @@ def pairs_are_couplers(pairs: np.ndarray, edges: np.ndarray) -> bool:
     return all((min(u, v), max(u, v)) in coupled for u, v in pairs.tolist())
 
 
-def build_reference(model: dict[str, np.ndarray], qubits: np.ndarray) -> dict[str, Any]:
+def build_reference(
+    model: dict[str, np.ndarray], qubits: np.ndarray, fixture_name: str
+) -> dict[str, Any]:
     """The structure arrays of ``model``, node groups mapped to fixture node ids."""
-    reference: dict[str, Any] = {"id_space": "chain-h0"}
+    reference: dict[str, Any] = {"id_space": fixture_name}
     unmapped: dict[str, Any] = {}
     for name, array in sorted(model.items()):
         if name in COEFFICIENT_ARRAYS:
@@ -153,7 +155,7 @@ def convert(
         "nonce": model_path.stem,
         "h_milli": h_fixture,
         "j_milli": j_fixture,
-        "reference": build_reference(model, qubits),
+        "reference": build_reference(model, qubits, fixture.name),
     }
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"{cell}.jsonl"

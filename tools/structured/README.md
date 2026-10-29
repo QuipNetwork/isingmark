@@ -28,7 +28,7 @@ The module docstring of each file under `isingmark_structured/families/` describ
 
 ## Install
 
-The package needs Python 3.11 or later, NumPy, and SciPy.
+The package needs Python 3.11 or later, NumPy, SciPy, and blake3.
 It does not need the D-Wave Ocean packages or the miner's Python bindings.
 It carries its own ports of the protocol draw and of the Zephyr coordinate helpers.
 
@@ -80,11 +80,12 @@ The header also records `suite_topology_sha256`, the SHA-256 of the suite specif
 ## Convert a frozen model
 
 `python -m isingmark_structured.convert` turns one research model (`.npz`) into a one-instance file.
-The file has the same header as a generated file, with `generator` set to `frozen-model`, plus `problem_family`, `model_blake3` (the BLAKE3 digest of the `.npz` bytes), and `source_model`.
+The file has the header of a generated file, with `generator` set to `frozen-model`, plus `problem_family`, `model_blake3` (the BLAKE3 digest of the `.npz` bytes), and `source_model`.
+It omits `generator_sha256` and `nonce_rule`, which only generated files carry.
 The converter maps the model to the fixture by qubit id, as the generator does.
-It stops with an error on a value outside -1,000 to 1,000, on qubits that the suite specification lacks, and on a model with another number of spins.
+It stops with an error on a value outside `-1000` to `1000`, on qubits that the suite specification lacks, and on a model with another number of spins.
 The `reference` object of the instance holds the structure arrays of the model.
-Node groups (`tetrahedra`, `clusters`, and `pairs` when every pair is a model coupler) appear as fixture node ids.
+Node groups (`tetrahedra`, `clusters`, `strong_blocks`, and `pairs` when every pair is a model coupler) appear as fixture node ids, with `id_space` set to the fixture name.
 Every other array appears under `reference.unmapped`, unchanged, with `id_space` `suite`.
 
 ```bash

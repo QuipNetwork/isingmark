@@ -94,7 +94,7 @@ def test_reference_maps_node_groups_and_keeps_the_rest(
 ) -> None:
     _, (instance,) = read_instances(_run(tmp_path, specs, _model(tmp_path)))
     reference = instance["reference"]
-    assert reference["id_space"] == "chain-h0"
+    assert reference["id_space"] == "toy"
     assert reference["tetrahedra"] == [[10, 11, 12, 13]]
     assert reference["pairs"] == [[10, 11], [12, 13]]
     assert reference["unmapped"] == {"id_space": "suite", "gauge": [1, -1, 1, 1, -1]}
@@ -172,3 +172,9 @@ def test_cli_reads_params_from_the_problems_tree(tmp_path: Path, specs: tuple[Pa
     )  # fmt: skip
     header, _ = read_instances(tmp_path / "out" / "toy-cell.jsonl")
     assert header["params"] == {"background_milli": 125}
+
+
+def test_strong_blocks_map_to_node_ids(tmp_path: Path, specs: tuple[Path, Path]) -> None:
+    model = _model(tmp_path, strong_blocks=np.array([[0, 1, 4]]))
+    _, (instance,) = read_instances(_run(tmp_path, specs, model))
+    assert instance["reference"]["strong_blocks"] == [[10, 11, 14]]
