@@ -24,6 +24,7 @@ use crate::modes::throughput::{
 use crate::modes::ttt::{self, TttConfig};
 use crate::modes::TopologyRef;
 use crate::params::ParamCurve;
+use crate::topology::Couplings;
 
 /// `isingmark`: an annealer-agnostic Ising model benchmarking tool.
 #[derive(Debug, Parser)]
@@ -59,6 +60,58 @@ pub enum Command {
     /// whether their best-energy distributions differ. Pure post-hoc
     /// analysis: no backend is spawned.
     Compare(CompareArgs),
+    /// Run timed trials from an explicit campaign manifest.
+    Campaign(CampaignArgs),
+}
+
+#[derive(Debug, Args)]
+#[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+pub struct CampaignArgs {
+    #[command(subcommand)]
+    pub command: Option<CampaignCommand>,
+    /// Campaign manifest, with paths relative to its directory.
+    #[arg(long, required = true)]
+    pub manifest: Option<PathBuf>,
+    /// Select policies with this backend name or executable path.
+    #[arg(long, required = true)]
+    pub backend: Option<String>,
+    /// Directory for trial traces and campaign results.
+    #[arg(long, required = true)]
+    pub output: Option<PathBuf>,
+    /// Validate inputs and print resource estimates without starting a miner.
+    #[arg(long)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CampaignCommand {
+    /// Read bounded JSON-lines commands from stdin and write JSON event replies.
+    Serve(CampaignServeArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct CampaignServeArgs {
+    /// Campaign manifest. Its input paths are relative to this file.
+    #[arg(long)]
+    pub manifest: PathBuf,
+    /// Select policies with this backend name or executable path.
+    #[arg(long)]
+    pub backend: String,
+    /// Directory for trial traces and campaign results.
+    #[arg(long)]
+    pub output: PathBuf,
+}
+
+impl CampaignServeArgs {
+    #[must_use]
+    pub fn into_config(self, dry_run: bool) -> crate::campaign::runner::CampaignConfig {
+        crate::campaign::runner::CampaignConfig {
+            manifest: self.manifest,
+            backend: self.backend,
+            output: self.output,
+            dry_run,
+        }
+    }
 }
 
 /// `isingmark compare` arguments. Unlike every other mode, compare takes
@@ -93,7 +146,7 @@ pub struct CommonArgs {
     /// set of names this maps to. Required from `--backend` or `--config`.
     #[arg(long, value_parser = parse_backend)]
     pub backend: Option<String>,
-    /// Topology source: at most one of the two flags; required from a flag
+    /// Topology source: at most one of the three flags; required from a flag
     /// or from `--config` after merge.
     #[command(flatten)]
     pub topology_source: TopologySource,
@@ -123,41 +176,60 @@ pub struct CommonArgs {
     pub verbosity: u8,
 }
 
-/// Topology source: a bundled fixture name, or a spec file path. At most
-/// one may be set on the CLI (`multiple = false`). Neither is required at
-/// clap parse time (`required = false`) because a `--config` file may
+/// Topology source: a bundled fixture, a spec file, or a generated graph.
+/// At most one may be set on the CLI. None is required at
+/// clap parse time because a `--config` file may
 /// supply the topology instead; after merge, exactly one source must
 /// resolve or `into_config` errors.
 #[derive(Debug, Args)]
-#[group(required = false, multiple = false)]
+#[group(skip)]
 pub struct TopologySource {
     /// Bundled fixture name (e.g. `"smoke"`).
-    #[arg(long)]
+    #[arg(long, group = "topology_source")]
     pub topology_preset: Option<String>,
     /// Path to a topology-spec JSON file.
-    #[arg(long)]
+    #[arg(long, group = "topology_source")]
     pub topology_file: Option<PathBuf>,
+    /// Generate complete:N or circulant:N:D in memory (D must be even and < N).
+    #[arg(long, group = "topology_source", value_name = "SPEC")]
+    pub topology_generate: Option<String>,
+    /// Coefficient sets for generated topologies (default: binary).
+    #[arg(long, value_enum, requires = "topology_generate", conflicts_with_all = ["topology_preset", "topology_file"])]
+    pub couplings: Option<Couplings>,
 }
 
 impl TopologySource {
-    /// Resolve to a [`TopologyRef`] from this flag pair alone (no config
+    /// Resolve to a [`TopologyRef`] from these flags alone (no config
     /// file). Prefer [`resolve_topology`] when a config file may also
     /// supply the topology.
     ///
     /// # Errors
     ///
-    /// Returns a message naming the problem if both or neither field is
-    /// set.
+    /// Returns a message if the topology source is missing or ambiguous,
+    /// or couplings are set without a generated topology.
     pub fn to_ref(&self) -> Result<TopologyRef, String> {
-        match (&self.topology_preset, &self.topology_file) {
-            (Some(name), None) => Ok(TopologyRef::Preset(name.clone())),
-            (None, Some(path)) => Ok(TopologyRef::File(path.clone())),
-            (Some(_), Some(_)) => {
-                Err("--topology-preset and --topology-file are mutually exclusive".to_string())
-            }
-            (None, None) => {
-                Err("one of --topology-preset or --topology-file is required".to_string())
-            }
+        if self.couplings.is_some() && self.topology_generate.is_none() {
+            return Err("--couplings requires --topology-generate".to_string());
+        }
+        match (
+            &self.topology_preset,
+            &self.topology_file,
+            &self.topology_generate,
+        ) {
+            (Some(name), None, None) => Ok(TopologyRef::Preset(name.clone())),
+            (None, Some(path), None) => Ok(TopologyRef::File(path.clone())),
+            (None, None, Some(description)) => Ok(TopologyRef::Generated {
+                description: description.clone(),
+                couplings: self.couplings.unwrap_or(Couplings::Binary),
+            }),
+            (None, None, None) => Err(
+                "one of --topology-preset, --topology-file or --topology-generate is required"
+                    .to_string(),
+            ),
+            _ => Err(
+                "--topology-preset, --topology-file and --topology-generate are mutually exclusive"
+                    .to_string(),
+            ),
         }
     }
 }
@@ -201,25 +273,25 @@ fn resolve_topology(
     file: &FileConfig,
     config_path: Option<&Path>,
 ) -> Result<TopologyRef, String> {
-    match (&flag.topology_preset, &flag.topology_file) {
+    if flag.topology_preset.is_some()
+        || flag.topology_file.is_some()
+        || flag.topology_generate.is_some()
+        || flag.couplings.is_some()
+    {
+        return flag.to_ref();
+    }
+    match (&file.topology_preset, &file.topology_file) {
         (Some(name), None) => Ok(TopologyRef::Preset(name.clone())),
         (None, Some(path)) => Ok(TopologyRef::File(path.clone())),
-        (Some(_), Some(_)) => {
-            Err("--topology-preset and --topology-file are mutually exclusive".to_string())
-        }
-        (None, None) => match (&file.topology_preset, &file.topology_file) {
-            (Some(name), None) => Ok(TopologyRef::Preset(name.clone())),
-            (None, Some(path)) => Ok(TopologyRef::File(path.clone())),
-            (Some(_), Some(_)) => Err(
-                "config file sets both topology_preset and topology_file; only one is allowed"
-                    .to_string(),
-            ),
-            (None, None) => Err(missing_required(
-                "topology",
-                "--topology-preset/--topology-file",
-                config_path,
-            )),
-        },
+        (Some(_), Some(_)) => Err(
+            "config file sets both topology_preset and topology_file; only one is allowed"
+                .to_string(),
+        ),
+        (None, None) => Err(missing_required(
+            "topology",
+            "--topology-preset/--topology-file/--topology-generate",
+            config_path,
+        )),
     }
 }
 
@@ -233,6 +305,29 @@ fn missing_required(what: &str, flag: &str, config_path: Option<&Path>) -> Strin
         ),
         None => format!("no {what}: not set by {flag} and no --config file was given"),
     }
+}
+
+/// Merge `--corpus` and `--instances` with the config file's values, flags
+/// first, and reject a result that sets both.
+fn resolve_finite_source(
+    corpus_flag: Option<String>,
+    instances_flag: Option<PathBuf>,
+    file: &FileConfig,
+    config_path: Option<&Path>,
+) -> Result<(Option<String>, Option<PathBuf>), String> {
+    // An explicit flag for one source displaces the file's key for the other:
+    // the flag is the per-invocation instruction.
+    let (corpus, instances) = match (corpus_flag, instances_flag) {
+        (None, None) => (file.corpus.clone(), file.instances.clone()),
+        (corpus, instances) => (corpus, instances),
+    };
+    if corpus.is_some() && instances.is_some() {
+        let origin = config_path.map_or_else(String::new, |p| format!(" (or {})", p.display()));
+        return Err(format!(
+            "--corpus and --instances are mutually exclusive{origin}: a run replays one finite source"
+        ));
+    }
+    Ok((corpus, instances))
 }
 
 /// Warn when a shared config file carries `hardness` for a mode that does
@@ -268,6 +363,15 @@ pub struct ThroughputArgs {
     /// against. A corpus is finite, so `--duration` becomes an upper bound.
     #[arg(long)]
     pub corpus: Option<String>,
+    /// Replay explicit instances from a JSONL file instead of deriving
+    /// problems from `--seed`. The file carries the coefficients themselves,
+    /// so it can hold problems that no topology preset draws.
+    ///
+    /// The file's header names the topology it was built for and must match
+    /// `--topology-preset`. The file is finite, so `--duration` becomes an
+    /// upper bound. Cannot be combined with `--corpus`.
+    #[arg(long, value_name = "PATH")]
+    pub instances: Option<PathBuf>,
 }
 
 impl ThroughputArgs {
@@ -299,7 +403,8 @@ impl ThroughputArgs {
             }
         };
         let param_curve = merge_param_curve(&file, THROUGHPUT_DEFAULT_CURVE);
-        let corpus = self.corpus.or(file.corpus.clone());
+        let (corpus, instances) =
+            resolve_finite_source(self.corpus, self.instances, &file, config_path)?;
         Ok(ThroughputConfig {
             backend,
             topology,
@@ -308,6 +413,7 @@ impl ThroughputArgs {
             duration_s,
             seed,
             corpus,
+            instances,
             output_dir,
             backend_bin_override: None,
             backend_args_override: None,
@@ -324,7 +430,7 @@ pub struct SweepArgs {
     /// `'{"num_reads":[64,128],"num_sweeps":[100,500]}'`. Which fields
     /// apply depends on `--backend`'s execution model: `num_reads` +
     /// `num_sweeps` for a sweeping backend (cpu-sa, cpu-gibbs, cuda,
-    /// cuda-gibbs, metal, beit), or `num_reads` + `anneal_time_us` for an
+    /// cuda-gibbs, cuda-msa, metal, beit), or `num_reads` + `anneal_time_us` for an
     /// annealing one
     /// (dwave, cuopt). `--hardness` (from `CommonArgs`) is not used by this mode
     /// — cell parameters come entirely from this grid instead of a
@@ -350,6 +456,15 @@ pub struct SweepArgs {
     /// every cell draws the same `min(num_jobs, corpus length)` instances.
     #[arg(long)]
     pub corpus: Option<String>,
+    /// Replay explicit instances from a JSONL file instead of deriving
+    /// problems from `--seed`. The file carries the coefficients themselves,
+    /// so it can hold problems that no topology preset draws.
+    ///
+    /// The file's header names the topology it was built for and must match
+    /// `--topology-preset`. The file is finite, so `--num-jobs` becomes an
+    /// upper bound, as for a corpus. Cannot be combined with `--corpus`.
+    #[arg(long, value_name = "PATH")]
+    pub instances: Option<PathBuf>,
 }
 
 impl SweepArgs {
@@ -393,7 +508,8 @@ impl SweepArgs {
             .or(file.param_grid.clone())
             .ok_or_else(|| missing_required("param-grid", "--param-grid", config_path))?;
         let num_jobs = merge(self.num_jobs, file.num_jobs, DEFAULT_NUM_JOBS);
-        let corpus = self.corpus.or(file.corpus.clone());
+        let (corpus, instances) =
+            resolve_finite_source(self.corpus, self.instances, &file, config_path)?;
         Ok(SweepConfig {
             backend,
             topology,
@@ -401,6 +517,7 @@ impl SweepArgs {
             num_jobs,
             seed,
             corpus,
+            instances,
             output_dir,
             backend_bin_override: None,
             backend_args_override: None,
@@ -955,7 +1072,8 @@ mod tests {
     fn throughput_args(cli: Cli) -> ThroughputArgs {
         match cli.command {
             Command::Throughput(args) => args,
-            Command::Sweep(_)
+            Command::Campaign(_)
+            | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Comparative(_)
             | Command::Scaling(_)
@@ -970,7 +1088,8 @@ mod tests {
     fn sweep_args(cli: Cli) -> SweepArgs {
         match cli.command {
             Command::Sweep(args) => args,
-            Command::Throughput(_)
+            Command::Campaign(_)
+            | Command::Throughput(_)
             | Command::Ttt(_)
             | Command::Comparative(_)
             | Command::Scaling(_)
@@ -985,7 +1104,8 @@ mod tests {
     fn ttt_args(cli: Cli) -> TttArgs {
         match cli.command {
             Command::Ttt(args) => args,
-            Command::Throughput(_)
+            Command::Campaign(_)
+            | Command::Throughput(_)
             | Command::Sweep(_)
             | Command::Comparative(_)
             | Command::Scaling(_)
@@ -1000,7 +1120,8 @@ mod tests {
     fn comparative_args(cli: Cli) -> ComparativeArgs {
         match cli.command {
             Command::Comparative(args) => args,
-            Command::Throughput(_)
+            Command::Campaign(_)
+            | Command::Throughput(_)
             | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Scaling(_)
@@ -1015,7 +1136,8 @@ mod tests {
     fn scaling_args(cli: Cli) -> ScalingArgs {
         match cli.command {
             Command::Scaling(args) => args,
-            Command::Throughput(_)
+            Command::Campaign(_)
+            | Command::Throughput(_)
             | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Comparative(_)
@@ -1030,7 +1152,8 @@ mod tests {
     fn reproducibility_args(cli: Cli) -> ReproducibilityArgs {
         match cli.command {
             Command::Reproducibility(args) => args,
-            Command::Throughput(_)
+            Command::Campaign(_)
+            | Command::Throughput(_)
             | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Comparative(_)
@@ -1045,7 +1168,8 @@ mod tests {
     fn compare_args(cli: Cli) -> CompareArgs {
         match cli.command {
             Command::Compare(args) => args,
-            Command::Throughput(_)
+            Command::Campaign(_)
+            | Command::Throughput(_)
             | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Comparative(_)
@@ -2118,5 +2242,106 @@ mod tests {
             message.contains("file-a") || message.contains("required"),
             "missing --file-a must be rejected: {message}"
         );
+    }
+
+    const THROUGHPUT_BASE: [&str; 7] = [
+        "throughput",
+        "--backend",
+        "cpu-sa",
+        "--topology-preset",
+        "smoke",
+        "--duration",
+        "30s",
+    ];
+
+    #[test]
+    fn throughput_instances_flag_reaches_the_config() {
+        let mut argv = THROUGHPUT_BASE.to_vec();
+        argv.extend(["--instances", "/tmp/family.jsonl"]);
+        let cfg = throughput_args(parse(&argv).expect("parses"))
+            .into_config()
+            .expect("builds");
+        assert_eq!(
+            cfg.instances,
+            Some(std::path::PathBuf::from("/tmp/family.jsonl"))
+        );
+        assert_eq!(cfg.corpus, None);
+    }
+
+    #[test]
+    fn throughput_corpus_and_instances_together_is_a_usage_error() {
+        let mut argv = THROUGHPUT_BASE.to_vec();
+        argv.extend(["--corpus", "chain-h0", "--instances", "/tmp/family.jsonl"]);
+        let err = throughput_args(parse(&argv).expect("clap accepts both"))
+            .into_config()
+            .expect_err("both sources must be rejected");
+        assert!(err.contains("mutually exclusive"), "{err}");
+    }
+
+    #[test]
+    fn throughput_config_file_supplies_instances_and_a_flag_displaces_the_files_corpus() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("t.yaml");
+        std::fs::write(
+            &path,
+            "backend: cpu-sa\ntopology_preset: smoke\nduration: 30s\ncorpus: chain-h0\n",
+        )
+        .expect("write");
+        let config = path.to_str().expect("utf8 path");
+        let cfg = throughput_args(
+            parse(&[
+                "throughput",
+                "--config",
+                config,
+                "--instances",
+                "/tmp/f.jsonl",
+            ])
+            .expect("parses"),
+        )
+        .into_config()
+        .expect("a flag for one source displaces the file's other source");
+        assert_eq!(cfg.corpus, None);
+        assert_eq!(
+            cfg.instances,
+            Some(std::path::PathBuf::from("/tmp/f.jsonl"))
+        );
+
+        std::fs::write(
+            &path,
+            "backend: cpu-sa\ntopology_preset: smoke\nduration: 30s\ncorpus: chain-h0\ninstances: /tmp/f.jsonl\n",
+        )
+        .expect("write");
+        let err = throughput_args(parse(&["throughput", "--config", config]).expect("parses"))
+            .into_config()
+            .expect_err("a file that sets both must be rejected");
+        assert!(err.contains("mutually exclusive"), "{err}");
+    }
+
+    #[test]
+    fn sweep_instances_flag_reaches_the_config_and_conflicts_with_corpus() {
+        let base = [
+            "sweep",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--param-grid",
+            r#"{"num_reads":[8],"num_sweeps":[10]}"#,
+        ];
+        let mut argv = base.to_vec();
+        argv.extend(["--instances", "/tmp/family.jsonl"]);
+        let cfg = sweep_args(parse(&argv).expect("parses"))
+            .into_config()
+            .expect("builds");
+        assert_eq!(
+            cfg.instances,
+            Some(std::path::PathBuf::from("/tmp/family.jsonl"))
+        );
+
+        argv.extend(["--corpus", "chain-h0"]);
+        let err = sweep_args(parse(&argv).expect("clap accepts both"))
+            .into_config()
+            .expect_err("both sources must be rejected");
+        assert!(err.contains("mutually exclusive"), "{err}");
     }
 }

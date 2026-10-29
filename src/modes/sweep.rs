@@ -76,14 +76,13 @@
 //!   one — so an `Annealing` sweep's per-cell `anneal_time_us` cannot be
 //!   verified from a `JobRecord` at all. This is the residual gap.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::Deserialize;
 
 use crate::backend::{builtin_registry, run_session, BackendSpec, RunParams, RunReport};
-use crate::corpus::CorpusSource;
-use crate::modes::{hex_encode, JobSource, ModeError, ParseError, TopologyRef};
+use crate::modes::{hex_encode, load_finite_source, JobSource, ModeError, ParseError, TopologyRef};
 use crate::params::BackendKind;
 use crate::problem::ProblemSource;
 use crate::record::{append_jsonl, write_summary, HardwareInfo, Summary, TopologyInfo, Totals};
@@ -183,6 +182,16 @@ pub struct SweepConfig {
     /// corpus from the start, so the paired design holds exactly as it does
     /// for a derived source.
     pub corpus: Option<String>,
+    /// Replay explicit instances from a JSONL file instead of deriving
+    /// problems from [`Self::seed`]. Mutually exclusive with
+    /// [`Self::corpus`]; setting both fails with
+    /// [`ModeError::ConflictingSources`].
+    ///
+    /// The file's header must carry the `topology_hash` of the run's
+    /// topology (see [`crate::instances`]). The file is finite, so it caps
+    /// [`Self::num_jobs`] exactly as a corpus does, and every cell reloads it
+    /// from the start.
+    pub instances: Option<PathBuf>,
     /// Directory to write one subdirectory per cell into, plus a top-level
     /// [`SUMMARY_FILENAME`]. Created if it does not already exist. Refuses
     /// to start (see [`ModeError::RecordsFileExists`]) if *any* cell's
@@ -285,7 +294,13 @@ pub async fn run_sweep(cfg: &SweepConfig) -> Result<SweepReport, ModeError> {
         std::fs::create_dir_all(dir).map_err(ModeError::Io)?;
         std::fs::File::create(records_path).map_err(ModeError::Io)?;
 
-        let jobs = cell.draw_jobs(&spec, cfg.seed, cfg.num_jobs, cfg.corpus.as_deref())?;
+        let jobs = cell.draw_jobs(
+            &spec,
+            cfg.seed,
+            cfg.num_jobs,
+            cfg.corpus.as_deref(),
+            cfg.instances.as_deref(),
+        )?;
 
         let sock_path = unique_sock_path();
         let report = run_session(RunParams {
@@ -368,17 +383,17 @@ impl Cell {
         seed: u64,
         count: u32,
         corpus: Option<&str>,
+        instances: Option<&Path>,
     ) -> Result<Vec<quip_proto::v1::Job>, ModeError> {
-        let mut source = match corpus {
-            Some(name) => JobSource::Corpus(Box::new(CorpusSource::load(name, spec)?)),
-            None => JobSource::Derived(Box::new(ProblemSource::new(
+        let mut source = load_finite_source(corpus, instances, spec)?.unwrap_or_else(|| {
+            JobSource::Derived(Box::new(ProblemSource::new(
                 spec,
                 MINER_ACCOUNT,
                 seed,
                 count,
                 NO_DEADLINE_MS,
-            ))),
-        };
+            )))
+        });
         let mut jobs = Vec::with_capacity(count as usize);
         while jobs.len() < count as usize {
             let Some(mut job) = source.next_job() else {
@@ -569,6 +584,7 @@ fn build_summary(cfg: &SweepConfig, spec: &TopologySpec, outcomes: &[CellOutcome
         "topology": cfg.topology.label(),
         "seed": cfg.seed,
         "corpus": cfg.corpus.clone(),
+        "instances": cfg.instances.as_ref().map(|p| p.display().to_string()),
         "num_jobs_per_cell": cfg.num_jobs,
         "grid": {
             "num_reads": cfg.grid.num_reads,

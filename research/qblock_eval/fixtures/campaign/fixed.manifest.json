@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "protocol_profile": "../../configs/protocol.json",
+  "instances": ["../two_spin.instance.json"],
+  "policies": [{
+    "policy_id": "fixed-control",
+    "backend": "fake",
+    "num_reads": 1,
+    "num_sweeps": 10,
+    "anneal_time_us": 20,
+    "host_compute_limit_s": 1200.0,
+    "evaluation_limit": 100000,
+    "preparation": "cold"
+  }],
+  "trials_per_pair": 2,
+  "budget": {"wall_limit_s": 1200.0, "device_budget_s": 30.0}
+}

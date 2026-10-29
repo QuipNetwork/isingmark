@@ -116,11 +116,15 @@ pub struct FileConfig {
     /// Difficulty in `[0.0, 1.0]`.
     pub hardness: Option<f64>,
     /// Seed for deterministic problem generation. Ignored when
-    /// [`Self::corpus`] is set.
+    /// [`Self::corpus`] or [`Self::instances`] is set.
     pub seed: Option<u64>,
     /// Replay a bundled corpus name or a JSONL path instead of deriving
     /// problems from [`Self::seed`]. Throughput mode only.
     pub corpus: Option<String>,
+    /// Replay explicit instances from this JSONL path instead of deriving
+    /// problems from [`Self::seed`]. Mutually exclusive with
+    /// [`Self::corpus`]. Throughput and sweep modes only.
+    pub instances: Option<PathBuf>,
     /// Directory for JSONL records and the run summary.
     pub output_dir: Option<PathBuf>,
     /// Hardness-to-parameter curve bounds. Validated on load (see

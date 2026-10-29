@@ -37,6 +37,7 @@ fn base_config(output_dir: PathBuf) -> ThroughputConfig {
         duration_s: 1.2,
         seed: 42,
         corpus: None,
+        instances: None,
         output_dir,
         backend_bin_override: Some(fake_miner_bin()),
         backend_args_override: None,
@@ -48,6 +49,76 @@ fn read_summary(output_dir: &std::path::Path) -> Summary {
     let text = std::fs::read_to_string(output_dir.join(SUMMARY_FILENAME))
         .expect("summary.json is readable");
     serde_json::from_str(&text).expect("summary.json parses as Summary")
+}
+
+#[test]
+fn throughput_cli_fails_only_when_every_job_is_rejected_and_keeps_evidence() {
+    use std::os::unix::fs::PermissionsExt;
+
+    for (miner_args, jobs_per_batch, rejected_per_batch, passed_per_batch, success) in [
+        ("--disconnect-after 1", 1, 1, 0, false),
+        ("--reject-job 2", 8, 1, 7, true),
+        ("--energy-lie-milli 1000", 8, 0, 0, true),
+    ] {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let miner = dir.path().join("quip-cpu-sa");
+        std::fs::write(
+            &miner,
+            format!("#!/bin/sh\nexec \"$ISINGMARK_TEST_MINER\" {miner_args} \"$@\"\n"),
+        )
+        .expect("write fake miner wrapper");
+        std::fs::set_permissions(&miner, std::fs::Permissions::from_mode(0o755))
+            .expect("make fake miner wrapper executable");
+        let output_dir = dir.path().join("output");
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_isingmark"))
+            .args([
+                "throughput",
+                "--backend",
+                "cpu-sa",
+                "--topology-preset",
+                "smoke",
+                "--duration",
+                "0.001s",
+                "--output-dir",
+            ])
+            .arg(&output_dir)
+            .env("PATH", dir.path())
+            .env("ISINGMARK_TEST_MINER", fake_miner_bin())
+            .output()
+            .expect("run throughput command");
+
+        assert!(
+            output_dir.join(SUMMARY_FILENAME).is_file(),
+            "throughput must save its summary: {output:?}"
+        );
+        let summary = read_summary(&output_dir);
+        // The duration can admit more than one complete batch.
+        let batches = summary.totals.jobs / jobs_per_batch;
+        assert!(batches > 0, "{miner_args}");
+        assert_eq!(
+            summary.totals.jobs,
+            jobs_per_batch * batches,
+            "{miner_args}"
+        );
+        assert_eq!(
+            summary.totals.rejected,
+            rejected_per_batch * batches,
+            "{miner_args}"
+        );
+        assert_eq!(
+            summary.totals.passed,
+            passed_per_batch * batches,
+            "{miner_args}"
+        );
+        let records = read_jsonl(&output_dir.join(RECORDS_FILENAME)).expect("read records");
+        assert_eq!(records.skipped_lines, 0);
+        assert_eq!(records.records.len(), summary.totals.jobs);
+        assert_eq!(
+            output.status.success(),
+            success,
+            "wrong throughput exit for {miner_args}: {output:?}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -486,6 +557,75 @@ async fn hermetic_throughput_corpus_run_records_its_source_in_the_summary() {
         Some(corpus.display().to_string().as_str())
     );
     assert_eq!(summary.config["corpus_instances"].as_u64(), Some(2));
+}
+
+fn smoke_instances_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("corpora")
+        .join("structured")
+        .join("smoke-ice-glass.jsonl")
+}
+
+/// An instance-file run must dispatch exactly the file's instances, once
+/// each in file order, and the summary must say where they came from.
+#[tokio::test]
+async fn hermetic_throughput_instances_run_replays_the_file_and_records_its_source() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let path = smoke_instances_path();
+    let cfg = ThroughputConfig {
+        duration_s: 60.0,
+        instances: Some(path.clone()),
+        ..base_config(dir.path().to_path_buf())
+    };
+
+    let report = run_throughput(&cfg).await.expect("instances run succeeds");
+
+    let ids: Vec<&str> = report.records.iter().map(|r| r.job_id.as_str()).collect();
+    assert_eq!(ids, vec![format!("{:0>64}", "1"), format!("{:0>64}", "2")]);
+    assert!(
+        report.run_wall_ms < 60_000,
+        "the run must end on exhausting the file, not on the 60s duration"
+    );
+    let summary = read_summary(dir.path());
+    assert!(summary.config["corpus"].is_null());
+    assert_eq!(
+        summary.config["job_source"].as_str(),
+        Some(format!("instances:{}", path.display()).as_str())
+    );
+    assert_eq!(summary.config["corpus_instances"].as_u64(), Some(2));
+}
+
+/// Setting both finite sources through the library API fails before any job
+/// runs.
+#[tokio::test]
+async fn hermetic_throughput_rejects_a_corpus_and_instances_together() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = ThroughputConfig {
+        corpus: Some("chain-h0".to_string()),
+        instances: Some(smoke_instances_path()),
+        ..base_config(dir.path().to_path_buf())
+    };
+    let msg = run_throughput(&cfg)
+        .await
+        .err()
+        .map_or_else(String::new, |e| e.to_string());
+    assert!(msg.contains("mutually exclusive"), "{msg}");
+}
+
+/// An instance file built for another topology fails before any job runs.
+#[tokio::test]
+async fn hermetic_throughput_rejects_an_instance_file_on_the_wrong_topology() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cfg = ThroughputConfig {
+        topology: TopologyRef::Preset("chain-ternary".to_string()),
+        instances: Some(smoke_instances_path()),
+        ..base_config(dir.path().to_path_buf())
+    };
+    let msg = run_throughput(&cfg)
+        .await
+        .err()
+        .map_or_else(String::new, |e| e.to_string());
+    assert!(msg.contains("--topology-preset"), "{msg}");
 }
 
 /// A seeded run must keep reporting a null corpus, so an older summary and a

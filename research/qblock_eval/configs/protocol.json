@@ -1,0 +1,14 @@
+{
+  "profile_id": "current-rule-quip-protocol-0.0.2",
+  "verifier_crate": "quip-protocol",
+  "verifier_version": "0.0.2",
+  "verifier_rev_evidence": "The newest local quip-miner release tag from git tag --sort=-creatordate is v0.3.6 (tag object 03e618392a8f3e58787f8449db930935a1c8740a, commit 4674a34b6c7155aadc60ac3eb7b69db93241c1af). Its v0.3.6:Cargo.lock:3105-3107 contains name = \"quip-protocol\", version = \"0.0.3\", and source = \"registry+https://github.com/rust-lang/crates.io-index\". IsingMark origin/main d2f4621ee01cfccf4b91cd84a25dad2f32576f23 and this worktree compile 0.0.2: Cargo.lock:1392-1394 contains name = \"quip-protocol\", version = \"0.0.2\", and the same registry source. The release verifier 0.0.3 differs from the pinned verifier 0.0.2. Plan 3 decides whether to move IsingMark.",
+  "threshold": "strict_less",
+  "count": "valid_reads_no_dedup",
+  "diversity": "mean_pairwise_flip_invariant_milli",
+  "subset": "greedy_select_diverse",
+  "ranking": "lowest_best_energy",
+  "decay": "unaudited",
+  "inclusion": "unaudited",
+  "tie_rule": "unaudited"
+}

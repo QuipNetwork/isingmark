@@ -7,7 +7,7 @@ use std::process::ExitCode;
 
 use clap::Parser as _;
 use isingmark::backend::RunReport;
-use isingmark::cli::{Cli, Command, CompareArgs};
+use isingmark::cli::{CampaignArgs, CampaignCommand, Cli, Command, CompareArgs};
 use isingmark::modes::comparative::{self, ComparativeConfig};
 use isingmark::modes::compare::{self, format_comparison_table};
 use isingmark::modes::reproducibility::{self, ReproConfig, ReproReport};
@@ -54,16 +54,75 @@ async fn main() -> ExitCode {
             Err(message) => fail(&message),
         },
         Command::Compare(args) => run_compare_files(&args),
+        Command::Campaign(args) => run_campaign_command(args).await,
     }
 }
 
-/// Run throughput mode and report the outcome. Returns `ExitCode::SUCCESS`
-/// even when some jobs failed/were rejected — that is a benchmark result,
-/// not a tool failure; only a `ModeError` (the mode could not run at all)
-/// is reported as a non-zero exit. A run whose miner failed partway
-/// through still exits `SUCCESS` (its records are real and worth keeping)
-/// but prints a warning naming what happened, so it is not mistaken for a
-/// complete run.
+async fn run_campaign_command(args: CampaignArgs) -> ExitCode {
+    use isingmark::campaign::runner::{run_campaign, serve_campaign};
+    if let Some(CampaignCommand::Serve(inputs)) = args.command {
+        return match serve_campaign(
+            &inputs.into_config(false),
+            std::io::BufReader::new(std::io::stdin()),
+            std::io::stdout().lock(),
+        )
+        .await
+        {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => campaign_failure(&error),
+        };
+    }
+    let (Some(manifest), Some(backend), Some(output)) = (args.manifest, args.backend, args.output)
+    else {
+        return campaign_failure(&isingmark::campaign::CampaignError::MissingField(
+            "campaign arguments",
+        ));
+    };
+    let config = isingmark::campaign::runner::CampaignConfig {
+        manifest,
+        backend,
+        output,
+        dry_run: args.dry_run,
+    };
+    match run_campaign(&config).await {
+        Ok(report) => {
+            let written = if config.dry_run {
+                write_campaign_json(&report.resources)
+            } else {
+                write_campaign_json(&report)
+            };
+            match written {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => campaign_failure(&error),
+            }
+        }
+        Err(error) => campaign_failure(&error),
+    }
+}
+
+fn write_campaign_json(
+    value: &impl serde::Serialize,
+) -> Result<(), isingmark::campaign::CampaignError> {
+    use std::io::Write as _;
+    let invalid = |error: String| isingmark::campaign::CampaignError::InvalidRun(error);
+    let mut stdout = std::io::stdout().lock();
+    serde_json::to_writer(&mut stdout, value).map_err(|error| invalid(error.to_string()))?;
+    stdout
+        .write_all(b"\n")
+        .and_then(|()| stdout.flush())
+        .map_err(|error| invalid(error.to_string()))
+}
+
+fn campaign_failure(error: &isingmark::campaign::CampaignError) -> ExitCode {
+    use std::io::Write as _;
+    let _ = writeln!(std::io::stderr().lock(), "error: {error}");
+    ExitCode::FAILURE
+}
+
+/// Run throughput mode and report the outcome. A run with at least one
+/// rejected job and no completed jobs exits non-zero after printing its
+/// summary and evidence paths. Partial results remain successful, with a
+/// warning when the miner stopped early. A `ModeError` also exits non-zero.
 async fn run_throughput(cfg: &ThroughputConfig) -> ExitCode {
     match throughput::run_throughput_with_summary(cfg).await {
         Ok((report, summary)) => {
@@ -80,15 +139,20 @@ async fn run_throughput(cfg: &ThroughputConfig) -> ExitCode {
                 records_path.display(),
                 summary_path.display(),
             );
-            succeed(&message)
+            if summary.totals.rejected > 0 && summary.totals.rejected == summary.totals.jobs {
+                print_line(&message);
+                fail("no jobs completed; all dispatched jobs were rejected")
+            } else {
+                succeed(&message)
+            }
         }
         Err(e) => fail(&e.to_string()),
     }
 }
 
-/// Run sweep mode and report the outcome. Mirrors [`run_throughput`]'s
-/// exit-code convention: `ExitCode::SUCCESS` even when some cell's miner
-/// failed partway through (a benchmark result, not a tool failure); each
+/// Run sweep mode and report the outcome. Returns `ExitCode::SUCCESS`
+/// even when some cell's miner failed partway through (a benchmark result,
+/// not a tool failure); each
 /// affected cell gets its own warning line via [`truncated_run_warning`],
 /// prefixed with that cell's own directory name so a multi-cell warning
 /// list is attributable to the cell it came from.
