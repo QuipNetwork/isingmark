@@ -3,7 +3,7 @@
 
 use std::{
     fs,
-    io::Write,
+    io::{Read, Write},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -435,6 +435,142 @@ async fn serve_serializes_submits_and_reuses_prepared_sessions() {
             assert!(pair[1].started >= pair[0].started + pair[0].accepted_wall.expect("accepted"));
         }
     }
+}
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keep process-start synchronization and timeout cleanup in one fixture."
+)]
+async fn serve_skips_queued_trial(eof: bool) {
+    use isingmark::campaign::runner::serve_campaign;
+
+    let dir = tempfile::tempdir().expect("directory");
+    let started_path = dir.path().join("started");
+    assert!(Command::new("mkfifo")
+        .arg(&started_path)
+        .status()
+        .expect("startup notification FIFO")
+        .success());
+    let mut started = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&started_path)
+        .expect("startup notification");
+    let mut observer = started.try_clone().expect("startup observer");
+    let mut notification = tokio::task::spawn_blocking(move || observer.read_exact(&mut [0]));
+    let starts = dir.path().join("starts");
+    let backend = dir.path().join("miner");
+    fs::write(
+        &backend,
+        format!(
+            "#!/bin/bash\nset -euo pipefail\nprintf 'start\\n' >>'{}'\nprintf s >'{}'\nexec '{}' --result-delay-ms 1000 \"$@\"\n",
+            starts.display(), started_path.display(), env!("CARGO_BIN_EXE_isingmark-fake-miner")
+        ),
+    )
+    .expect("miner wrapper");
+    fs::set_permissions(&backend, fs::Permissions::from_mode(0o700)).expect("executable miner");
+    let config = CampaignConfig {
+        manifest: manifest(dir.path(), Preparation::Cold),
+        backend: backend.display().to_string(),
+        output: dir.path().join("out"),
+        dry_run: false,
+    };
+    let mut value: Value = serde_json::from_slice(&fs::read(&config.manifest).expect("manifest"))
+        .expect("manifest JSON");
+    value["policies"][0]["backend"] = json!(config.backend);
+    fs::write(&config.manifest, serde_json::to_vec(&value).expect("JSON")).expect("manifest");
+    let output_dir = config.output.clone();
+    let (input, mut commands) = std::io::pipe().expect("command pipe");
+    let server = tokio::spawn(async move {
+        let mut output = Vec::new();
+        let result = serve_campaign(&config, std::io::BufReader::new(input), &mut output).await;
+        (result, output)
+    });
+    writeln!(commands, "{}", json!({"cmd": "submit", "instance_id": "two-spin", "policy_id": "test-policy", "trial_id": "first"})).expect("first submit");
+    // Observe a real process start while the first trial holds the runner lock.
+    let startup = tokio::time::timeout(Duration::from_secs(5), &mut notification).await;
+    if startup.is_err() {
+        drop(commands);
+        started.write_all(b"x").expect("unblock startup observer");
+        notification
+            .await
+            .expect("observer task")
+            .expect("observer");
+        let (result, output) = server.await.expect("serve task");
+        result.expect("serve startup and EOF cleanup");
+        let trace = fs::read_to_string(output_dir.join("first/events.jsonl"))
+            .expect("startup failure trace");
+        assert!(
+            startup.is_ok(),
+            "miner did not start: {}\n{trace}",
+            String::from_utf8_lossy(&output)
+        );
+        return;
+    }
+    startup
+        .expect("startup notification")
+        .expect("observer task")
+        .expect("miner start");
+    let first = read_trace(&output_dir.join("first/events.jsonl")).expect("first challenge");
+    assert!(first
+        .events
+        .iter()
+        .any(|event| event.kind == EventKind::ChallengeRelease));
+    assert!(!first
+        .events
+        .iter()
+        .any(|event| event.kind == EventKind::TrialTermination));
+    writeln!(commands, "{}", json!({"cmd": "submit", "instance_id": "two-spin", "policy_id": "test-policy", "trial_id": "second"})).expect("second submit");
+    if !eof {
+        writeln!(
+            commands,
+            "{}",
+            json!({"cmd": "cancel_trial", "trial_id": "second"})
+        )
+        .expect("cancel queued trial");
+        writeln!(commands, "{}", json!({"cmd": "finish"})).expect("finish");
+    }
+    drop(commands);
+    let (result, output) = tokio::time::timeout(Duration::from_secs(10), server)
+        .await
+        .expect("serve completes")
+        .expect("serve task");
+    result.expect("cancellation is not an error");
+    let replies: Vec<Value> = std::str::from_utf8(&output)
+        .expect("UTF-8")
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("reply"))
+        .collect();
+    assert!(replies.contains(&json!({"event": "cancelled_before_start", "trial_id": "second"})));
+    assert!(!replies.iter().any(|reply| reply["event"] == "error"));
+    assert!(
+        !output_dir.join("second").exists(),
+        "no trace or ChallengeRelease"
+    );
+    assert_eq!(
+        fs::read_to_string(starts)
+            .expect("miner starts")
+            .lines()
+            .count(),
+        1
+    );
+    if !eof {
+        let finished = replies.last().expect("finish reply");
+        assert_eq!(finished["event"], "finished");
+        assert_eq!(finished["errors"], json!([]));
+        assert_eq!(finished["trials"].as_array().expect("trials").len(), 1);
+        assert_eq!(finished["trials"][0]["trial_id"], "first");
+    }
+}
+
+#[tokio::test]
+async fn serve_cancel_trial_skips_queued_cold_trial() {
+    serve_skips_queued_trial(false).await;
+}
+
+#[tokio::test]
+async fn serve_eof_skips_queued_cold_trial() {
+    serve_skips_queued_trial(true).await;
 }
 
 #[test]

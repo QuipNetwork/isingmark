@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Bounded JSON-lines control. Each input command receives exactly one reply.
+//! Bounded JSON-lines control with explicit trial cancellation outcomes.
 
 use std::{
     io::{BufRead, Write},
@@ -36,7 +36,7 @@ enum Command {
 
 struct RunningTrial {
     cancel: oneshot::Sender<()>,
-    task: JoinHandle<Result<Trial, CampaignError>>,
+    task: JoinHandle<Result<Option<Trial>, CampaignError>>,
 }
 
 // Drain an oversized line through its newline without retaining the excess.
@@ -94,7 +94,7 @@ fn find_policy<'a>(
         .ok_or_else(|| invalid("unknown policy_id"))
 }
 
-async fn collect(running: RunningTrial, cancel: bool) -> Result<Trial, CampaignError> {
+async fn collect(running: RunningTrial, cancel: bool) -> Result<Option<Trial>, CampaignError> {
     if cancel {
         let _ = running.cancel.send(());
     }
@@ -104,16 +104,22 @@ async fn collect(running: RunningTrial, cancel: bool) -> Result<Trial, CampaignE
 async fn cancel_outstanding(
     active: BTreeMap<String, RunningTrial>,
     mut result: Result<(), CampaignError>,
+    writer: &mut impl Write,
 ) -> Result<(), CampaignError> {
     let mut tasks = Vec::new();
-    for (_, running) in active {
+    for (id, running) in active {
         let _ = running.cancel.send(());
-        tasks.push(running.task);
+        tasks.push((id, running.task));
     }
-    for task in tasks {
+    for (id, task) in tasks {
         // Preserve termination records even if stdin or stdout fails.
         let cleanup = match task.await {
-            Ok(result) => result.map(|_| ()),
+            Ok(Ok(Some(_))) => Ok(()),
+            Ok(Ok(None)) => write_event(
+                writer,
+                &json!({"event": "cancelled_before_start", "trial_id": id}),
+            ),
+            Ok(Err(error)) => Err(error),
             Err(error) => Err(invalid(error)),
         };
         if result.is_ok() {
@@ -128,11 +134,15 @@ async fn run_serialized(
     instance: &Instance,
     policy: &PolicyManifest,
     budget: &TrialBudget,
-    cancelled: oneshot::Receiver<()>,
+    mut cancelled: oneshot::Receiver<()>,
     id: String,
-) -> Result<Trial, CampaignError> {
+) -> Result<Option<Trial>, CampaignError> {
     // Hold the lock through termination so no two trials use a live session.
     let mut shared = shared.lock().await;
+    match cancelled.try_recv() {
+        Ok(()) | Err(oneshot::error::TryRecvError::Closed) => return Ok(None),
+        Err(oneshot::error::TryRecvError::Empty) => {}
+    }
     let (policy_id, runner) = &mut *shared;
     if policy_id.as_ref().is_some_and(|id| id != &policy.policy_id) {
         runner.finish().await?;
@@ -144,7 +154,7 @@ async fn run_serialized(
     if result.is_err() {
         runner.session.take();
     }
-    result
+    result.map(Some)
 }
 
 /// Serve submit, proof verification, cancellation, and finish commands.
@@ -152,6 +162,7 @@ async fn run_serialized(
 /// Submit names a manifest instance and policy, with an optional unique trial ID.
 /// Verification names an instance and carries a complete `witnesses` array.
 /// Finish waits for outstanding trials; EOF cancels them and retains their traces.
+/// Queued cancellations reply `cancelled_before_start` and produce no trial or trace.
 /// Submissions run one at a time on a shared runner for the selected backend.
 /// Warm and amortized preparation spans submissions within the same policy.
 /// A policy change ends the previous prepared session before the next trial.
@@ -230,11 +241,12 @@ pub async fn serve_campaign<R: BufRead + Send + 'static, W: Write>(
                 Command::CancelTrial { trial_id } => {
                     if let Some(running) = active.remove(&trial_id) {
                         match collect(running, true).await {
-                            Ok(trial) => {
+                            Ok(Some(trial)) => {
                                 let event = json!({"event": "cancelled", "trial": trial});
                                 completed.insert(trial_id, trial);
                                 Ok(event)
                             }
+                            Ok(None) => Ok(json!({"event": "cancelled_before_start", "trial_id": trial_id})),
                             Err(error) => Err(error),
                         }
                     } else { Err(invalid("unknown active trial_id")) }
@@ -243,7 +255,8 @@ pub async fn serve_campaign<R: BufRead + Send + 'static, W: Write>(
                     let mut failures = Vec::new();
                     for (id, running) in std::mem::take(&mut active) {
                         match collect(running, false).await {
-                            Ok(trial) => { completed.insert(id, trial); }
+                            Ok(Some(trial)) => { completed.insert(id, trial); }
+                            Ok(None) => write_event(&mut writer, &json!({"event": "cancelled_before_start", "trial_id": id}))?,
                             Err(error) => failures.push(json!({"trial_id": id, "error": error.to_string()})),
                         }
                     }
@@ -258,7 +271,7 @@ pub async fn serve_campaign<R: BufRead + Send + 'static, W: Write>(
         }
         Ok(())
     }.await;
-    let result = cancel_outstanding(active, result).await;
+    let result = cancel_outstanding(active, result, &mut writer).await;
     let shutdown = runner.lock().await.1.finish().await;
     result.and(shutdown)
 }
@@ -269,8 +282,82 @@ mod tests {
         atomic::{AtomicUsize, Ordering},
         Arc,
     };
+    use std::{future::Future, task::Poll};
 
     use super::*;
+
+    #[tokio::test]
+    async fn queued_cancellation_preserves_the_prepared_session_and_policy() {
+        use super::super::{LiveSession, SessionError};
+
+        for close_sender in [false, true] {
+            let dir = tempfile::tempdir().expect("directory");
+            let config = CampaignConfig {
+                manifest: std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("research/qblock_eval/fixtures/campaign/fixed.manifest.json"),
+                backend: "fake".into(),
+                output: dir.path().join("out"),
+                dry_run: false,
+            };
+            let loaded = load_campaign(&config).expect("campaign");
+            let (commands, mut command_receiver) = mpsc::channel(1);
+            let (_events, receiver) = mpsc::channel(1);
+            let mut runner = TrialRunner::new(
+                resolve_backend("fake"),
+                config.output.clone(),
+                RuleSet::Current(loaded.profile),
+            );
+            runner.session = Some(LiveSession {
+                id: "prepared".into(),
+                commands,
+                events: receiver,
+                failed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                task: tokio::spawn(async {
+                    Err(SessionError::Spawn(std::io::Error::other(
+                        "prepared session must remain open",
+                    )))
+                }),
+                ready: true,
+                trials: 0,
+            });
+            let shared = Mutex::new((Some("previous-policy".to_owned()), runner));
+            let guard = shared.lock().await;
+            let (cancel, cancelled) = oneshot::channel();
+            let mut queued = Box::pin(run_serialized(
+                &shared,
+                &loaded.instances[0],
+                &loaded.policies[0],
+                &loaded.budget,
+                cancelled,
+                "queued".into(),
+            ));
+            assert!(
+                std::future::poll_fn(|cx| Poll::Ready(queued.as_mut().poll(cx)))
+                    .await
+                    .is_pending()
+            );
+            if close_sender {
+                drop(cancel);
+            } else {
+                cancel.send(()).expect("queued cancellation");
+            }
+            drop(guard);
+            let result = queued.await;
+            assert!(
+                result.is_ok(),
+                "queued cancellation is not an error: {result:?}"
+            );
+            assert!(result.expect("queued cancellation").is_none());
+            let shared = shared.lock().await;
+            assert_eq!(shared.0.as_deref(), Some("previous-policy"));
+            assert_eq!(
+                shared.1.session.as_ref().map(|session| session.id.as_str()),
+                Some("prepared")
+            );
+            assert!(command_receiver.try_recv().is_err());
+            assert!(!config.output.exists(), "no trace or ChallengeRelease");
+        }
+    }
 
     #[tokio::test]
     async fn eof_cancels_queued_and_running_trials_before_joining() {
@@ -303,7 +390,7 @@ mod tests {
         ]);
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(1),
-            cancel_outstanding(active, Ok(())),
+            cancel_outstanding(active, Ok(()), &mut Vec::new()),
         )
         .await;
         assert!(
@@ -330,7 +417,7 @@ mod tests {
                 });
                 active.insert(id.into(), RunningTrial { cancel, task });
             }
-            let error = cancel_outstanding(active, result)
+            let error = cancel_outstanding(active, result, &mut Vec::new())
                 .await
                 .expect_err("first failure");
             assert_eq!(completed.load(Ordering::SeqCst), 2);
