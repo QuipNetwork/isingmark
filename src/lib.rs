@@ -2,6 +2,7 @@
 //! `IsingMark` benchmark harness.
 
 pub mod backend;
+pub mod campaign;
 pub mod cli;
 pub mod config;
 pub mod corpus;

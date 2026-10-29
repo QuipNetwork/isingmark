@@ -59,6 +59,58 @@ pub enum Command {
     /// whether their best-energy distributions differ. Pure post-hoc
     /// analysis: no backend is spawned.
     Compare(CompareArgs),
+    /// Run timed trials from an explicit campaign manifest.
+    Campaign(CampaignArgs),
+}
+
+#[derive(Debug, Args)]
+#[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+pub struct CampaignArgs {
+    #[command(subcommand)]
+    pub command: Option<CampaignCommand>,
+    /// Campaign manifest, with paths relative to its directory.
+    #[arg(long, required = true)]
+    pub manifest: Option<PathBuf>,
+    /// Select policies with this backend name or executable path.
+    #[arg(long, required = true)]
+    pub backend: Option<String>,
+    /// Directory for trial traces and campaign results.
+    #[arg(long, required = true)]
+    pub output: Option<PathBuf>,
+    /// Validate inputs and print resource estimates without starting a miner.
+    #[arg(long)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CampaignCommand {
+    /// Read bounded JSON-lines commands from stdin and write JSON event replies.
+    Serve(CampaignServeArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct CampaignServeArgs {
+    /// Campaign manifest. Its input paths are relative to this file.
+    #[arg(long)]
+    pub manifest: PathBuf,
+    /// Select policies with this backend name or executable path.
+    #[arg(long)]
+    pub backend: String,
+    /// Directory for trial traces and campaign results.
+    #[arg(long)]
+    pub output: PathBuf,
+}
+
+impl CampaignServeArgs {
+    #[must_use]
+    pub fn into_config(self, dry_run: bool) -> crate::campaign::runner::CampaignConfig {
+        crate::campaign::runner::CampaignConfig {
+            manifest: self.manifest,
+            backend: self.backend,
+            output: self.output,
+            dry_run,
+        }
+    }
 }
 
 /// `isingmark compare` arguments. Unlike every other mode, compare takes
@@ -1000,7 +1052,8 @@ mod tests {
     fn throughput_args(cli: Cli) -> ThroughputArgs {
         match cli.command {
             Command::Throughput(args) => args,
-            Command::Sweep(_)
+            Command::Campaign(_)
+            | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Comparative(_)
             | Command::Scaling(_)
@@ -1015,7 +1068,8 @@ mod tests {
     fn sweep_args(cli: Cli) -> SweepArgs {
         match cli.command {
             Command::Sweep(args) => args,
-            Command::Throughput(_)
+            Command::Campaign(_)
+            | Command::Throughput(_)
             | Command::Ttt(_)
             | Command::Comparative(_)
             | Command::Scaling(_)
@@ -1030,7 +1084,8 @@ mod tests {
     fn ttt_args(cli: Cli) -> TttArgs {
         match cli.command {
             Command::Ttt(args) => args,
-            Command::Throughput(_)
+            Command::Campaign(_)
+            | Command::Throughput(_)
             | Command::Sweep(_)
             | Command::Comparative(_)
             | Command::Scaling(_)
@@ -1045,7 +1100,8 @@ mod tests {
     fn comparative_args(cli: Cli) -> ComparativeArgs {
         match cli.command {
             Command::Comparative(args) => args,
-            Command::Throughput(_)
+            Command::Campaign(_)
+            | Command::Throughput(_)
             | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Scaling(_)
@@ -1060,7 +1116,8 @@ mod tests {
     fn scaling_args(cli: Cli) -> ScalingArgs {
         match cli.command {
             Command::Scaling(args) => args,
-            Command::Throughput(_)
+            Command::Campaign(_)
+            | Command::Throughput(_)
             | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Comparative(_)
@@ -1075,7 +1132,8 @@ mod tests {
     fn reproducibility_args(cli: Cli) -> ReproducibilityArgs {
         match cli.command {
             Command::Reproducibility(args) => args,
-            Command::Throughput(_)
+            Command::Campaign(_)
+            | Command::Throughput(_)
             | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Comparative(_)
@@ -1090,7 +1148,8 @@ mod tests {
     fn compare_args(cli: Cli) -> CompareArgs {
         match cli.command {
             Command::Compare(args) => args,
-            Command::Throughput(_)
+            Command::Campaign(_)
+            | Command::Throughput(_)
             | Command::Sweep(_)
             | Command::Ttt(_)
             | Command::Comparative(_)
