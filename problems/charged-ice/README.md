@@ -13,7 +13,7 @@ Couplings are in units of the full-strength coupler (J = 1), with the milli valu
 - Topology use: 100 percent of qubits and 100 percent of couplers.
 
 ## Compact representations
-- Problem (256 bits: the nonce plus the generator version): summed tile terms `A/2 (sum g s - q)^2` over the suite tetrahedra, where each tetrahedron carries a charge q of 0, +2, or −2 set by the fields.
+- Problem (256 bits: the nonce plus the generator version): the nonce drives the suite generator, which gives 10,710 strong couplers at `±250` with their tile gauges, fields on 2,438 qubits, and 30,764 weak couplers at `±31` with their signs. The source states the formula as summed tile terms `A/2 (sum g s - q)^2` with overlap, random signs, or charges. That formula is shared with other ice cells, and a formula for this cell alone is not recorded.
 - Solution (4,575 bits raw, compact size not measured): charge-2 tiles keep 4 states (1-in-4).
 - Explicit size of the largest of 12 models: 41,474 couplers × 2 bits = 82,948 bits (4 values).
 

@@ -22,7 +22,7 @@ Topology use: 100% of qubits, 100% of couplers, 100% of the topology.
 The generator and the postprocess are not imported. No source file in `sources/` belongs to this family. The research generator is `generate.py` in the research cell directory `qpu-suite/work/cells/pair-loop`. The production postprocess is `dimers` plus `csa`, 0.25 s of one core per call, with a median gain of 1 (0) energy units. The attacks use pair contraction and cycle moves.
 
 ## Results
-- QPU: the suite run took no QPU capture, because the Tier 3 rule omitted it. The new-pow recap holds 12 production calls (48 reads at 80 µs). The QPU energies below come from those 12 calls.
+- QPU: the suite run took no QPU capture, because the Tier 3 rule omitted it. The new-pow recap holds 12 production calls (48 reads at 80 µs, 0.046 s of access per call). The comparison against the single-flip GPU in the suite run is not measured. The QPU energies below come from those 12 calls.
 - Strongest attack: both CPU attacks (pair contraction and cycle moves) beat the deepest GPU rung on 12 of 12 screened models.
 - Rank: QPU (0.046 s) < CPU (1.94 s) < CUDA (>75.9 s). CPU beats CUDA.
 - Best classical: CPU 6.5× (1.9×). CUDA gap: >256× (>75×).

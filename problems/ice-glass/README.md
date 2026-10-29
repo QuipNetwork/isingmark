@@ -13,7 +13,7 @@ Couplings are in units of the full-strength coupler (J = 1), with the milli valu
 - Topology use: 100 percent of qubits and 100 percent of couplers, with 41,474 nonzero couplers per model.
 
 ## Compact representations
-- Problem (256 bits: the nonce plus the generator version): `sum_t 0.500[(sum_{i in t} g_ti s_i)^2 - 4]` over 1,785 tiles, with one global gauge per nonce, plus a random-sign glass of ±0.062, ±0.125, or ±0.200 (ratio 16, 8, or 5).
+- Problem (256 bits: the nonce plus the generator version): `sum_t 0.500[(sum_{i in t} g_ti s_i)^2 - 4]` over 1,785 tiles, with a global gauge (F11) or a per-tile gauge (F12), plus a glass of ±0.031 to ±0.250. The source states this one formula for several families, so a formula for this family alone is not recorded. This family uses one global gauge per nonce and the glass values listed under Construction.
 - Solution: the strong layer obeys the ice rule with 6 of 16 states per tile. The Pauling count is about 2^1,560. The strong floor of −3,570 is closed form. The glass optimum has no closed form. Size: 4,575 bits raw for `ice-glass-r8` and `ice-glass-r16`, and 2,504 bits compact (mean per qualifying state, at most 2,648) for `ice-glass-r5`.
 
 ## Variants
