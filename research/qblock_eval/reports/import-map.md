@@ -154,7 +154,11 @@ Algorithm deltas, none imported:
 Parameter deltas: P1 adds `--beta-knee` and `--knee-frac` (L9 and L13). P2 adds `--beta-knot` and `--knot-fraction` on the older non-CSR base. Both are off by default.
 
 Non-algorithm deltas: N1 is the older `pair_bench.rs` base. It has no CSR layout and no incremental boundary sums.
-The single-replica move set is the same. This was read, not run. N2 is output-only variants of `fast_bench.rs`. N3 is `sb_bench.rs`, which is unrelated.
+The single-replica move set is the same. This was read, not run.
+
+N2 is output-only variants of `fast_bench.rs`.
+
+N3 is `sb_bench.rs`, which is unrelated.
 
 `fast_bench.rs` is a separate solver in the same family as `pair_bench` in soft pair mode. It adds a CSR layout, an
 incremental heat bath, replica exchange, and an exact strip polish. The strip polish lives in `examples/cluster/strips.rs`, which is
