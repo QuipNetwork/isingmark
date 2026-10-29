@@ -93,7 +93,13 @@ src/
   modes/              throughput, sweep, comparative, ttt, scaling,
                       reproducibility, compare
   report/             text tables; plot.rs behind the plot feature
+research/qblock_eval/
+  sources/selected/   byte-identical copies of selected research sources
+                      plus manifest.json (blake3 digests, function -> ticket)
+  reports/            import-map.md: provenance and destination tickets
 ```
+
+`tests/campaign_source_inventory.rs` validates the manifest against the copied files. Never edit a copied source in place. Copy a new snapshot from the research workspace and update its manifest entry.
 
 Solver deps (versions in `Cargo.toml`): `quip-proto`, `quip-protocol`, and `quip-solver-core`, published on crates.io from `quip.network/quip-solver-core`.
 
