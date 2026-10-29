@@ -53,7 +53,7 @@ graph, integer couplings in milli units from −1,000 to 1,000, and zero fields.
 The construction of every cell is in the module docstring of its file under
 `tools/structured/isingmark_structured/families/`. The evidence for every verdict is under
 `/home/carback1/quip-data/regimes/qpu-suite/work/cells/<cell>/` on the research host, and
-the per-cell manifest in `corpora/structured/<cell>.manifest.json` records the suite's
+the per-cell parameter file in `problems/<family>/params/<cell>.json` records the suite's
 generator hash and the census of each model.
 
 ## Instance file format
@@ -92,13 +92,13 @@ Zephyr coordinate helpers, so it does not need the D-Wave Ocean packages.
 cd tools/structured
 python -m venv .venv
 .venv/bin/pip install -e '.[test]'
-.venv/bin/isingmark-structured --family ice-glass-r8 --out ../../corpora/structured
+.venv/bin/isingmark-structured --family ice-glass-r8
 .venv/bin/isingmark-structured --family ice-twisted --family tri-match-r4 \
-  --out ../../corpora/structured --count 24
+  --count 24
 ```
 
 The generator reads the live topology specification. The default path is
-`/home/carback1/quip-data/regimes/topology-live-2026-09-21.spec.json` on the research host.
+`fixtures/suite-live-2026-09-21.spec.json` in this repository.
 Give another copy with `--suite-spec`. Each run writes `<out>/<cell>.jsonl` and
 `<out>/<cell>.manifest.json`. Git tracks the manifests. The generator produces the instance
 files on demand, and git ignores them, except the two-instance smoke file the tests use.
@@ -122,9 +122,9 @@ full command reference.
 
 ```bash
 isingmark throughput --backend cpu-sa --topology-preset chain-h0 \
-  --instances corpora/structured/ice-glass-r8.jsonl --duration 10m
+  --instances corpora/ice-glass-r8.jsonl --duration 10m
 isingmark sweep --backend cpu-sa --topology-preset chain-h0 \
-  --instances corpora/structured/ice-twisted.jsonl --sweeps 8192,32768,131072
+  --instances corpora/ice-twisted.jsonl --sweeps 8192,32768,131072
 ```
 
 `--instances` and `--corpus` are mutually exclusive. An explicit `--instances` or

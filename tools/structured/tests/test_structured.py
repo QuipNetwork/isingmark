@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SUITE_MANIFEST = Path(
     "/home/carback1/quip-data/regimes/qpu-suite/work/cells/ice-glass-r8/manifest.json"
 )
-COMMITTED_MANIFEST = ROOT / "corpora" / "structured" / "ice-glass-r8.manifest.json"
+COMMITTED_MANIFEST = ROOT / "problems" / "ice-glass" / "params" / "ice-glass-r8.json"
 
 
 def test_nonce_list_matches_the_suite() -> None:

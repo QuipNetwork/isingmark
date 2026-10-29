@@ -7,8 +7,9 @@ This document records which research sources the repository now holds. It maps e
 origins below are relative to it.
 
 The repository holds 41 imported files (1826115 bytes) under
-`research/qblock_eval/sources/selected/<origin>`. The manifest
-`research/qblock_eval/sources/selected/manifest.json` lists each file with its size and blake3
+`problems/<owner>/sources/<origin>`, where `<owner>` is a problem family or `shared`. The
+live topology spec is the one exception and sits at `fixtures/suite-live-2026-09-21.spec.json`.
+The manifest `problems/sources.json` lists each file with its repository path, size, and blake3
 digest. It also lists 248 byte-identical duplicates, 48 retained evidence entries,
 and the skipped checks.
 

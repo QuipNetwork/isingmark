@@ -41,19 +41,20 @@ python -m venv .venv
 ## Generate
 
 The generator reads the live topology specification of the suite.
-The default path is `/home/carback1/quip-data/regimes/topology-live-2026-09-21.spec.json` on the research host.
+The default path is `fixtures/suite-live-2026-09-21.spec.json` in this repository.
 Give another copy with `--suite-spec`.
 The specification has 4,575 qubits and 41,474 couplers.
 
 ```bash
-isingmark-structured --family ice-glass-r8 --out ../../corpora/structured
-isingmark-structured --family tri-match-r4 --family tri-match-r6 --out ../../corpora/structured --count 24
+isingmark-structured --family ice-glass-r8
+isingmark-structured --family tri-match-r4 --family tri-match-r6 --count 24
 ```
 
 Each run writes two files for each family:
 
-- `<out>/<family>.jsonl`: a header line, then one instance per nonce.
-- `<out>/<family>.manifest.json`: the nonces and parameters of the run.
+- `corpora/<cell>.jsonl` (set the directory with `--out`): a header line, then one instance per nonce.
+- `problems/<family>/params/<cell>.json`: the nonces and parameters of the run.
+  A cell with no params file yet needs `--problem-family <family>`.
   It also holds the package hash and the exactness flag.
 
 Add `--suite-dir <qpu-suite>` to copy the suite generator hash and the per-model census into the manifest.

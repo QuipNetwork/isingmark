@@ -294,7 +294,7 @@ mod tests {
             let dir = tempfile::tempdir().expect("directory");
             let config = CampaignConfig {
                 manifest: std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("research/qblock_eval/fixtures/campaign/fixed.manifest.json"),
+                    .join("evaluation/qblock/fixtures/campaign/fixed.manifest.json"),
                 backend: "fake".into(),
                 output: dir.path().join("out"),
                 dry_run: false,

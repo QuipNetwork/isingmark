@@ -16,7 +16,9 @@ from pathlib import Path
 
 import numpy as np
 
-DEFAULT_SUITE_SPEC = Path("/home/carback1/quip-data/regimes/topology-live-2026-09-21.spec.json")
+DEFAULT_SUITE_SPEC = (
+    Path(__file__).resolve().parents[3] / "fixtures" / "suite-live-2026-09-21.spec.json"
+)
 DEFAULT_SPIN_MILLI = [-1000, 1000]
 
 

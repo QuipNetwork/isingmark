@@ -654,7 +654,6 @@ mod tests {
         let spec = smoke();
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("corpora")
-            .join("structured")
             .join("smoke-ice-glass.jsonl");
         let mut src = InstanceSource::load(&path, &spec).expect("smoke file loads");
         assert_eq!(src.len(), 2);
@@ -681,7 +680,6 @@ mod tests {
         let other = load_fixture("chain-ternary").expect("fixture parses");
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("corpora")
-            .join("structured")
             .join("smoke-ice-glass.jsonl");
         assert!(matches!(
             InstanceSource::load(&path, &other).expect_err("must reject"),

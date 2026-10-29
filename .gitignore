@@ -37,9 +37,11 @@ docs/superpowers/plans/
 .plans/
 
 # Structured instance files are generated on demand (tools/structured).
-# Only the two-instance smoke file used by the tests is tracked.
-corpora/structured/*.jsonl
-!corpora/structured/smoke-ice-glass.jsonl
+# Only the chain corpora and the two-instance smoke file used by the tests are tracked.
+corpora/*.jsonl
+!corpora/chain-h0.jsonl
+!corpora/chain-ternary.jsonl
+!corpora/smoke-ice-glass.jsonl
 
 # Python tooling caches under tools/structured
 __pycache__/

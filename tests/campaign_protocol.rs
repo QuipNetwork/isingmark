@@ -56,7 +56,7 @@ fn witness(instance: &Instance, spins: &[i8]) -> Witness {
 }
 
 fn profile_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("research/qblock_eval/configs/protocol.json")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("evaluation/qblock/configs/protocol.json")
 }
 
 fn profile() -> ProtocolProfile {

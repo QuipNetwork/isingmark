@@ -8,7 +8,7 @@ use crate::campaign::{contracts::TimingStatus, trace::read_trace};
 fn inputs() -> (Instance, PolicyManifest, TrialBudget, RuleSet) {
     let config = CampaignConfig {
         manifest: Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("research/qblock_eval/fixtures/campaign/fixed.manifest.json"),
+            .join("evaluation/qblock/fixtures/campaign/fixed.manifest.json"),
         backend: "fake".into(),
         output: PathBuf::new(),
         dry_run: true,
@@ -23,7 +23,7 @@ fn inputs() -> (Instance, PolicyManifest, TrialBudget, RuleSet) {
 }
 
 fn manifest_config(dir: &Path) -> CampaignConfig {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("research/qblock_eval");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("evaluation/qblock");
     let (_, policy, _, _) = inputs();
     let manifest = dir.join("manifest.json");
     fs::write(

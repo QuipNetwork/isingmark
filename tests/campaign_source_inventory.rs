@@ -1,5 +1,4 @@
-//! Integrity checks for the research source manifest under
-//! `research/qblock_eval/sources/selected`.
+//! Integrity checks for the research source manifest `problems/sources.json`.
 
 use std::fs;
 use std::path::Path;
@@ -14,7 +13,8 @@ mod inventory {
 
     use serde::Deserialize;
 
-    const SCHEMA: &str = "isingmark.research-sources/1";
+    const MANIFEST: &str = "problems/sources.json";
+    const SCHEMA: &str = "isingmark.research-sources/2";
     const KINDS: [&str; 7] = [
         "solver",
         "generator",
@@ -24,6 +24,9 @@ mod inventory {
         "topology",
         "script",
     ];
+    /// The one copied source that lives outside `problems/`. It is renamed on copy, so the
+    /// file-name rule skips it.
+    const SPEC_PATH: &str = "fixtures/suite-live-2026-09-21.spec.json";
     const TICKET_PREFIXES: [&str; 9] = ["SC", "CPU", "CU", "MT", "DW", "CO", "VAL", "IM", "EXP"];
 
     #[derive(Deserialize)]
@@ -44,9 +47,9 @@ mod inventory {
         skipped_checks: Vec<SkippedCheck>,
     }
 
-    /// Returns the `skipped_checks` recorded in the manifest in `dir`.
-    pub fn skipped_checks(dir: &Path) -> Result<Vec<SkippedCheck>, String> {
-        let raw = fs::read(dir.join("manifest.json")).map_err(|e| e.to_string())?;
+    /// Returns the `skipped_checks` recorded in `problems/sources.json` under `root`.
+    pub fn skipped_checks(root: &Path) -> Result<Vec<SkippedCheck>, String> {
+        let raw = fs::read(root.join(MANIFEST)).map_err(|e| e.to_string())?;
         let parsed: SkippedChecks = serde_json::from_slice(&raw).map_err(|e| e.to_string())?;
         Ok(parsed.skipped_checks)
     }
@@ -55,6 +58,7 @@ mod inventory {
     struct Source {
         id: String,
         origin: String,
+        path: String,
         kind: String,
         bytes: u64,
         blake3: String,
@@ -97,6 +101,15 @@ mod inventory {
                 .all(|part| !part.is_empty() && part != "." && part != "..")
     }
 
+    /// A copy lives under `problems/`, except for the one topology spec under `fixtures/`.
+    fn is_valid_path(path: &str) -> bool {
+        is_safe_origin(path) && (path.starts_with("problems/") || path == SPEC_PATH)
+    }
+
+    fn file_name(path: &str) -> &str {
+        path.rsplit('/').next().unwrap_or(path)
+    }
+
     /// Lists files under `dir` as `/`-separated paths relative to `root`.
     fn list_files(root: &Path, dir: &Path, out: &mut BTreeSet<String>) -> std::io::Result<()> {
         for entry in fs::read_dir(dir)? {
@@ -111,15 +124,16 @@ mod inventory {
         Ok(())
     }
 
-    /// Checks the manifest in `dir` against the copied files and returns every violation.
-    pub fn validate(dir: &Path) -> Result<(), Vec<String>> {
+    /// Checks `problems/sources.json` under `root` against the copied files and returns every
+    /// violation.
+    pub fn validate(root: &Path) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
-        let manifest: Manifest = match fs::read(dir.join("manifest.json"))
+        let manifest: Manifest = match fs::read(root.join(MANIFEST))
             .map_err(|e| e.to_string())
             .and_then(|raw| serde_json::from_slice(&raw).map_err(|e| e.to_string()))
         {
             Ok(manifest) => manifest,
-            Err(e) => return Err(vec![format!("cannot read manifest.json: {e}")]),
+            Err(e) => return Err(vec![format!("cannot read {MANIFEST}: {e}")]),
         };
 
         if manifest.schema != SCHEMA {
@@ -138,6 +152,7 @@ mod inventory {
         let mut ids: HashMap<&str, &Source> = HashMap::new();
         let mut digests = BTreeSet::new();
         let mut origins = BTreeSet::new();
+        let mut paths = BTreeSet::new();
         for source in &manifest.sources {
             let origin = &source.origin;
             if ids.insert(&source.id, source).is_some() {
@@ -167,11 +182,26 @@ mod inventory {
             {
                 errors.push(format!("{origin}: {} source has no functions", source.kind));
             }
+            let mut usable = true;
             if !is_safe_origin(origin) {
                 errors.push(format!("unsafe origin {origin:?}"));
-                continue;
+                usable = false;
             }
-            check_file(dir, source, &mut errors);
+            if !is_valid_path(&source.path) {
+                errors.push(format!("{origin}: bad path {:?}", source.path));
+                usable = false;
+            } else if source.path != SPEC_PATH && file_name(&source.path) != file_name(origin) {
+                errors.push(format!(
+                    "{origin}: path {:?} has a different file name",
+                    source.path
+                ));
+            }
+            if !paths.insert(source.path.as_str()) {
+                errors.push(format!("duplicate path {}", source.path));
+            }
+            if usable {
+                check_file(root, source, &mut errors);
+            }
         }
 
         for duplicate in &manifest.duplicates {
@@ -195,16 +225,7 @@ mod inventory {
             }
         }
 
-        let mut files = BTreeSet::new();
-        if let Err(e) = list_files(dir, dir, &mut files) {
-            errors.push(format!("cannot list {}: {e}", dir.display()));
-        }
-        for file in files {
-            let listed = manifest.sources.iter().any(|s| s.origin == file);
-            if file != "manifest.json" && !listed {
-                errors.push(format!("unlisted file {file}"));
-            }
-        }
+        check_unlisted(root, &paths, &mut errors);
 
         if errors.is_empty() {
             Ok(())
@@ -213,9 +234,30 @@ mod inventory {
         }
     }
 
-    fn check_file(dir: &Path, source: &Source, errors: &mut Vec<String>) {
+    /// Reports every file under `problems/*/sources/` that no source lists as its `path`.
+    fn check_unlisted(root: &Path, paths: &BTreeSet<&str>, errors: &mut Vec<String>) {
+        let mut files = BTreeSet::new();
+        if let Ok(families) = fs::read_dir(root.join("problems")) {
+            for family in families.flatten() {
+                let sources = family.path().join("sources");
+                if !sources.is_dir() {
+                    continue;
+                }
+                if let Err(e) = list_files(root, &sources, &mut files) {
+                    errors.push(format!("cannot list {}: {e}", sources.display()));
+                }
+            }
+        }
+        for file in files {
+            if !paths.contains(file.as_str()) {
+                errors.push(format!("unlisted file {file}"));
+            }
+        }
+    }
+
+    fn check_file(root: &Path, source: &Source, errors: &mut Vec<String>) {
         let origin = &source.origin;
-        let content = match fs::read(dir.join(origin)) {
+        let content = match fs::read(root.join(&source.path)) {
             Ok(content) => content,
             Err(e) => {
                 errors.push(format!("{origin}: missing copied file ({e})"));
@@ -241,10 +283,12 @@ fn hash(bytes: &[u8]) -> String {
     blake3::hash(bytes).to_hex().to_string()
 }
 
+/// Builds an entry whose copy sits at `problems/shared/sources/<origin>`.
 fn source(id: &str, origin: &str, content: &[u8]) -> Value {
     json!({
         "id": id,
         "origin": origin,
+        "path": format!("problems/shared/sources/{origin}"),
         "kind": "solver",
         "bytes": content.len(),
         "blake3": hash(content),
@@ -263,7 +307,7 @@ fn source(id: &str, origin: &str, content: &[u8]) -> Value {
 
 fn manifest(sources: &[Value], duplicates: &[Value]) -> Value {
     json!({
-        "schema": "isingmark.research-sources/1",
+        "schema": "isingmark.research-sources/2",
         "research_root": "/research",
         "digest": "blake3",
         "sources": sources,
@@ -273,8 +317,9 @@ fn manifest(sources: &[Value], duplicates: &[Value]) -> Value {
     })
 }
 
+/// Writes the copy of `origin` where `source` expects it.
 fn write_file(dir: &Path, origin: &str, content: &[u8]) -> TestResult {
-    let path = dir.join(origin);
+    let path = dir.join("problems/shared/sources").join(origin);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -283,8 +328,9 @@ fn write_file(dir: &Path, origin: &str, content: &[u8]) -> TestResult {
 }
 
 fn write_manifest(dir: &Path, manifest: &Value) -> TestResult {
+    fs::create_dir_all(dir.join("problems"))?;
     fs::write(
-        dir.join("manifest.json"),
+        dir.join("problems/sources.json"),
         serde_json::to_vec_pretty(manifest)?,
     )?;
     Ok(())
@@ -430,7 +476,7 @@ fn unlisted_file_fails() -> TestResult {
 }
 
 fn recorded_dir() -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("research/qblock_eval/sources/selected")
+    Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf()
 }
 
 #[test]
@@ -499,4 +545,44 @@ fn repeated_origin_fails() -> TestResult {
     let dup = json!({ "origin": "a/one.rs", "blake3": hash(b"fn one() {}"), "same_as": "one" });
     write_manifest(tmp.path(), &manifest(&[one], &[dup]))?;
     expect_error(tmp.path(), "duplicate origin")
+}
+
+#[test]
+fn bad_path_fails() -> TestResult {
+    for path in [
+        "elsewhere/one.rs",
+        "problems/../one.rs",
+        "/problems/one.rs",
+        "fixtures/other.spec.json",
+    ] {
+        let tmp = TempDir::new()?;
+        let mut one = one_source(tmp.path())?;
+        one["path"] = json!(path);
+        write_manifest(tmp.path(), &manifest(&[one], &[]))?;
+        expect_error(tmp.path(), "bad path")?;
+    }
+    Ok(())
+}
+
+#[test]
+fn path_with_other_file_name_fails() -> TestResult {
+    let tmp = TempDir::new()?;
+    let mut one = one_source(tmp.path())?;
+    one["path"] = json!("problems/shared/sources/a/renamed.rs");
+    write_manifest(tmp.path(), &manifest(&[one], &[]))?;
+    expect_error(tmp.path(), "different file name")?;
+    Ok(())
+}
+
+#[test]
+fn spec_path_outside_problems_is_allowed() -> TestResult {
+    let tmp = TempDir::new()?;
+    let spec = "fixtures/suite-live-2026-09-21.spec.json";
+    fs::create_dir_all(tmp.path().join("fixtures"))?;
+    fs::write(tmp.path().join(spec), b"{}")?;
+    let mut entry = source("spec", "suite-live-2026-09-21.spec.json", b"{}");
+    entry["path"] = json!(spec);
+    entry["kind"] = json!("topology");
+    write_manifest(tmp.path(), &manifest(&[entry], &[]))?;
+    expect_valid(tmp.path())
 }

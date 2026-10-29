@@ -77,7 +77,7 @@ isingmark refuses a different `--topology-preset`. `--instances` and
 ```bash
 isingmark throughput --backend cpu-sa \
   --topology-preset smoke \
-  --instances corpora/structured/smoke-ice-glass.jsonl --duration 10s
+  --instances corpora/smoke-ice-glass.jsonl --duration 10s
 ```
 
 ### sweep

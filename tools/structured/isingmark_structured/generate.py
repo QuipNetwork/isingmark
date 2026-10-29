@@ -2,8 +2,8 @@
 
 ``<out>/<family>.jsonl`` holds a header line, then one line per nonce with
 ``h_milli`` and ``j_milli`` in the fixture's node and edge order.
-``<out>/<family>.manifest.json`` records the nonces, parameters, provenance
-and, with ``--suite-dir``, the suite's per-model census.
+``problems/<problem-family>/params/<cell>.json`` records the nonces, parameters,
+provenance and, with ``--suite-dir``, the suite's per-model census.
 """
 
 from __future__ import annotations
@@ -28,7 +28,10 @@ from isingmark_structured.topology import (
 )
 
 PACKAGE_DIR = Path(__file__).resolve().parent
-DEFAULT_FIXTURE = PACKAGE_DIR.parents[2] / "fixtures" / "chain-h0.spec.json"
+REPO_ROOT = PACKAGE_DIR.parents[2]
+DEFAULT_FIXTURE = REPO_ROOT / "fixtures" / "chain-h0.spec.json"
+DEFAULT_OUT = REPO_ROOT / "corpora"
+DEFAULT_PROBLEMS = REPO_ROOT / "problems"
 FORMAT = 1
 MILLI_LIMIT = 1000
 # Census lists longer than this (component sizes that count every isolated spin) stay in the suite.
@@ -97,9 +100,23 @@ def suite_record(suite_dir: Path, cell: str, family: Family, nonces: list[str]) 
     return {"suite_generator_sha256": generator, "census": census}
 
 
+def params_file(problems: Path, cell: str, problem_family: str | None) -> Path:
+    """The ``problems/<family>/params/<cell>.json`` path for ``cell``.
+
+    The family folder is the one that already holds the cell, else ``problem_family``.
+    """
+    existing = sorted(problems.glob(f"*/params/{cell}.json"))
+    if existing:
+        return existing[0]
+    if problem_family is None:
+        raise SystemExit(f"{cell}: no problems/*/params/{cell}.json yet; pass --problem-family")
+    return problems / problem_family / "params" / f"{cell}.json"
+
+
 def build(
     cell: str,
     out: Path,
+    params_path: Path,
     count: int,
     suite: SuiteSpec,
     fixture_path: Path,
@@ -164,7 +181,8 @@ def build(
         manifest["references"] = {
             nonce: references[nonce] for nonce in nonces if nonce in references
         }
-    manifest_path = out / f"{cell}.manifest.json"
+    manifest_path = params_path
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return jsonl, manifest_path
 
@@ -178,7 +196,19 @@ def main(argv: list[str] | None = None) -> int:
         choices=sorted(FAMILIES),
         help="cell name; repeatable",
     )
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--out", type=Path, default=DEFAULT_OUT, help="directory for <cell>.jsonl (default: corpora/)"
+    )
+    parser.add_argument(
+        "--problems",
+        type=Path,
+        default=DEFAULT_PROBLEMS,
+        help="problems directory that holds <family>/params/<cell>.json (default: problems/)",
+    )
+    parser.add_argument(
+        "--problem-family",
+        help="problems/ folder for a cell that has no params file yet",
+    )
     parser.add_argument("--count", type=int, default=protocol.SUITE_MODELS)
     parser.add_argument(
         "--fixture",
@@ -201,8 +231,9 @@ def main(argv: list[str] | None = None) -> int:
     suite = load_suite_spec(args.suite_spec)
     references = json.loads(args.references.read_text()) if args.references else {}
     for cell in args.family:
+        params_path = params_file(args.problems, cell, args.problem_family)
         jsonl, manifest = build(
-            cell, args.out, args.count, suite, args.fixture, args.suite_dir, references
+            cell, args.out, params_path, args.count, suite, args.fixture, args.suite_dir, references
         )
         print(f"{cell}: wrote {jsonl} and {manifest}", flush=True)
     return 0

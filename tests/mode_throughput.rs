@@ -562,7 +562,6 @@ async fn hermetic_throughput_corpus_run_records_its_source_in_the_summary() {
 fn smoke_instances_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("corpora")
-        .join("structured")
         .join("smoke-ice-glass.jsonl")
 }
 
