@@ -22,6 +22,56 @@ fn inputs() -> (Instance, PolicyManifest, TrialBudget, RuleSet) {
     )
 }
 
+fn manifest_config(dir: &Path) -> CampaignConfig {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("research/qblock_eval");
+    let (_, policy, _, _) = inputs();
+    let manifest = dir.join("manifest.json");
+    fs::write(
+        &manifest,
+        serde_json::to_vec(&json!({
+            "schema_version": 1,
+            "protocol_profile": root.join("configs/protocol.json"),
+            "instances": [root.join("fixtures/two_spin.instance.json")],
+            "policies": [policy],
+            "trials_per_pair": 2,
+            "budget": {"wall_limit_s": 5.0}
+        }))
+        .expect("manifest JSON"),
+    )
+    .expect("manifest");
+    CampaignConfig {
+        manifest,
+        backend: "fake".into(),
+        output: dir.join("out"),
+        dry_run: true,
+    }
+}
+
+#[tokio::test]
+async fn absent_resource_limits_round_trip_as_null() {
+    let dir = tempfile::tempdir().expect("directory");
+    let config = manifest_config(dir.path());
+    for (budget, wall, device) in [
+        (json!({"wall_limit_s": 5.0}), json!(10.0), Value::Null),
+        (json!({"device_budget_s": 30.0}), Value::Null, json!(60.0)),
+    ] {
+        let mut manifest: Value =
+            serde_json::from_reader(File::open(&config.manifest).expect("manifest")).expect("JSON");
+        manifest["budget"] = budget;
+        fs::write(
+            &config.manifest,
+            serde_json::to_vec(&manifest).expect("JSON"),
+        )
+        .expect("manifest");
+        let report = run_campaign(&config).await.expect("dry run");
+        let encoded = serde_json::to_value(report.resources).expect("resource JSON");
+        assert_eq!(encoded["max_wall_s"], wall);
+        assert_eq!(encoded["max_device_s"], device);
+        let _: ResourceEstimate =
+            serde_json::from_value(encoded).expect("finite resource round trip");
+    }
+}
+
 fn state(
     dir: &Path,
     instance: &Instance,
@@ -58,7 +108,15 @@ fn batch(state: &mut TrialState, id: &str, meta: Option<u64>, spins: &[Vec<i8>])
             None,
         )
         .expect("dispatch");
-    let capture = BatchCapture {
+    let capture = captured_batch(id, meta, spins);
+    state
+        .receive(&capture, Instant::now())
+        .expect("batch receipt");
+    capture
+}
+
+fn captured_batch(id: &str, meta: Option<u64>, spins: &[Vec<i8>]) -> BatchCapture {
+    BatchCapture {
         job_id: id.as_bytes().to_vec(),
         received_after_dispatch: Duration::from_millis(300),
         solutions: spins
@@ -76,11 +134,7 @@ fn batch(state: &mut TrialState, id: &str, meta: Option<u64>, spins: &[Vec<i8>])
             qpu_access_us,
             extra: BTreeMap::from([("raw".into(), "kept".into())]),
         }),
-    };
-    state
-        .receive(&capture, Instant::now())
-        .expect("batch receipt");
-    capture
+    }
 }
 
 fn session_channels() -> (
@@ -251,29 +305,34 @@ fn zero_distinct_rule_still_needs_a_scored_valid_witness() {
     assert!(state.trial.accepted_wall.is_some());
 }
 
-#[test]
-fn useful_first_read_does_not_prorate_the_batch() {
+#[tokio::test]
+async fn useful_first_read_does_not_prorate_the_batch() {
     let dir = tempfile::tempdir().expect("directory");
     let (instance, policy, budget, rules) = inputs();
-    let target = target_from_objective(&instance).expect("target");
     let mut state = state(dir.path(), &instance, &policy, &budget);
-    let capture = batch(
-        &mut state,
-        "expensive",
-        Some(31_000_000),
-        &[vec![1, 1], vec![1, -1]],
-    );
-    state
-        .evaluate(&instance, &policy, &rules, &target, &capture)
-        .expect("evaluate");
+    let capture = captured_batch("expensive", Some(31_000_000), &[vec![1, 1], vec![1, -1]]);
+    let (mut session, _commands, events) = session_channels();
+    events
+        .send(SessionEvent::Dispatched {
+            job_id: capture.job_id.clone(),
+            at: Instant::now(),
+        })
+        .await
+        .expect("dispatch");
+    events
+        .send(SessionEvent::Batch {
+            capture,
+            at: Instant::now(),
+        })
+        .await
+        .expect("batch");
+    drive_to_terminal(&mut session, &mut state, &instance, &policy, &rules).await;
     assert!(state.trial.accepted_wall.is_some());
     assert_eq!(
         state.ledger.outcome(30_000_000_000),
         BudgetOutcome::Exceeded
     );
-    state
-        .terminate(TerminalReason::DeviceBudgetExhausted)
-        .expect("termination");
+    assert_terminal(&state, "accepted");
     let trace = read_trace(&state.trial.events).expect("trace");
     let receipt = trace
         .events
@@ -293,6 +352,182 @@ fn useful_first_read_does_not_prorate_the_batch() {
     );
     assert_eq!(receipt.payload["meta"]["device_access_time_us"], 80_000_000);
     assert_eq!(receipt.payload["meta"]["extra"]["raw"], "kept");
+}
+
+#[tokio::test]
+async fn drained_proof_after_wall_cap_keeps_device_success() {
+    for terminal in [TerminalReason::WallTimeout, TerminalReason::Cancelled] {
+        let dir = tempfile::tempdir().expect("directory");
+        let (instance, policy, _, rules) = inputs();
+        let budget =
+            TrialBudget::new(Some(Duration::from_millis(1)), Some(30_000_000_000)).expect("budget");
+        let mut state = state(dir.path(), &instance, &policy, &budget);
+        state.clock = Instant::now()
+            .checked_sub(Duration::from_millis(2))
+            .expect("earlier clock");
+        state
+            .dispatch(b"late".to_vec(), Instant::now())
+            .expect("dispatch");
+        let (session, _commands, events) = session_channels();
+        events
+            .send(SessionEvent::Batch {
+                capture: captured_batch("late", Some(29_000_000), &[vec![1, 1]]),
+                at: Instant::now(),
+            })
+            .await
+            .expect("late batch");
+        let mut runner =
+            TrialRunner::new(resolve_backend(&policy.backend), dir.path().into(), rules);
+        runner.session = Some(session);
+        let target = target_from_objective(&instance).expect("target");
+        runner
+            .stop_trial(&mut state, terminal, &instance, &policy, &target)
+            .await
+            .expect("drain");
+        state.terminate(terminal).expect("termination");
+        assert_eq!(state.trial.terminal, terminal);
+        assert!(
+            state.trial.accepted_wall.expect("late proof") > budget.wall_limit.expect("wall cap")
+        );
+        assert_eq!(state.ledger.outcome(30_000_000_000), BudgetOutcome::Within);
+        let trace = read_trace(&state.trial.events).expect("trace");
+        let proof = trace
+            .events
+            .iter()
+            .find(|event| event.kind == EventKind::ProofAcceptance)
+            .expect("proof event");
+        assert!(proof.wall_ns > 1_000_000);
+    }
+}
+
+#[tokio::test]
+async fn cancellation_grace_scores_a_proof_after_the_wall_timer_fires() {
+    let dir = tempfile::tempdir().expect("directory");
+    let (instance, mut policy, _, rules) = inputs();
+    policy.preparation = Preparation::Warm;
+    let budget = TrialBudget::new(Some(Duration::from_millis(10)), Some(30_000_000_000))
+        .expect("short wall cap");
+    let (mut session, mut commands, events) = session_channels();
+    session.ready = true;
+    session.task = tokio::spawn(async move {
+        let submission = match commands.recv().await.expect("submission") {
+            SessionCommand::Submit(submission) => Some(submission),
+            SessionCommand::Finish => None,
+        }
+        .expect("submit before shutdown");
+        let job_id = submission.job.job_id;
+        events
+            .send(SessionEvent::Dispatched {
+                job_id: job_id.clone(),
+                at: Instant::now(),
+            })
+            .await
+            .expect("dispatch");
+        assert!(matches!(
+            commands.recv().await,
+            Some(SessionCommand::Finish)
+        ));
+        // Arrival is gated by the actual wall-time stop and cancellation grace.
+        events
+            .send(SessionEvent::Batch {
+                capture: captured_batch(
+                    std::str::from_utf8(&job_id).expect("job id"),
+                    Some(29_000_000),
+                    &[vec![1, 1]],
+                ),
+                at: Instant::now(),
+            })
+            .await
+            .expect("grace batch");
+        Err(SessionError::Spawn(std::io::Error::other(
+            "test transport ended",
+        )))
+    });
+    let mut runner = TrialRunner::new(resolve_backend(&policy.backend), dir.path().into(), rules);
+    runner.session = Some(session);
+    let trial = runner
+        .run_trial(&instance, &policy, &budget)
+        .await
+        .expect("trial");
+    assert_eq!(trial.terminal, TerminalReason::WallTimeout);
+    assert!(trial.accepted_wall.expect("proof") > budget.wall_limit.expect("cap"));
+    assert_eq!(
+        super::super::timing::budget_outcome(&trial.device_total, 30_000_000_000),
+        BudgetOutcome::Within
+    );
+    let trace = read_trace(&trial.events).expect("trace");
+    assert!(trace
+        .events
+        .iter()
+        .any(|event| event.kind == EventKind::ProofAcceptance && event.wall_ns > 10_000_000));
+}
+
+#[tokio::test]
+async fn drained_batches_respect_scoring_limits() {
+    for host_limit in [true, false] {
+        let dir = tempfile::tempdir().expect("directory");
+        let (instance, mut policy, budget, rules) = inputs();
+        if host_limit {
+            policy.host_compute_limit_s = 0.0;
+        } else {
+            policy.evaluation_limit = 0;
+        }
+        let mut state = state(dir.path(), &instance, &policy, &budget);
+        state
+            .dispatch(b"late".to_vec(), Instant::now())
+            .expect("dispatch");
+        let (session, _commands, events) = session_channels();
+        events
+            .send(SessionEvent::Batch {
+                capture: captured_batch("late", Some(29_000_000), &[vec![1, 1]]),
+                at: Instant::now(),
+            })
+            .await
+            .expect("late batch");
+        let mut runner =
+            TrialRunner::new(resolve_backend(&policy.backend), dir.path().into(), rules);
+        runner.session = Some(session);
+        let target = target_from_objective(&instance).expect("target");
+        runner
+            .stop_trial(
+                &mut state,
+                TerminalReason::WallTimeout,
+                &instance,
+                &policy,
+                &target,
+            )
+            .await
+            .expect("drain");
+        assert!(state.trial.accepted_wall.is_none());
+        assert_eq!(state.trial.resources.get("evaluations"), None);
+        assert_eq!(state.ledger.total().lower_ns, 29_000_000_000);
+    }
+}
+
+#[tokio::test]
+async fn miner_reject_is_an_operational_terminal() {
+    let dir = tempfile::tempdir().expect("directory");
+    let (instance, policy, budget, rules) = inputs();
+    let mut state = state(dir.path(), &instance, &policy, &budget);
+    let (mut session, _commands, events) = session_channels();
+    events
+        .send(SessionEvent::Dispatched {
+            job_id: b"rejected".to_vec(),
+            at: Instant::now(),
+        })
+        .await
+        .expect("dispatch");
+    events
+        .send(SessionEvent::Rejected {
+            job_id: b"rejected".to_vec(),
+            reason: "unsupported".into(),
+            at: Instant::now(),
+        })
+        .await
+        .expect("reject");
+    drive_to_terminal(&mut session, &mut state, &instance, &policy, &rules).await;
+    assert_terminal(&state, "miner_rejected");
+    assert!(state.trial.accepted_wall.is_none());
 }
 
 #[test]

@@ -6,8 +6,8 @@ use std::{collections::BTreeMap, error::Error, fmt, time::Duration};
 use crate::campaign::{
     contracts::TimeBasis,
     runner::{TerminalReason, Trial},
-    timing::{budget_outcome, BudgetOutcome},
-    trace::read_trace,
+    timing::{budget_outcome, wall_outcome, BudgetOutcome, WallOutcome},
+    trace::{read_trace, EventKind},
 };
 
 use super::confidence::{binomial_lower, binomial_upper, cluster_bootstrap};
@@ -92,6 +92,7 @@ pub enum AnalysisError {
     CorruptTrace(String),
     MixedBasis,
     InvalidProbability,
+    NoSizeReachesPower,
 }
 
 impl fmt::Display for AnalysisError {
@@ -104,6 +105,10 @@ impl fmt::Display for AnalysisError {
             Self::CorruptTrace(detail) => write!(formatter, "corrupt campaign trace: {detail}"),
             Self::MixedBasis => write!(formatter, "FixedWindow requires equal wall-clock limits"),
             Self::InvalidProbability => write!(formatter, "invalid probability or binomial count"),
+            Self::NoSizeReachesPower => write!(
+                formatter,
+                "no sample size within the scan limit reaches the requested power"
+            ),
         }
     }
 }
@@ -140,7 +145,8 @@ pub fn quantile(curve: &Curve, q: f64) -> Quantile {
 ///
 /// # Errors
 /// Returns `Empty` for missing trials, grids, or resamples, `MixedBasis` for unequal fixed windows,
-/// and `CorruptTrace` for unreadable or partial traces, missing wall observations, or
+/// and `CorruptTrace` for invalid trials, unreadable or partial traces, missing termination
+/// events or wall observations, or
 /// device grid times that cannot be represented as a nanosecond budget.
 pub fn estimate_curves(
     trials: &[Trial],
@@ -177,11 +183,8 @@ pub fn estimate_curves(
     let wall_grid = curve_grid(
         &design.wall_grid_s,
         trials.iter().filter_map(|trial| {
-            if trial.terminal == TerminalReason::Accepted {
-                trial.accepted_wall.map(|time| time.as_secs_f64())
-            } else {
-                None
-            }
+            let (time, accepted) = wall_observation(trial).ok()?;
+            accepted.then_some(time.as_secs_f64())
         }),
         wall_limit,
     );
@@ -189,7 +192,7 @@ pub fn estimate_curves(
         &design.device_grid_s,
         trials.iter().filter_map(|trial| {
             let upper = trial.device_total.upper_ns?;
-            if trial.terminal == TerminalReason::Accepted
+            if trial.accepted_wall.is_some()
                 && budget_outcome(&trial.device_total, upper) == BudgetOutcome::Within
             {
                 Some(Duration::from_nanos(upper).as_secs_f64())
@@ -237,10 +240,13 @@ pub fn estimate_curves(
             assumptions: vec![
                 design.censoring.assumption(),
                 design.band_assumption(instance_count),
-                "Device success is a joint condition with each trial's wall-clock cap and policy stops. \
-                 Stops before the device budget is spent remain unresolved, never independent censors. \
-                 The upper statistic includes their instance-weighted share and unresolved timing. \
-                 Exact endpoint overrides replace bootstrap bounds."
+                "Device proofs are scored independently of wall-clock caps and terminal reasons. \
+                 Without a proof, wall-clock and policy limits form a joint observation condition: \
+                 stops before the device budget is spent remain unresolved, never independent censors. \
+                 Miner crashes, miner rejections, and cancellations without proofs count as operational failures under the tested policy. \
+                 The upper statistic includes unresolved trials and timing with instance weights. \
+                 The exact zero-event bound floors the bootstrap upper band when unresolved mass exists. \
+                 Exact bounds replace bootstrap bounds only at pure zero-success and all-success points."
                     .into(),
             ],
         },
@@ -248,12 +254,27 @@ pub fn estimate_curves(
 }
 
 fn validate_trace(trial: &Trial) -> Result<(), AnalysisError> {
+    if trial.terminal == TerminalReason::InvalidRun {
+        return Err(AnalysisError::CorruptTrace(format!(
+            "trial {} ended as InvalidRun",
+            trial.trial_id
+        )));
+    }
     let path = trial.events.display();
     let trace = read_trace(&trial.events)
         .map_err(|error| AnalysisError::CorruptTrace(format!("{path}: {error}")))?;
     if trace.truncated_tail {
         return Err(AnalysisError::CorruptTrace(format!(
             "{path}: truncated final event"
+        )));
+    }
+    if !trace
+        .events
+        .iter()
+        .any(|event| event.kind == EventKind::TrialTermination)
+    {
+        return Err(AnalysisError::CorruptTrace(format!(
+            "{path}: missing trial termination"
         )));
     }
     Ok(())
@@ -272,7 +293,10 @@ fn curve_grid(design: &[f64], successes: impl Iterator<Item = f64>, limit: f64) 
 }
 
 fn wall_observation(trial: &Trial) -> Result<(Duration, bool), AnalysisError> {
-    let accepted = trial.terminal == TerminalReason::Accepted;
+    let accepted = wall_outcome(
+        trial.accepted_wall,
+        trial.wall_limit.unwrap_or(Duration::MAX),
+    ) == WallOutcome::Success;
     let time = if accepted {
         trial.accepted_wall
     } else {
@@ -352,19 +376,23 @@ enum DeviceResult {
 }
 
 fn device_result(trial: &Trial, budget_ns: u64) -> DeviceResult {
-    match trial.terminal {
-        TerminalReason::Accepted => match budget_outcome(&trial.device_total, budget_ns) {
+    if trial.accepted_wall.is_some() {
+        return match budget_outcome(&trial.device_total, budget_ns) {
             BudgetOutcome::Within => DeviceResult::Success,
             BudgetOutcome::Exceeded => DeviceResult::Failure,
             BudgetOutcome::Unresolved => DeviceResult::Unresolved,
-        },
-        TerminalReason::DeviceBudgetExhausted => DeviceResult::Failure,
+        };
+    }
+    match trial.terminal {
+        TerminalReason::Accepted
+        | TerminalReason::DeviceBudgetExhausted
+        | TerminalReason::MinerCrashed
+        | TerminalReason::MinerRejected
+        | TerminalReason::Cancelled
+        | TerminalReason::InvalidRun => DeviceResult::Failure,
         TerminalReason::WallTimeout
         | TerminalReason::HostComputeLimit
-        | TerminalReason::EvaluationLimit
-        | TerminalReason::MinerCrashed
-        | TerminalReason::Cancelled
-        | TerminalReason::InvalidRun => {
+        | TerminalReason::EvaluationLimit => {
             if trial.device_total.lower_ns >= budget_ns {
                 DeviceResult::Failure
             } else {

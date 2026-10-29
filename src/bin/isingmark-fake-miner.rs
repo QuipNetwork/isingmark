@@ -129,6 +129,9 @@ struct Cli {
     /// coordinator captures and surfaces it.
     #[arg(long)]
     stderr_and_exit: Option<String>,
+    /// Return a non-zero exit after the session has shut down, retaining all results.
+    #[arg(long)]
+    fail_on_shutdown: bool,
     /// 1-based ordinal (among jobs this process receives) at which to call
     /// `std::process::abort()` immediately, with no message and no orderly
     /// shutdown — simulating a segfault, `SIGKILL`/OOM, or a `panic = "abort"`
@@ -682,7 +685,7 @@ async fn run() -> Result<(), ExitCode> {
     };
     let _ = tokio::time::timeout(Duration::from_secs(5), drain).await;
 
-    if fatal_sent {
+    if fatal_sent || cli.fail_on_shutdown {
         Err(ExitCode::InternalFatal)
     } else {
         Ok(())

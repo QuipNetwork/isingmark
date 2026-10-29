@@ -1145,12 +1145,11 @@ fn decode_milli_f64(bytes: &[u8]) -> Vec<f64> {
         .unwrap_or_default()
 }
 
-fn build_batch_capture(
+fn scored_solutions(
     job: &Job,
     result: &JobResult,
     edges: &[(usize, usize)],
-    received_after_dispatch: Duration,
-) -> BatchCapture {
+) -> Vec<CapturedSolution> {
     let ising = job.ising.clone().unwrap_or_default();
     let h = decode_milli_f64(&ising.h);
     let j = decode_milli_f64(&ising.j);
@@ -1163,10 +1162,19 @@ fn build_batch_capture(
             reported_energy_milli: solution.energy_milli,
         });
     }
+    solutions
+}
+
+fn build_batch_capture(
+    job: &Job,
+    result: &JobResult,
+    edges: &[(usize, usize)],
+    received_after_dispatch: Duration,
+) -> BatchCapture {
     BatchCapture {
         job_id: result.job_id.clone(),
         received_after_dispatch,
-        solutions,
+        solutions: scored_solutions(job, result, edges),
         meta: result.meta.as_ref().map(|meta| CapturedMeta {
             reads: meta.reads,
             sweeps: meta.sweeps,
@@ -1200,21 +1208,16 @@ fn build_result_record(
     target: Option<&SetTarget>,
     wall: Duration,
 ) -> JobRecord {
-    let ising = job.ising.clone().unwrap_or_default();
-    let h = decode_milli_f64(&ising.h);
-    let j = decode_milli_f64(&ising.j);
-
     let mut mismatched = false;
     let mut recomputed = Vec::with_capacity(result.solutions.len());
     let mut spins_by_solution = Vec::with_capacity(result.solutions.len());
-    for solution in &result.solutions {
-        let spins = decode_spins_packed(&solution.spins, h.len()).unwrap_or_default();
-        let energy = energy_milli(&spins, &h, &j, edges);
-        if energy != solution.energy_milli {
+    for solution in scored_solutions(job, result, edges) {
+        let energy = solution.recomputed_energy_milli;
+        if energy != solution.reported_energy_milli {
             mismatched = true;
         }
         recomputed.push(energy);
-        spins_by_solution.push(spins);
+        spins_by_solution.push(solution.spins);
     }
 
     let n_solutions = result.solutions.len();
@@ -1404,6 +1407,52 @@ mod tests {
         assert_eq!(capture.solutions[0].spins, [-1, 1]);
         assert_eq!(capture.solutions[0].reported_energy_milli, -2500);
         assert_eq!(capture.solutions[0].recomputed_energy_milli, -2500);
+    }
+
+    #[test]
+    fn capture_and_record_share_energy_scoring_and_mismatch_detection() {
+        let job = Job {
+            ising: Some(quip_proto::v1::IsingProblem {
+                h: quip_protocol::wire::encode_i32_le(&[1000, -1000]),
+                j: quip_protocol::wire::encode_i32_le(&[500]),
+                ..Default::default()
+            }),
+            ..dummy_job(&[1])
+        };
+        for mismatch in [false, true] {
+            let result = quip_proto::v1::Result {
+                job_id: job.job_id.clone(),
+                solutions: vec![
+                    quip_proto::v1::Solution {
+                        spins: quip_protocol::wire::encode_spins_packed(&[1, 1]),
+                        energy_milli: 500,
+                    },
+                    quip_proto::v1::Solution {
+                        spins: quip_protocol::wire::encode_spins_packed(&[-1, 1]),
+                        energy_milli: if mismatch { 99 } else { -2500 },
+                    },
+                ],
+                ..Default::default()
+            };
+            let capture = super::build_batch_capture(&job, &result, &[(0, 1)], Duration::ZERO);
+            let record =
+                super::build_result_record("fake", &job, &result, &[(0, 1)], None, Duration::ZERO);
+            assert_eq!(
+                capture
+                    .solutions
+                    .iter()
+                    .map(|read| read.recomputed_energy_milli)
+                    .collect::<Vec<_>>(),
+                [500, -2500]
+            );
+            assert_eq!(record.best_energy_milli, Some(-2500));
+            assert_eq!(record.n_solutions, 2);
+            assert_eq!(record.passed, !mismatch);
+            assert_eq!(
+                capture.solutions[1].reported_energy_milli,
+                if mismatch { 99 } else { -2500 }
+            );
+        }
     }
 
     fn sample_record() -> JobRecord {

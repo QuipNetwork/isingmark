@@ -141,12 +141,13 @@ fn sequence_must_increase() {
         .append(&event(5))
         .expect_err("reject duplicate sequence");
     assert!(matches!(error, CampaignError::InvalidRun(_)));
-    writer
-        .append(&event(6))
-        .expect("continue after rejected event");
+    assert!(matches!(
+        writer.append(&event(6)),
+        Err(CampaignError::InvalidRun(_))
+    ));
     assert_eq!(
         read_trace(&path).expect("read valid sequence").events,
-        [event(5), event(6)]
+        [event(5)]
     );
 }
 
@@ -220,16 +221,54 @@ fn writer_rejects_decreasing_sequences_and_accepts_u64_endpoints() {
     let mut writer = TraceWriter::create(&path).expect("create trace writer");
     writer.append(&event(0)).expect("accept sequence zero");
     writer.append(&event(5)).expect("allow sequence gaps");
+    writer
+        .append(&event(u64::MAX))
+        .expect("accept largest sequence without incrementing it");
     assert!(matches!(
         writer.append(&event(4)),
         Err(CampaignError::InvalidRun(_))
     ));
-    writer
-        .append(&event(u64::MAX))
-        .expect("accept largest sequence without incrementing it");
+    assert!(matches!(
+        writer.append(&event(u64::MAX)),
+        Err(CampaignError::InvalidRun(_))
+    ));
     assert_eq!(
         read_trace(&path).expect("read full sequence range").events,
         [event(0), event(5), event(u64::MAX)]
+    );
+}
+
+#[test]
+fn trace_line_limit_rejects_complete_and_unterminated_oversized_lines() {
+    const LIMIT: usize = 16 * 1024 * 1024;
+    let mut bytes = serde_json::to_vec(&event(1)).expect("event JSON");
+    // Whitespace keeps the complete JSON valid and makes the boundary exact.
+    bytes.resize(LIMIT, b' ');
+    assert_eq!(
+        read_bytes(&bytes).expect("exact line limit").events,
+        [event(1)]
+    );
+    bytes.push(b' ');
+    for newline in [false, true] {
+        if newline {
+            bytes.push(b'\n');
+        }
+        assert!(
+            matches!(read_bytes(&bytes), Err(CampaignError::InvalidRun(reason)) if reason.contains("16 MiB"))
+        );
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn trace_writer_stays_poisoned_after_an_io_failure() {
+    let mut writer = TraceWriter::create(std::path::Path::new("/dev/full")).expect("full device");
+    assert!(matches!(
+        writer.append(&event(1)),
+        Err(CampaignError::Io(_))
+    ));
+    assert!(
+        matches!(writer.append(&event(2)), Err(CampaignError::InvalidRun(reason)) if reason.contains("poisoned"))
     );
 }
 
@@ -472,6 +511,8 @@ async fn batch_round_trip_preserves_all_reads() {
     );
 
     let mut receipt = event(1);
+    receipt.instance_id = None;
+    receipt.batch_id = None;
     receipt.job_id = Some(report.records[0].job_id.clone());
     receipt.wall_ns = u64::try_from(capture.received_after_dispatch.as_nanos())
         .expect("test receipt fits nanoseconds");

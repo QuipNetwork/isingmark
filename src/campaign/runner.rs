@@ -81,6 +81,7 @@ pub enum Preparation {
     Amortized { horizon: u32 },
 }
 
+/// Why the trial loop stopped, independent of proof acceptance and either clock's outcome.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TerminalReason {
@@ -90,6 +91,7 @@ pub enum TerminalReason {
     HostComputeLimit,
     EvaluationLimit,
     MinerCrashed,
+    MinerRejected,
     Cancelled,
     InvalidRun,
 }
@@ -104,6 +106,7 @@ pub struct Trial {
     pub device_budget_ns: Option<u64>,
     pub resources: BTreeMap<String, u64>,
     pub events: PathBuf,
+    /// Challenge-relative proof completion, including proofs scored after a stop.
     pub accepted_wall: Option<Duration>,
     pub device_total: DeviceTime,
     pub terminal: TerminalReason,
@@ -114,8 +117,8 @@ pub struct Trial {
 pub struct ResourceEstimate {
     pub trials: u64,
     /// An absent limit serializes as null (an unbounded estimate).
-    pub max_wall_s: f64,
-    pub max_device_s: f64,
+    pub max_wall_s: Option<f64>,
+    pub max_device_s: Option<f64>,
     pub backends: Vec<String>,
 }
 
@@ -251,8 +254,14 @@ fn load_campaign(config: &CampaignConfig) -> Result<LoadedCampaign, CampaignErro
         .ok_or(CampaignError::Overflow)?;
     let estimate = ResourceEstimate {
         trials,
-        max_wall_s: manifest.budget.wall_limit_s.unwrap_or(f64::INFINITY) * trials as f64,
-        max_device_s: manifest.budget.device_budget_s.unwrap_or(f64::INFINITY) * trials as f64,
+        max_wall_s: manifest
+            .budget
+            .wall_limit_s
+            .map(|seconds| seconds * trials as f64),
+        max_device_s: manifest
+            .budget
+            .device_budget_s
+            .map(|seconds| seconds * trials as f64),
         backends: vec![config.backend.clone()],
     };
     Ok(LoadedCampaign {
@@ -326,20 +335,25 @@ pub async fn run_campaign_with_backend(
         config.output.clone(),
         RuleSet::Current(loaded.profile),
     );
-    for policy in &loaded.policies {
-        // Preparation is shared within a policy, never across policy choices.
-        runner.finish().await?;
-        for instance in &loaded.instances {
-            for _ in 0..loaded.trials_per_pair {
-                report
-                    .trials
-                    .push(runner.run_trial(instance, policy, &loaded.budget).await?);
+    let result = async {
+        for policy in &loaded.policies {
+            // Preparation is shared within a policy, never across policy choices.
+            runner.finish().await?;
+            for instance in &loaded.instances {
+                for _ in 0..loaded.trials_per_pair {
+                    report
+                        .trials
+                        .push(runner.run_trial(instance, policy, &loaded.budget).await?);
+                }
             }
         }
+        runner.finish().await
     }
-    runner.finish().await?;
+    .await;
+    // Terminated trials remain available even when a later trial or shutdown fails.
     let mut file = File::create(config.output.join("campaign.json")).map_err(invalid)?;
     serde_json::to_writer(&mut file, &report).map_err(invalid)?;
+    result?;
     Ok(report)
 }
 
@@ -611,7 +625,8 @@ impl TrialRunner {
         };
         session.trials = session.trials.saturating_add(1);
         if terminal != TerminalReason::Accepted || policy.preparation == Preparation::Cold {
-            self.stop_trial(&mut state, terminal).await?;
+            self.stop_trial(&mut state, terminal, instance, policy, &target)
+                .await?;
         }
         state.terminate(terminal)?;
         Ok(state.trial)
@@ -621,6 +636,9 @@ impl TrialRunner {
         &mut self,
         state: &mut TrialState,
         terminal: TerminalReason,
+        instance: &Instance,
+        policy: &PolicyManifest,
+        target: &quip_protocol::target::Target,
     ) -> Result<(), CampaignError> {
         let Some(mut session) = self.session.take() else {
             return Ok(());
@@ -636,12 +654,12 @@ impl TrialRunner {
             session.events.close();
         }
         while let Ok(event) = session.events.try_recv() {
-            state.observe_unscored(event)?;
+            state.observe(event, instance, policy, &self.rules, target)?;
         }
         state.cancel_pending(terminal)?;
         if session.ready {
             while let Some(event) = session.next().await? {
-                state.observe_unscored(event)?;
+                state.observe(event, instance, policy, &self.rules, target)?;
                 state.cancel_pending(terminal)?;
             }
             let outcome = (&mut session.task).await.map_err(invalid)?;
@@ -878,8 +896,11 @@ impl TrialState {
         target: &quip_protocol::target::Target,
         capture: &BatchCapture,
     ) -> Result<(), CampaignError> {
+        if self.trial.accepted_wall.is_some() {
+            return Ok(());
+        }
         for solution in &capture.solutions {
-            if self.expired() || self.policy_terminal(policy)?.is_some() {
+            if self.policy_terminal(policy)?.is_some() {
                 break;
             }
             let witness = Witness {
@@ -911,7 +932,7 @@ impl TrialState {
                 None,
             )?;
         }
-        if self.expired() || self.witnesses.is_empty() || self.host_exhausted(policy)? {
+        if self.witnesses.is_empty() || self.host_exhausted(policy)? {
             return Ok(());
         }
         let started = Instant::now();
@@ -938,18 +959,12 @@ impl TrialState {
                     },
                 }
             }
-            RuleSet::ProposedUnique { min_distinct } => {
+            RuleSet::ProposedUnique { .. } => {
                 selected_indices = (0..self.witnesses.len()).collect();
-                RuleSet::ProposedUnique {
-                    min_distinct: (*min_distinct).max(1),
-                }
-                .validate_set(instance, &self.witnesses)?
+                rules.validate_set(instance, &self.witnesses)?
             }
         };
         self.count("host_compute_ns", nanos(started.elapsed())?)?;
-        if self.expired() {
-            return Ok(());
-        }
         match decision {
             ProofDecision::Accepted { .. } => {
                 let at = Instant::now();
@@ -991,11 +1006,21 @@ impl TrialState {
         Ok(())
     }
 
-    fn observe_unscored(&mut self, event: SessionEvent) -> Result<(), CampaignError> {
+    fn observe(
+        &mut self,
+        event: SessionEvent,
+        instance: &Instance,
+        policy: &PolicyManifest,
+        rules: &RuleSet,
+        target: &quip_protocol::target::Target,
+    ) -> Result<(), CampaignError> {
         match event {
             SessionEvent::Ready => Ok(()),
             SessionEvent::Dispatched { job_id, at } => self.dispatch(job_id, at),
-            SessionEvent::Batch { capture, at } => self.receive(&capture, at),
+            SessionEvent::Batch { capture, at } => {
+                self.receive(&capture, at)?;
+                self.evaluate(instance, policy, rules, target, &capture)
+            }
             SessionEvent::Rejected { job_id, reason, at } => self.reject(job_id, &reason, at),
             SessionEvent::Failed { reason, at } => self.emit(
                 EventKind::Rejection,
@@ -1119,6 +1144,9 @@ async fn drive_trial(
                 Some(SessionEvent::Batch { capture, at }) => {
                     state.receive(&capture, at)?;
                     state.evaluate(instance, policy, rules, target, &capture)?;
+                    if state.trial.accepted_wall.is_some() {
+                        return Ok(TerminalReason::Accepted);
+                    }
                     if state.expired() {
                         return Ok(TerminalReason::WallTimeout);
                     }
@@ -1129,17 +1157,14 @@ async fn drive_trial(
                     {
                         return Ok(TerminalReason::DeviceBudgetExhausted);
                     }
-                    if state.trial.accepted_wall.is_some() {
-                        return Ok(TerminalReason::Accepted);
-                    }
                     break;
                 }
                 Some(SessionEvent::Rejected { job_id, reason, at }) => {
                     state.reject(job_id, &reason, at)?;
-                    return Ok(TerminalReason::InvalidRun);
+                    return Ok(TerminalReason::MinerRejected);
                 }
                 Some(event @ SessionEvent::Failed { .. }) => {
-                    state.observe_unscored(event)?;
+                    state.observe(event, instance, policy, rules, target)?;
                     return Ok(TerminalReason::MinerCrashed);
                 }
                 None => return Ok(TerminalReason::MinerCrashed),

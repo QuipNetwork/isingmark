@@ -127,6 +127,20 @@ fn oversized_witness_is_rejected() {
 }
 
 #[test]
+fn witness_spin_limit_is_checked_below_the_byte_limit() {
+    witness(vec![1; 65_536])
+        .validate()
+        .expect("maximum spin count");
+    assert!(matches!(
+        witness(vec![1; 65_537]).validate(),
+        Err(CampaignError::TooLarge {
+            what: "spins",
+            limit: 65_536
+        })
+    ));
+}
+
+#[test]
 fn source_manifest_requires_hashes() {
     assert!(validate_source_manifest(&fixture("manifest_unhashed.json")).is_err());
     let path =
@@ -216,13 +230,61 @@ fn spin_limit_and_encoding_indices_are_checked() {
     ));
     let mut instance = serde_json::to_value(two_spin()).expect("serialize instance");
     instance["physical"]["edges"] = json!([[0, 2]]);
-    assert!(load_value(&instance).is_err());
+    assert!(matches!(
+        load_value(&instance),
+        Err(CampaignError::LengthMismatch)
+    ));
     instance["physical"]["edges"] = json!([[0, 1]]);
     instance["physical"]["h"] = json!([0]);
     assert!(matches!(
         load_value(&instance),
         Err(CampaignError::LengthMismatch)
     ));
+}
+
+#[test]
+fn auxiliary_indices_must_name_an_existing_spin() {
+    let mut instance = serde_json::to_value(two_spin()).expect("instance");
+    instance["physical"]["auxiliaries"] = json!([1]);
+    load_value(&instance).expect("last valid auxiliary index");
+    instance["physical"]["auxiliaries"] = json!([2]);
+    assert!(matches!(
+        load_value(&instance),
+        Err(CampaignError::LengthMismatch)
+    ));
+}
+
+#[test]
+fn offset_beyond_float_precision_round_trips_exactly() {
+    const OFFSET: i64 = 9_007_199_254_740_993;
+    let mut value = serde_json::to_value(two_spin()).expect("instance");
+    value["physical"]["h"] = json!([0, 0]);
+    value["physical"]["j"] = json!([0]);
+    value["physical"]["offset"] = json!(OFFSET);
+    value["objective"]["max_energy_milli"] = json!(OFFSET);
+    let instance = load_value(&value).expect("large offset");
+    let encoded = match FixedIsing.encode(&instance).expect("encoding") {
+        EncodingOutcome::Exact(encoded) => Some(encoded),
+        EncodingOutcome::Surrogate(_) | EncodingOutcome::Unsupported { .. } => None,
+    }
+    .expect("exact encoding");
+    let bytes = serde_json::to_vec(&encoded).expect("encoding JSON");
+    let decoded: IsingEncoding = serde_json::from_slice(&bytes).expect("round trip");
+    assert_eq!(decoded.offset, OFFSET);
+    assert!(
+        !FixedIsing
+            .evaluate(&instance, &witness(vec![1, 1]), &context())
+            .expect("strict equality")
+            .valid
+    );
+    value["objective"]["max_energy_milli"] = json!(OFFSET + 1);
+    let instance = load_value(&value).expect("next integer threshold");
+    assert!(
+        FixedIsing
+            .evaluate(&instance, &witness(vec![1, 1]), &context())
+            .expect("strict inequality")
+            .valid
+    );
 }
 
 #[test]

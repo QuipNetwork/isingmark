@@ -95,17 +95,7 @@ impl DeviceLedger {
                         .upper_ns
                         .zip(cost.upper_ns)
                         .and_then(|(left, right)| left.checked_add(right));
-                    let status = if self.total.status == TimingStatus::Missing
-                        || cost.status == TimingStatus::Missing
-                    {
-                        TimingStatus::Missing
-                    } else if self.total.status == TimingStatus::ConservativeEstimate
-                        || cost.status == TimingStatus::ConservativeEstimate
-                    {
-                        TimingStatus::ConservativeEstimate
-                    } else {
-                        TimingStatus::Complete
-                    };
+                    let status = self.total.status.worst(cost.status);
                     self.total = DeviceTime {
                         lower_ns,
                         upper_ns,

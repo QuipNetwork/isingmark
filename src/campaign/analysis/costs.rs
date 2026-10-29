@@ -97,8 +97,8 @@ pub enum Gate {
 /// # Errors
 /// Returns `InvalidProbability` for invalid probabilities, nonfinite or negative
 /// times or limits, cluster sizes below one, ICC outside [0, 1], or count overflow.
-/// Also returns `InvalidProbability` if no size at or below 10,000,000 reaches
-/// the requested power. This shared error variant has no detail payload.
+/// Returns `NoSizeReachesPower` if no size at or below 10,000,000 reaches
+/// the requested power.
 pub fn plan_evidence(
     guides: &Guides,
     alternatives: &Alternatives,
@@ -271,7 +271,7 @@ fn required_trials(gate: Gate, p: f64, power: f64, guides: &Guides) -> Result<u6
             return Ok(n);
         }
     }
-    Err(AnalysisError::InvalidProbability)
+    Err(AnalysisError::NoSizeReachesPower)
 }
 
 // Count classical successes or, for lower-bound gates, failures. In either case

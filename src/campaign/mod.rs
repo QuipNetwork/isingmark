@@ -42,7 +42,7 @@ impl fmt::Display for CampaignError {
             }
             Self::MissingField(field) => write!(formatter, "missing required field {field}"),
             Self::Overflow => write!(formatter, "coefficient or energy exceeds its integer range"),
-            Self::InvalidRun(reason) => write!(formatter, "invalid campaign input: {reason}"),
+            Self::InvalidRun(reason) => write!(formatter, "invalid run: {reason}"),
             Self::Eval(error) => error.fmt(formatter),
         }
     }

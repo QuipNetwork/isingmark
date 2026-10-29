@@ -249,6 +249,33 @@ async fn warm_session_is_reused() {
 }
 
 #[tokio::test]
+async fn amortized_session_reuse_ends_at_the_horizon() {
+    let dir = tempfile::tempdir().expect("directory");
+    let mut runner = TrialRunner::new(
+        fake_miner_backend(&["--abort-after", "3"]),
+        dir.path().into(),
+        rules(),
+    );
+    let mut policy = policy();
+    policy.preparation = Preparation::Amortized { horizon: 2 };
+    let budget =
+        TrialBudget::new(Some(Duration::from_secs(5)), Some(30_000_000_000)).expect("budget");
+    let mut sessions = Vec::new();
+    for _ in 0..4 {
+        let trial = runner
+            .run_trial(&instance(), &policy, &budget)
+            .await
+            .expect("trial");
+        assert_eq!(trial.terminal, TerminalReason::Accepted);
+        sessions.push(events(&trial)[0].session_id.clone());
+    }
+    runner.finish().await.expect("shutdown");
+    assert_eq!(sessions[0], sessions[1]);
+    assert_ne!(sessions[1], sessions[2]);
+    assert_eq!(sessions[2], sessions[3]);
+}
+
+#[tokio::test]
 async fn event_writer_failure_invalidates_run() {
     let dir = tempfile::tempdir().expect("directory");
     let config = CampaignConfig {
@@ -263,6 +290,151 @@ async fn event_writer_failure_invalidates_run() {
     fs::set_permissions(&config.output, fs::Permissions::from_mode(0o700))
         .expect("restore permissions");
     assert!(matches!(result, Err(CampaignError::InvalidRun(_))));
+}
+
+#[tokio::test]
+async fn wall_only_campaign_writes_null_device_estimate() {
+    let dir = tempfile::tempdir().expect("directory");
+    let config = CampaignConfig {
+        manifest: manifest(dir.path(), Preparation::Warm),
+        backend: "fake".into(),
+        output: dir.path().join("out"),
+        dry_run: false,
+    };
+    let mut value: Value =
+        serde_json::from_slice(&fs::read(&config.manifest).expect("manifest")).expect("JSON");
+    value["budget"] = json!({"wall_limit_s": 5.0});
+    fs::write(&config.manifest, serde_json::to_vec(&value).expect("JSON")).expect("manifest");
+    let report = run_campaign_with_backend(&config, fake_miner_backend(&[]))
+        .await
+        .expect("campaign");
+    assert_eq!(report.trials.len(), 2);
+    let saved: Value =
+        serde_json::from_slice(&fs::read(config.output.join("campaign.json")).expect("report"))
+            .expect("JSON");
+    assert_eq!(saved["resources"]["max_device_s"], Value::Null);
+    assert_eq!(saved["trials"].as_array().expect("trials").len(), 2);
+}
+
+#[tokio::test]
+async fn shutdown_failure_preserves_terminated_campaign_trials() {
+    for multiple_policies in [false, true] {
+        let dir = tempfile::tempdir().expect("directory");
+        let config = CampaignConfig {
+            manifest: manifest(dir.path(), Preparation::Warm),
+            backend: "fake".into(),
+            output: dir.path().join("out"),
+            dry_run: false,
+        };
+        if multiple_policies {
+            let mut value: Value =
+                serde_json::from_slice(&fs::read(&config.manifest).expect("manifest"))
+                    .expect("JSON");
+            let mut second = value["policies"][0].clone();
+            second["policy_id"] = json!("second-policy");
+            value["policies"]
+                .as_array_mut()
+                .expect("policies")
+                .push(second);
+            fs::write(&config.manifest, serde_json::to_vec(&value).expect("JSON"))
+                .expect("manifest");
+        }
+        let error = run_campaign_with_backend(&config, fake_miner_backend(&["--fail-on-shutdown"]))
+            .await
+            .expect_err("shutdown fault");
+        assert!(
+            matches!(error, CampaignError::InvalidRun(ref reason) if reason.contains("shutdown"))
+        );
+        let saved: Value = serde_json::from_slice(
+            &fs::read(config.output.join("campaign.json")).expect("retained report"),
+        )
+        .expect("JSON");
+        let trials: Vec<Trial> = serde_json::from_value(saved["trials"].clone()).expect("trials");
+        assert_eq!(trials.len(), 2);
+        for trial in trials {
+            assert_eq!(trial.terminal, TerminalReason::Accepted);
+            events(&trial);
+        }
+    }
+}
+
+#[test]
+fn wall_only_dry_run_prints_null_device_estimate() {
+    let dir = tempfile::tempdir().expect("directory");
+    let path = manifest(dir.path(), Preparation::Cold);
+    let mut value: Value =
+        serde_json::from_slice(&fs::read(&path).expect("manifest")).expect("JSON");
+    value["budget"] = json!({"wall_limit_s": 5.0});
+    fs::write(&path, serde_json::to_vec(&value).expect("JSON")).expect("manifest");
+    let output = Command::new(env!("CARGO_BIN_EXE_isingmark"))
+        .args(["campaign", "--manifest"])
+        .arg(path)
+        .args(["--backend", "fake", "--output"])
+        .arg(dir.path().join("out"))
+        .arg("--dry-run")
+        .output()
+        .expect("dry run");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let estimate: Value = serde_json::from_slice(&output.stdout).expect("estimate");
+    assert_eq!(estimate["max_wall_s"], 10.0);
+    assert_eq!(estimate["max_device_s"], Value::Null);
+}
+
+#[tokio::test]
+async fn serve_serializes_submits_and_reuses_prepared_sessions() {
+    use isingmark::campaign::runner::serve_campaign;
+    for preparation in [Preparation::Warm, Preparation::Amortized { horizon: 2 }] {
+        let dir = tempfile::tempdir().expect("directory");
+        let config = CampaignConfig {
+            manifest: manifest(dir.path(), preparation),
+            backend: env!("CARGO_BIN_EXE_isingmark-fake-miner").into(),
+            output: dir.path().join("out"),
+            dry_run: false,
+        };
+        let mut value: Value =
+            serde_json::from_slice(&fs::read(&config.manifest).expect("manifest")).expect("JSON");
+        value["policies"][0]["backend"] = json!(config.backend);
+        fs::write(&config.manifest, serde_json::to_vec(&value).expect("JSON")).expect("manifest");
+        let mut commands: Vec<Value> = (0..3).map(|id| json!({"cmd": "submit", "instance_id": "two-spin", "policy_id": "test-policy", "trial_id": format!("trial-{id}")})).collect();
+        commands.push(json!({"cmd": "finish"}));
+        let input = commands
+            .iter()
+            .map(Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut output = Vec::new();
+        serve_campaign(&config, std::io::Cursor::new(input), &mut output)
+            .await
+            .expect("serve");
+        let replies: Vec<Value> = std::str::from_utf8(&output)
+            .expect("UTF-8")
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("reply"))
+            .collect();
+        assert_eq!(replies.len(), 4);
+        assert_eq!(replies[3]["errors"], json!([]));
+        let mut trials: Vec<Trial> =
+            serde_json::from_value(replies[3]["trials"].clone()).expect("trials");
+        assert_eq!(trials.len(), 3);
+        trials.sort_by_key(|trial| trial.started);
+        let sessions: Vec<_> = trials
+            .iter()
+            .map(|trial| events(trial)[0].session_id.clone())
+            .collect();
+        assert_eq!(sessions[0], sessions[1]);
+        if preparation == Preparation::Warm {
+            assert_eq!(sessions[1], sessions[2]);
+        } else {
+            assert_ne!(sessions[1], sessions[2]);
+        }
+        for pair in trials.windows(2) {
+            assert!(pair[1].started >= pair[0].started + pair[0].accepted_wall.expect("accepted"));
+        }
+    }
 }
 
 #[test]
@@ -403,7 +575,7 @@ async fn late_batch_after_cancellation_keeps_its_full_charge() {
     )
     .await;
     assert_eq!(trial.terminal, TerminalReason::WallTimeout);
-    assert!(trial.accepted_wall.is_none());
+    assert!(trial.accepted_wall.expect("late proof") > Duration::from_millis(400));
     assert_eq!(trial.device_total.lower_ns, 1_000_000_000);
     assert_eq!(trial.device_total.status, TimingStatus::Complete);
     let trace = events(&trial);
@@ -416,7 +588,7 @@ async fn late_batch_after_cancellation_keeps_its_full_charge() {
         .position(|event| event.kind == EventKind::BatchReceipt)
         .expect("late receipt");
     assert!(cancel < receipt);
-    assert!(!trace
+    assert!(trace
         .iter()
         .any(|event| event.kind == EventKind::ProofAcceptance));
 }

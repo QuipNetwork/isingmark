@@ -70,6 +70,14 @@ fn power_size_is_minimal() {
 }
 
 #[test]
+fn default_evidence_sizes_match_exact_reference_values() {
+    let plan = default_plan(&pilot(), &limits());
+    assert_eq!(plan.classical_trials, 473);
+    assert_eq!(plan.qpu_trials, 124);
+    assert_eq!(plan.race_trials, 179);
+}
+
+#[test]
 fn qpu_power_size_is_minimal() {
     let n = default_plan(&pilot(), &limits()).qpu_trials;
     assert!(gate_power(Gate::Qpu, n, 0.99, &Guides::default()).expect("power") >= 0.80);
@@ -435,19 +443,22 @@ fn invalid_probabilities_timings_and_limits_are_rejected() {
 
 #[test]
 fn sample_search_rejects_a_guide_beyond_the_scan_cap() {
+    let error = plan_evidence(
+        &Guides {
+            classical_wall_upper: 1e-10,
+            ..Guides::default()
+        },
+        &Alternatives {
+            classical_p: 0.0,
+            ..Alternatives::default()
+        },
+        &pilot(),
+        &limits(),
+    )
+    .expect_err("scan exhausted");
+    assert_eq!(error, AnalysisError::NoSizeReachesPower);
     assert_eq!(
-        plan_evidence(
-            &Guides {
-                classical_wall_upper: 1e-10,
-                ..Guides::default()
-            },
-            &Alternatives {
-                classical_p: 0.0,
-                ..Alternatives::default()
-            },
-            &pilot(),
-            &limits()
-        ),
-        Err(AnalysisError::InvalidProbability)
+        error.to_string(),
+        "no sample size within the scan limit reaches the requested power"
     );
 }

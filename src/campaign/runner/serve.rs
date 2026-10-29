@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Bounded JSON-lines control. Each input command receives exactly one reply.
 
-use std::io::{BufRead, Write};
+use std::{
+    io::{BufRead, Write},
+    sync::Arc,
+};
+
+use tokio::sync::Mutex;
 
 use super::{
     invalid, json, load_campaign, mpsc, new_id, oneshot, resolve_backend, BTreeMap, CampaignConfig,
-    CampaignError, Deserialize, Instance, JoinHandle, PolicyManifest, RuleSet, Trial, TrialRunner,
-    Value, Witness,
+    CampaignError, Deserialize, Instance, JoinHandle, PolicyManifest, RuleSet, Trial, TrialBudget,
+    TrialRunner, Value, Witness,
 };
 
 const MAX_LINE_BYTES: usize = 1024 * 1024;
@@ -100,12 +105,44 @@ async fn cancel_outstanding(
     active: BTreeMap<String, RunningTrial>,
     mut result: Result<(), CampaignError>,
 ) -> Result<(), CampaignError> {
+    let mut tasks = Vec::new();
     for (_, running) in active {
+        let _ = running.cancel.send(());
+        tasks.push(running.task);
+    }
+    for task in tasks {
         // Preserve termination records even if stdin or stdout fails.
-        let cleanup = collect(running, true).await.map(|_| ());
+        let cleanup = match task.await {
+            Ok(result) => result.map(|_| ()),
+            Err(error) => Err(invalid(error)),
+        };
         if result.is_ok() {
             result = cleanup;
         }
+    }
+    result
+}
+
+async fn run_serialized(
+    shared: &Mutex<(Option<String>, TrialRunner)>,
+    instance: &Instance,
+    policy: &PolicyManifest,
+    budget: &TrialBudget,
+    cancelled: oneshot::Receiver<()>,
+    id: String,
+) -> Result<Trial, CampaignError> {
+    // Hold the lock through termination so no two trials use a live session.
+    let mut shared = shared.lock().await;
+    let (policy_id, runner) = &mut *shared;
+    if policy_id.as_ref().is_some_and(|id| id != &policy.policy_id) {
+        runner.finish().await?;
+    }
+    *policy_id = Some(policy.policy_id.clone());
+    let result = runner
+        .run_cancellable(instance, policy, budget, Some(cancelled), Some(id))
+        .await;
+    if result.is_err() {
+        runner.session.take();
     }
     result
 }
@@ -115,6 +152,9 @@ async fn cancel_outstanding(
 /// Submit names a manifest instance and policy, with an optional unique trial ID.
 /// Verification names an instance and carries a complete `witnesses` array.
 /// Finish waits for outstanding trials; EOF cancels them and retains their traces.
+/// Submissions run one at a time on a shared runner for the selected backend.
+/// Warm and amortized preparation spans submissions within the same policy.
+/// A policy change ends the previous prepared session before the next trial.
 ///
 /// # Errors
 /// Returns invalid manifest data, input I/O failures, or output writer failures.
@@ -125,6 +165,14 @@ pub async fn serve_campaign<R: BufRead + Send + 'static, W: Write>(
 ) -> Result<(), CampaignError> {
     let loaded = load_campaign(config)?;
     let rules = RuleSet::Current(loaded.profile);
+    let runner = Arc::new(Mutex::new((
+        None::<String>,
+        TrialRunner::new(
+            resolve_backend(&config.backend),
+            config.output.clone(),
+            rules.clone(),
+        ),
+    )));
     let (sender, mut input) = mpsc::channel(1);
     // A dedicated stdin thread can end independently of the async runtime.
     // spawn_blocking would make runtime shutdown wait for an open stdin forever.
@@ -163,14 +211,12 @@ pub async fn serve_campaign<R: BufRead + Send + 'static, W: Write>(
                     if active.contains_key(&trial_id) || completed.contains_key(&trial_id) || config.output.join(&trial_id).exists() {
                         return Err(invalid("trial_id already exists"));
                     }
-                    let mut runner = TrialRunner::new(resolve_backend(&config.backend), config.output.clone(), rules.clone());
+                    let shared_runner = Arc::clone(&runner);
                     let budget = loaded.budget;
                     let id = trial_id.clone();
                     let (cancel, cancelled) = oneshot::channel();
                     let task = tokio::spawn(async move {
-                        let trial = runner.run_cancellable(&instance, &policy, &budget, Some(cancelled), Some(id)).await?;
-                        runner.finish().await?;
-                        Ok(trial)
+                        run_serialized(&shared_runner, &instance, &policy, &budget, cancelled, id).await
                     });
                     active.insert(trial_id.clone(), RunningTrial { cancel, task });
                     Ok(json!({"event": "submitted", "trial_id": trial_id}))
@@ -212,7 +258,9 @@ pub async fn serve_campaign<R: BufRead + Send + 'static, W: Write>(
         }
         Ok(())
     }.await;
-    cancel_outstanding(active, result).await
+    let result = cancel_outstanding(active, result).await;
+    let shutdown = runner.lock().await.1.finish().await;
+    result.and(shutdown)
 }
 
 #[cfg(test)]
@@ -225,13 +273,50 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn eof_cancels_queued_and_running_trials_before_joining() {
+        let (running_cancel, running_cancelled) = oneshot::channel();
+        let running = tokio::spawn(async move {
+            running_cancelled.await.expect("cancel running trial");
+            Err(invalid("running cancelled"))
+        });
+        let (queued_cancel, queued_cancelled) = oneshot::channel();
+        let queued = tokio::spawn(async move {
+            queued_cancelled.await.expect("cancel queued trial");
+            // The queued trial cannot finish until the current session user releases it.
+            running.await.expect("running task")
+        });
+        let active = BTreeMap::from([
+            (
+                "a-queued".into(),
+                RunningTrial {
+                    cancel: queued_cancel,
+                    task: queued,
+                },
+            ),
+            (
+                "z-running".into(),
+                RunningTrial {
+                    cancel: running_cancel,
+                    task: tokio::spawn(async { Err(invalid("running collected")) }),
+                },
+            ),
+        ]);
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            cancel_outstanding(active, Ok(())),
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "EOF must cancel the session user before waiting for the queued trial"
+        );
+    }
+
+    #[tokio::test]
     async fn eof_cleanup_awaits_every_trial_and_returns_the_first_error() {
         for (result, expected) in [
-            (Ok(()), "invalid campaign input: first trial failed"),
-            (
-                Err(invalid("input failed")),
-                "invalid campaign input: input failed",
-            ),
+            (Ok(()), "invalid run: first trial failed"),
+            (Err(invalid("input failed")), "invalid run: input failed"),
         ] {
             let completed = Arc::new(AtomicUsize::new(0));
             let mut active = BTreeMap::new();

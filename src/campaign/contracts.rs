@@ -119,3 +119,15 @@ pub enum TimingStatus {
     ConservativeEstimate,
     Missing,
 }
+
+impl TimingStatus {
+    pub(crate) fn worst(self, other: Self) -> Self {
+        if self == Self::Missing || other == Self::Missing {
+            Self::Missing
+        } else if self == Self::ConservativeEstimate || other == Self::ConservativeEstimate {
+            Self::ConservativeEstimate
+        } else {
+            Self::Complete
+        }
+    }
+}

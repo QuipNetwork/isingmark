@@ -4,7 +4,7 @@
 use std::{
     collections::BTreeMap,
     fs::File,
-    io::{BufRead, BufReader, BufWriter, Write},
+    io::{BufRead, BufReader, BufWriter, Read, Write},
     path::Path,
 };
 
@@ -14,6 +14,7 @@ use serde_json::Value;
 use super::{contracts::TimingStatus, CampaignError};
 
 pub const TRACE_VERSION: u32 = 1;
+const MAX_LINE_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeviceTime {
@@ -76,16 +77,7 @@ impl DeviceTime {
             .zip(other.upper_ns)
             .map(|(left, right)| left.checked_add(right).ok_or(CampaignError::Overflow))
             .transpose()?;
-        let status =
-            if self.status == TimingStatus::Missing || other.status == TimingStatus::Missing {
-                TimingStatus::Missing
-            } else if self.status == TimingStatus::ConservativeEstimate
-                || other.status == TimingStatus::ConservativeEstimate
-            {
-                TimingStatus::ConservativeEstimate
-            } else {
-                TimingStatus::Complete
-            };
+        let status = self.status.worst(other.status);
         Ok(Self {
             lower_ns,
             upper_ns,
@@ -132,6 +124,7 @@ pub struct TraceEvent {
 pub struct TraceWriter {
     file: BufWriter<File>,
     last_seq: Option<u64>,
+    poisoned: bool,
 }
 
 impl TraceWriter {
@@ -143,6 +136,7 @@ impl TraceWriter {
         Ok(Self {
             file: BufWriter::new(File::create(path)?),
             last_seq: None,
+            poisoned: false,
         })
     }
 
@@ -150,17 +144,24 @@ impl TraceWriter {
     ///
     /// # Errors
     /// Returns an error for a non-increasing sequence, serialization, or I/O failure.
+    /// Any failed append poisons the writer and rejects every later append.
     pub fn append(&mut self, event: &TraceEvent) -> Result<(), CampaignError> {
+        if self.poisoned {
+            return Err(CampaignError::InvalidRun("trace writer is poisoned".into()));
+        }
+        self.poisoned = true;
         if self.last_seq.is_some_and(|last| event.seq <= last) {
             return Err(CampaignError::InvalidRun(format!(
                 "trace sequence {} does not increase",
                 event.seq
             )));
         }
-        serde_json::to_writer(&mut self.file, event)?;
-        self.file.write_all(b"\n")?;
+        let mut line = serde_json::to_vec(event)?;
+        line.push(b'\n');
+        self.file.write_all(&line)?;
         self.file.flush()?;
         self.last_seq = Some(event.seq);
+        self.poisoned = false;
         Ok(())
     }
 }
@@ -174,7 +175,8 @@ pub struct TraceRead {
 /// Read complete events, retaining an explicit indication of a partial final line.
 ///
 /// # Errors
-/// Returns an error for I/O failures, unsupported versions, or malformed complete lines.
+/// Returns an error for I/O failures, unsupported versions, malformed complete lines,
+/// or lines exceeding 16 MiB excluding the newline.
 pub fn read_trace(path: &Path) -> Result<TraceRead, CampaignError> {
     let mut reader = BufReader::new(File::open(path)?);
     let mut trace = TraceRead {
@@ -184,8 +186,17 @@ pub fn read_trace(path: &Path) -> Result<TraceRead, CampaignError> {
     let mut line = Vec::new();
     loop {
         line.clear();
-        if reader.read_until(b'\n', &mut line)? == 0 {
+        if (&mut reader)
+            .take((MAX_LINE_BYTES + 1) as u64)
+            .read_until(b'\n', &mut line)?
+            == 0
+        {
             break;
+        }
+        if line.len() - usize::from(line.ends_with(b"\n")) > MAX_LINE_BYTES {
+            return Err(CampaignError::InvalidRun(
+                "trace line exceeds the 16 MiB limit".into(),
+            ));
         }
         let value = match serde_json::from_slice::<Value>(&line) {
             Ok(value) => value,

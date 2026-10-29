@@ -11,6 +11,14 @@ use isingmark::campaign::{
 };
 
 #[test]
+fn invalid_run_display_preserves_the_runtime_reason() {
+    assert_eq!(
+        CampaignError::InvalidRun("miner shutdown failed".into()).to_string(),
+        "invalid run: miner shutdown failed"
+    );
+}
+
+#[test]
 fn full_batch_cost_prevents_fractional_success() {
     let mut ledger = DeviceLedger::new();
     // Read 0 supplies the witness, but the complete batch costs 31 seconds.

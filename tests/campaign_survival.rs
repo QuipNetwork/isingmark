@@ -247,6 +247,27 @@ fn unreadable_or_malformed_trace_prevents_a_curve() {
 }
 
 #[test]
+fn trace_without_termination_prevents_a_curve() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    for empty in [true, false] {
+        let trial = trial(dir.path(), &format!("empty-{empty}"), "one", Some(1));
+        let mut event = isingmark::campaign::trace::read_trace(&trial.events)
+            .expect("trace")
+            .events
+            .remove(0);
+        let mut writer = TraceWriter::create(&trial.events).expect("replace trace");
+        if !empty {
+            event.kind = EventKind::ChallengeRelease;
+            writer.append(&event).expect("release only");
+        }
+        assert!(matches!(
+            estimate_curves(&[trial], &AnalysisDesign::default()),
+            Err(AnalysisError::CorruptTrace(_))
+        ));
+    }
+}
+
+#[test]
 fn empty_trials_or_either_empty_grid_are_rejected() {
     assert!(matches!(
         estimate_curves(&[], &AnalysisDesign::default()),
@@ -301,7 +322,7 @@ fn non_success_requires_a_wall_limit() {
 }
 
 #[test]
-fn non_accepted_terminals_remain_wall_failures() {
+fn proof_acceptance_is_independent_of_terminal() {
     let dir = tempfile::tempdir().expect("temporary traces");
     let mut trials = vec![trial(dir.path(), "success", "one", Some(2))];
     for terminal in [
@@ -310,8 +331,8 @@ fn non_accepted_terminals_remain_wall_failures() {
         TerminalReason::HostComputeLimit,
         TerminalReason::EvaluationLimit,
         TerminalReason::MinerCrashed,
+        TerminalReason::MinerRejected,
         TerminalReason::Cancelled,
-        TerminalReason::InvalidRun,
     ] {
         let mut failed = trial(dir.path(), &format!("{terminal:?}"), "one", Some(1));
         failed.terminal = terminal;
@@ -320,9 +341,11 @@ fn non_accepted_terminals_remain_wall_failures() {
     for design in [AnalysisDesign::default(), km_design()] {
         let curves = estimate_curves(&trials, &design).expect("operational failures");
         let wall = curve(&curves, TimeBasis::WallClock);
-        close(wall.estimate[point(wall, 1.0)], 0.0);
-        close(wall.estimate[point(wall, 2.0)], 0.125);
-        close(wall.estimate[point(wall, 1_200.0)], 0.125);
+        close(wall.estimate[point(wall, 1.0)], 0.875);
+        close(wall.estimate[point(wall, 2.0)], 1.0);
+        close(wall.estimate[point(wall, 1_200.0)], 1.0);
+        let device = curve(&curves, TimeBasis::QpuDeviceAccess);
+        close(device.estimate[point(device, 30.0)], 1.0);
     }
 }
 
@@ -477,9 +500,6 @@ fn halted_device_trials_are_unresolved_until_the_budget_is_spent() {
         TerminalReason::WallTimeout,
         TerminalReason::HostComputeLimit,
         TerminalReason::EvaluationLimit,
-        TerminalReason::MinerCrashed,
-        TerminalReason::Cancelled,
-        TerminalReason::InvalidRun,
     ] {
         let mut halted = trial(dir.path(), &format!("{terminal:?}"), "one", None);
         halted.terminal = terminal;
@@ -508,6 +528,82 @@ fn exhausted_device_budget_is_failure_even_without_timing() {
     let device = curve(&curves, TimeBasis::QpuDeviceAccess);
     close(device.upper[point(device, 30.0)], 0.975);
     assert_eq!(device.unresolved, 0);
+}
+
+#[test]
+fn operational_failures_do_not_widen_the_unresolved_device_band() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    for terminal in [
+        TerminalReason::MinerCrashed,
+        TerminalReason::MinerRejected,
+        TerminalReason::Cancelled,
+    ] {
+        let mut failed = trial(dir.path(), &format!("{terminal:?}"), "one", None);
+        failed.terminal = terminal;
+        failed.device_total = DeviceTime::from_exact_ns(10_000_000_000);
+        let curves =
+            estimate_curves(&[failed], &AnalysisDesign::default()).expect("failure curves");
+        let device = curve(&curves, TimeBasis::QpuDeviceAccess);
+        close(device.estimate[point(device, 30.0)], 0.0);
+        close(device.upper[point(device, 30.0)], 0.975);
+        assert_eq!(device.unresolved, 0);
+        assert!(device
+            .assumptions
+            .iter()
+            .any(|text| text.contains("operational failure")));
+        let wall = curve(&curves, TimeBasis::WallClock);
+        close(wall.estimate[point(wall, 1_200.0)], 0.0);
+    }
+}
+
+#[test]
+fn invalid_run_prevents_a_conclusive_report_even_with_a_proof() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    for accepted in [None, Some(5)] {
+        let mut invalid = trial(dir.path(), &format!("{accepted:?}"), "one", accepted);
+        invalid.terminal = TerminalReason::InvalidRun;
+        assert!(matches!(
+            estimate_curves(&[invalid], &AnalysisDesign::default()),
+            Err(AnalysisError::CorruptTrace(_))
+        ));
+    }
+}
+
+#[test]
+fn wall_success_survives_an_exceeded_device_budget() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let mut accepted = trial(dir.path(), "split", "one", Some(5));
+    accepted.terminal = TerminalReason::DeviceBudgetExhausted;
+    accepted.device_total = DeviceTime::from_exact_ns(31_000_000_000);
+    let design = AnalysisDesign {
+        wall_grid_s: vec![5.0, 1_200.0],
+        ..AnalysisDesign::default()
+    };
+    let curves = estimate_curves(&[accepted], &design).expect("split curves");
+    let wall = curve(&curves, TimeBasis::WallClock);
+    close(wall.estimate[point(wall, 5.0)], 1.0);
+    let device = curve(&curves, TimeBasis::QpuDeviceAccess);
+    close(device.estimate[point(device, 30.0)], 0.0);
+    assert_eq!(device.unresolved, 0);
+}
+
+#[test]
+fn device_success_survives_a_late_wall_acceptance() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    for terminal in [TerminalReason::WallTimeout, TerminalReason::Accepted] {
+        let mut accepted = trial(dir.path(), &format!("{terminal:?}"), "one", Some(1_300));
+        accepted.terminal = terminal;
+        accepted.device_total = DeviceTime::from_exact_ns(29_000_000_000);
+        for design in [AnalysisDesign::default(), km_design()] {
+            let curves = estimate_curves(&[accepted.clone()], &design).expect("split curves");
+            let wall = curve(&curves, TimeBasis::WallClock);
+            close(wall.estimate[point(wall, 1_200.0)], 0.0);
+            assert!(!wall.grid_s.contains(&1_300.0));
+            let device = curve(&curves, TimeBasis::QpuDeviceAccess);
+            close(device.estimate[point(device, 30.0)], 1.0);
+            assert_eq!(device.unresolved, 0);
+        }
+    }
 }
 
 #[test]

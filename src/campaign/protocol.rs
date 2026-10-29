@@ -95,7 +95,7 @@ impl RuleSet {
         match self {
             Self::Current(profile) => validate_set(instance, witnesses, profile),
             Self::ProposedUnique { min_distinct } => {
-                validate_unique(instance, witnesses, *min_distinct)
+                validate_unique(instance, witnesses, (*min_distinct).max(1))
             }
         }
     }

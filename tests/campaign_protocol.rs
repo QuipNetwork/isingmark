@@ -212,6 +212,29 @@ fn proposed_unique_rule_rejects_duplicates() {
 }
 
 #[test]
+fn proposed_unique_zero_minimum_still_requires_one_distinct_witness() {
+    let instance = fixed_instance(2);
+    let rule = RuleSet::ProposedUnique { min_distinct: 0 };
+    assert_eq!(
+        rule.validate_set(&instance, &[]).expect("empty proof"),
+        rejected("InsufficientDistinct")
+    );
+    assert_eq!(
+        rule.validate_set(&instance, &[witness(&instance, &[1, -1])])
+            .expect("invalid proof"),
+        rejected("InsufficientDistinct")
+    );
+    assert!(matches!(
+        rule.validate_set(&instance, &[witness(&instance, &[1, 1])])
+            .expect("valid proof"),
+        ProofDecision::Accepted {
+            valid_solution_count: 1,
+            ..
+        }
+    ));
+}
+
+#[test]
 fn profile_must_match_compiled_verifier() {
     let mut value = serde_json::to_value(profile()).expect("serialize profile");
     value["verifier_version"] = json!("9.9.9");
@@ -252,7 +275,7 @@ fn unsupported_family_is_an_input_error() {
     let error = validate_set(&instance, &[], &profile()).expect_err("reject unsupported family");
     assert_eq!(
         error.to_string(),
-        "invalid campaign input: unsupported family for current-rule replay: other-family"
+        "invalid run: unsupported family for current-rule replay: other-family"
     );
 }
 
