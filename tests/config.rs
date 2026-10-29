@@ -19,7 +19,8 @@ fn examples_configs_dir() -> PathBuf {
 fn throughput_from(cli: Cli) -> isingmark::cli::ThroughputArgs {
     match cli.command {
         Command::Throughput(args) => args,
-        Command::Sweep(_)
+        Command::Campaign(_)
+        | Command::Sweep(_)
         | Command::Ttt(_)
         | Command::Comparative(_)
         | Command::Scaling(_)

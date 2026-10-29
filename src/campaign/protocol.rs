@@ -159,7 +159,7 @@ pub fn select_proof(reads: &[(&[i8], i64)], target: &Target) -> Result<Vec<usize
         .map_err(|miss| CampaignError::InvalidRun(format!("{miss:?}")))
 }
 
-fn target_from_objective(instance: &Instance) -> Result<Target, CampaignError> {
+pub(crate) fn target_from_objective(instance: &Instance) -> Result<Target, CampaignError> {
     let energy = instance
         .objective
         .get("max_energy_milli")

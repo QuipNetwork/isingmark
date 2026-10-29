@@ -54,6 +54,9 @@ use crate::backend::registry::BackendSpec;
 use crate::record::JobRecord;
 use crate::topology::TopologySpec;
 
+pub(crate) mod control;
+use control::SessionControl;
+
 /// Miner id this harness always advertises to the backend it spawns.
 const MINER_ID: &str = "isingmark-0";
 
@@ -314,7 +317,8 @@ pub async fn run_session_with_capture(
 ) -> Result<(RunReport, Vec<BatchCapture>), SessionError> {
     let captures = Arc::new(Mutex::new(Vec::new()));
     let report =
-        run_session_inner_with_capture(p, MAX_MISSED_PINGS, Some(Arc::clone(&captures))).await?;
+        run_session_inner_with_capture(p, MAX_MISSED_PINGS, Some(Arc::clone(&captures)), None)
+            .await?;
     let batches = std::mem::take(&mut *captures.lock().unwrap_or_else(PoisonError::into_inner));
     Ok((report, batches))
 }
@@ -348,13 +352,14 @@ async fn run_session_inner(
     p: RunParams<'_>,
     max_missed_pings: u32,
 ) -> Result<RunReport, SessionError> {
-    run_session_inner_with_capture(p, max_missed_pings, None).await
+    run_session_inner_with_capture(p, max_missed_pings, None, None).await
 }
 
 async fn run_session_inner_with_capture(
     p: RunParams<'_>,
     max_missed_pings: u32,
     captures: Option<Arc<Mutex<Vec<BatchCapture>>>>,
+    control: Option<SessionControl>,
 ) -> Result<RunReport, SessionError> {
     let start = Instant::now();
     let listener = UnixListener::bind(p.sock_path).map_err(SessionError::Bind)?;
@@ -362,6 +367,7 @@ async fn run_session_inner_with_capture(
 
     let progress = Arc::new(SessionProgress {
         captures,
+        control: Mutex::new(control),
         ..SessionProgress::default()
     });
     let stderr_tail = Arc::new(StderrTail::default());
@@ -380,6 +386,7 @@ async fn run_session_inner_with_capture(
             .add_service(MinerServiceServer::new(svc))
             .serve_with_incoming(incoming),
     );
+    let mut cleanup = control::SessionCleanup::new(p.sock_path, server_task.abort_handle());
 
     let spawned = Command::new(&p.backend.bin)
         .args(&p.backend.args)
@@ -413,6 +420,9 @@ async fn run_session_inner_with_capture(
         .stderr
         .take()
         .map(|stderr| tokio::spawn(capture_stderr_tail(stderr, Arc::clone(&stderr_tail))));
+    if let Some(task) = &stderr_task {
+        cleanup.tasks.push(task.abort_handle());
+    }
 
     // `finish_rx` resolves as soon as `drive_session` is done — normally,
     // or via its `FinishSignal` guard firing on panic unwind. Racing against
@@ -544,6 +554,7 @@ struct SessionProgress {
     orphan_results: AtomicU64,
     records: Mutex<Vec<JobRecord>>,
     captures: Option<Arc<Mutex<Vec<BatchCapture>>>>,
+    control: Mutex<Option<SessionControl>>,
 }
 
 impl SessionProgress {
@@ -766,6 +777,16 @@ async fn drive_session(
         coord_msg::Msg::SetTarget(target.copied().unwrap_or_default()),
     )
     .await;
+
+    let control = progress
+        .control
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take();
+    if let Some(control) = control {
+        control::drive_controlled(inbound, tx, control, backend_name, progress).await;
+        return;
+    }
 
     let edges = edge_positions(spec);
     // Per job_id, a FIFO queue of dispatches. Two jobs may share a job_id

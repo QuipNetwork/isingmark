@@ -10,6 +10,7 @@ pub mod contracts;
 pub mod families;
 pub mod instance;
 pub mod protocol;
+pub mod runner;
 pub mod timing;
 pub mod trace;
 
