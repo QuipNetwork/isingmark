@@ -5,12 +5,13 @@
 //! own hand-rolled value parsers (durations, and later parameter grids).
 
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use quip_proto::v1::Job;
 
 use crate::backend::SessionError;
 use crate::corpus::{CorpusError, CorpusSource};
+use crate::instances::{InstanceError, InstanceSource};
 use crate::problem::ProblemSource;
 use crate::topology::{self, TopologyError, TopologySpec};
 
@@ -22,20 +23,24 @@ pub mod sweep;
 pub mod throughput;
 pub mod ttt;
 
-/// Where a mode's jobs come from: derived from a seed, or replayed from a
-/// corpus of chain-harvested instances.
+/// Where a mode's jobs come from: derived from a seed, replayed from a corpus
+/// of chain-harvested instances, or replayed from a file of explicit
+/// instances.
 ///
-/// The two differ in one way that matters to a caller. A derived source is
-/// endless — it will draw as many problems as asked for. A corpus is finite
-/// and yields each instance exactly once, so a mode that dispatches until a
-/// wall-clock target stops early when the corpus runs out. Treat `--duration`
-/// as a cap in that case, not a target.
+/// A derived source differs from the other two in one way that matters to a
+/// caller. A derived source is endless — it will draw as many problems as
+/// asked for. A corpus or an instance file is finite and yields each instance
+/// exactly once, so a mode that dispatches until a wall-clock target stops
+/// early when it runs out. Treat `--duration` as a cap in that case, not a
+/// target.
 #[derive(Debug)]
 pub enum JobSource {
     /// Deterministic problems derived from `(seed, topology, index)`.
     Derived(Box<ProblemSource>),
     /// Chain-harvested instances replayed from a corpus.
     Corpus(Box<CorpusSource>),
+    /// Explicit coefficients replayed from an instance file.
+    Instances(Box<InstanceSource>),
 }
 
 impl JobSource {
@@ -47,27 +52,54 @@ impl JobSource {
         match self {
             Self::Derived(s) => s.next_job(),
             Self::Corpus(s) => s.next_job(),
+            Self::Instances(s) => s.next_job(),
         }
     }
 
     /// A short label naming the source for a run summary: `"seed:<n>"` for a
-    /// derived source, or the corpus name or path.
+    /// derived source, the corpus name or path, or `"instances:<path>"`.
     #[must_use]
     pub fn label(&self, seed: u64) -> String {
         match self {
             Self::Derived(_) => format!("seed:{seed}"),
             Self::Corpus(s) => s.label().to_string(),
+            Self::Instances(s) => format!("instances:{}", s.label()),
         }
     }
 
-    /// How many instances a corpus source holds, or `None` for a derived
-    /// source, which has no fixed size.
+    /// How many instances a corpus or instance-file source holds, or `None`
+    /// for a derived source, which has no fixed size.
     #[must_use]
     pub fn instances(&self) -> Option<usize> {
         match self {
             Self::Derived(_) => None,
             Self::Corpus(s) => Some(s.len()),
+            Self::Instances(s) => Some(s.len()),
         }
+    }
+}
+
+/// Load the finite source a run asked for, or `None` when it asked for
+/// neither: `corpus` names a corpus replay, `instances` an instance file.
+///
+/// # Errors
+///
+/// Returns [`ModeError::ConflictingSources`] when both are set, or the load
+/// error of whichever source was named.
+pub fn load_finite_source(
+    corpus: Option<&str>,
+    instances: Option<&Path>,
+    spec: &TopologySpec,
+) -> Result<Option<JobSource>, ModeError> {
+    match (corpus, instances) {
+        (Some(_), Some(_)) => Err(ModeError::ConflictingSources),
+        (Some(name), None) => Ok(Some(JobSource::Corpus(Box::new(CorpusSource::load(
+            name, spec,
+        )?)))),
+        (None, Some(path)) => Ok(Some(JobSource::Instances(Box::new(InstanceSource::load(
+            path, spec,
+        )?)))),
+        (None, None) => Ok(None),
     }
 }
 
@@ -116,6 +148,12 @@ pub enum ModeError {
     /// The configured corpus could not be loaded, or does not belong to the
     /// configured topology.
     Corpus(CorpusError),
+    /// The configured instance file could not be loaded, or does not belong
+    /// to the configured topology.
+    Instances(InstanceError),
+    /// Both a corpus and an instance file were configured. A run replays one
+    /// finite source.
+    ConflictingSources,
     /// `backend` did not match any entry in `backend::builtin_registry`.
     UnknownBackend(String),
     /// The coordinator-side session loop failed to start (bind/spawn).
@@ -232,6 +270,13 @@ impl fmt::Display for ModeError {
         match self {
             Self::Topology(e) => write!(f, "failed to load topology: {e}"),
             Self::Corpus(e) => write!(f, "failed to load corpus: {e}"),
+            Self::Instances(e) => write!(f, "failed to load instances: {e}"),
+            Self::ConflictingSources => {
+                write!(
+                    f,
+                    "corpus and instances are mutually exclusive: set only one"
+                )
+            }
             Self::UnknownBackend(name) => write!(
                 f,
                 "unknown backend {name:?}; see `backend::builtin_registry` for valid names"
@@ -323,7 +368,9 @@ impl std::error::Error for ModeError {
         match self {
             Self::Topology(e) => Some(e),
             Self::Corpus(e) => Some(e),
+            Self::Instances(e) => Some(e),
             Self::UnknownBackend(_)
+            | Self::ConflictingSources
             | Self::RecordsFileExists(_)
             | Self::EmptyGrid
             | Self::InapplicableGridDimension(_)
@@ -356,6 +403,12 @@ impl From<TopologyError> for ModeError {
 impl From<CorpusError> for ModeError {
     fn from(e: CorpusError) -> Self {
         Self::Corpus(e)
+    }
+}
+
+impl From<InstanceError> for ModeError {
+    fn from(e: InstanceError) -> Self {
+        Self::Instances(e)
     }
 }
 

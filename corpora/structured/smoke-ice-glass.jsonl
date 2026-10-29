@@ -1,0 +1,3 @@
+{"kind":"header","format":1,"family":"smoke-ice-glass","topology_hash":"a8c3e3deb9b48090e55340a462dc182d9f41c008ba244daf9901a86aa1f66da6","topology_fixture":"smoke","nodes":8,"edges":8,"generator":"hand-written","verdict":"none"}
+{"nonce":"0000000000000000000000000000000000000000000000000000000000000001","j_milli":[125,-125,1000,-1000,0,125,-125,0],"reference":{"note":"hand-checkable"}}
+{"nonce":"0000000000000000000000000000000000000000000000000000000000000002","h_milli":[250,0,-250,0,0,0,0,1000],"j_milli":[-125,125,-125,125,-125,125,-125,125]}

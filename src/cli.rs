@@ -235,6 +235,29 @@ fn missing_required(what: &str, flag: &str, config_path: Option<&Path>) -> Strin
     }
 }
 
+/// Merge `--corpus` and `--instances` with the config file's values, flags
+/// first, and reject a result that sets both.
+fn resolve_finite_source(
+    corpus_flag: Option<String>,
+    instances_flag: Option<PathBuf>,
+    file: &FileConfig,
+    config_path: Option<&Path>,
+) -> Result<(Option<String>, Option<PathBuf>), String> {
+    // An explicit flag for one source displaces the file's key for the other:
+    // the flag is the per-invocation instruction.
+    let (corpus, instances) = match (corpus_flag, instances_flag) {
+        (None, None) => (file.corpus.clone(), file.instances.clone()),
+        (corpus, instances) => (corpus, instances),
+    };
+    if corpus.is_some() && instances.is_some() {
+        let origin = config_path.map_or_else(String::new, |p| format!(" (or {})", p.display()));
+        return Err(format!(
+            "--corpus and --instances are mutually exclusive{origin}: a run replays one finite source"
+        ));
+    }
+    Ok((corpus, instances))
+}
+
 /// Warn when a shared config file carries `hardness` for a mode that does
 /// not use it. A flat `FileConfig` union may legitimately hold keys for
 /// several modes, so this is a warning rather than an error (unlike an
@@ -268,6 +291,15 @@ pub struct ThroughputArgs {
     /// against. A corpus is finite, so `--duration` becomes an upper bound.
     #[arg(long)]
     pub corpus: Option<String>,
+    /// Replay explicit instances from a JSONL file instead of deriving
+    /// problems from `--seed`. The file carries the coefficients themselves,
+    /// so it can hold problems that no topology preset draws.
+    ///
+    /// The file's header names the topology it was built for and must match
+    /// `--topology-preset`. The file is finite, so `--duration` becomes an
+    /// upper bound. Cannot be combined with `--corpus`.
+    #[arg(long, value_name = "PATH")]
+    pub instances: Option<PathBuf>,
 }
 
 impl ThroughputArgs {
@@ -299,7 +331,8 @@ impl ThroughputArgs {
             }
         };
         let param_curve = merge_param_curve(&file, THROUGHPUT_DEFAULT_CURVE);
-        let corpus = self.corpus.or(file.corpus.clone());
+        let (corpus, instances) =
+            resolve_finite_source(self.corpus, self.instances, &file, config_path)?;
         Ok(ThroughputConfig {
             backend,
             topology,
@@ -308,6 +341,7 @@ impl ThroughputArgs {
             duration_s,
             seed,
             corpus,
+            instances,
             output_dir,
             backend_bin_override: None,
             backend_args_override: None,
@@ -350,6 +384,15 @@ pub struct SweepArgs {
     /// every cell draws the same `min(num_jobs, corpus length)` instances.
     #[arg(long)]
     pub corpus: Option<String>,
+    /// Replay explicit instances from a JSONL file instead of deriving
+    /// problems from `--seed`. The file carries the coefficients themselves,
+    /// so it can hold problems that no topology preset draws.
+    ///
+    /// The file's header names the topology it was built for and must match
+    /// `--topology-preset`. The file is finite, so `--num-jobs` becomes an
+    /// upper bound, as for a corpus. Cannot be combined with `--corpus`.
+    #[arg(long, value_name = "PATH")]
+    pub instances: Option<PathBuf>,
 }
 
 impl SweepArgs {
@@ -393,7 +436,8 @@ impl SweepArgs {
             .or(file.param_grid.clone())
             .ok_or_else(|| missing_required("param-grid", "--param-grid", config_path))?;
         let num_jobs = merge(self.num_jobs, file.num_jobs, DEFAULT_NUM_JOBS);
-        let corpus = self.corpus.or(file.corpus.clone());
+        let (corpus, instances) =
+            resolve_finite_source(self.corpus, self.instances, &file, config_path)?;
         Ok(SweepConfig {
             backend,
             topology,
@@ -401,6 +445,7 @@ impl SweepArgs {
             num_jobs,
             seed,
             corpus,
+            instances,
             output_dir,
             backend_bin_override: None,
             backend_args_override: None,
@@ -2118,5 +2163,106 @@ mod tests {
             message.contains("file-a") || message.contains("required"),
             "missing --file-a must be rejected: {message}"
         );
+    }
+
+    const THROUGHPUT_BASE: [&str; 7] = [
+        "throughput",
+        "--backend",
+        "cpu-sa",
+        "--topology-preset",
+        "smoke",
+        "--duration",
+        "30s",
+    ];
+
+    #[test]
+    fn throughput_instances_flag_reaches_the_config() {
+        let mut argv = THROUGHPUT_BASE.to_vec();
+        argv.extend(["--instances", "/tmp/family.jsonl"]);
+        let cfg = throughput_args(parse(&argv).expect("parses"))
+            .into_config()
+            .expect("builds");
+        assert_eq!(
+            cfg.instances,
+            Some(std::path::PathBuf::from("/tmp/family.jsonl"))
+        );
+        assert_eq!(cfg.corpus, None);
+    }
+
+    #[test]
+    fn throughput_corpus_and_instances_together_is_a_usage_error() {
+        let mut argv = THROUGHPUT_BASE.to_vec();
+        argv.extend(["--corpus", "chain-h0", "--instances", "/tmp/family.jsonl"]);
+        let err = throughput_args(parse(&argv).expect("clap accepts both"))
+            .into_config()
+            .expect_err("both sources must be rejected");
+        assert!(err.contains("mutually exclusive"), "{err}");
+    }
+
+    #[test]
+    fn throughput_config_file_supplies_instances_and_a_flag_displaces_the_files_corpus() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("t.yaml");
+        std::fs::write(
+            &path,
+            "backend: cpu-sa\ntopology_preset: smoke\nduration: 30s\ncorpus: chain-h0\n",
+        )
+        .expect("write");
+        let config = path.to_str().expect("utf8 path");
+        let cfg = throughput_args(
+            parse(&[
+                "throughput",
+                "--config",
+                config,
+                "--instances",
+                "/tmp/f.jsonl",
+            ])
+            .expect("parses"),
+        )
+        .into_config()
+        .expect("a flag for one source displaces the file's other source");
+        assert_eq!(cfg.corpus, None);
+        assert_eq!(
+            cfg.instances,
+            Some(std::path::PathBuf::from("/tmp/f.jsonl"))
+        );
+
+        std::fs::write(
+            &path,
+            "backend: cpu-sa\ntopology_preset: smoke\nduration: 30s\ncorpus: chain-h0\ninstances: /tmp/f.jsonl\n",
+        )
+        .expect("write");
+        let err = throughput_args(parse(&["throughput", "--config", config]).expect("parses"))
+            .into_config()
+            .expect_err("a file that sets both must be rejected");
+        assert!(err.contains("mutually exclusive"), "{err}");
+    }
+
+    #[test]
+    fn sweep_instances_flag_reaches_the_config_and_conflicts_with_corpus() {
+        let base = [
+            "sweep",
+            "--backend",
+            "cpu-sa",
+            "--topology-preset",
+            "smoke",
+            "--param-grid",
+            r#"{"num_reads":[8],"num_sweeps":[10]}"#,
+        ];
+        let mut argv = base.to_vec();
+        argv.extend(["--instances", "/tmp/family.jsonl"]);
+        let cfg = sweep_args(parse(&argv).expect("parses"))
+            .into_config()
+            .expect("builds");
+        assert_eq!(
+            cfg.instances,
+            Some(std::path::PathBuf::from("/tmp/family.jsonl"))
+        );
+
+        argv.extend(["--corpus", "chain-h0"]);
+        let err = sweep_args(parse(&argv).expect("clap accepts both"))
+            .into_config()
+            .expect_err("both sources must be rejected");
+        assert!(err.contains("mutually exclusive"), "{err}");
     }
 }

@@ -5,6 +5,7 @@ pub mod backend;
 pub mod cli;
 pub mod config;
 pub mod corpus;
+pub mod instances;
 pub mod modes;
 pub mod params;
 pub mod problem;
