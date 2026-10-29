@@ -2,4 +2,5 @@
 //! Campaign analysis modules are registered here as they are implemented.
 
 pub mod confidence;
+pub mod costs;
 pub mod survival;
