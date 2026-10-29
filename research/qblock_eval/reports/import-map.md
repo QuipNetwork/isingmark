@@ -6,10 +6,10 @@ This document records which research sources the repository now holds. It maps e
 `/home/carback1/quip-data/regimes`. It is read-only and is not a git repository. All
 origins below are relative to it.
 
-The repository holds 39 imported files (1783638 bytes) under
+The repository holds 41 imported files (1826115 bytes) under
 `research/qblock_eval/sources/selected/<origin>`. The manifest
 `research/qblock_eval/sources/selected/manifest.json` lists each file with its size and blake3
-digest. It also lists 218 byte-identical duplicates, 48 retained evidence entries,
+digest. It also lists 248 byte-identical duplicates, 48 retained evidence entries,
 and the skipped checks.
 
 Imported kinds: solver, generator, postprocess, build, script, target-manifest, and topology.
@@ -23,14 +23,14 @@ that each duplicate matches its source. A changed byte fails the test.
 
 ## Function to ticket map
 
-Each imported function appears once and maps to exactly one ticket. The 93 entries
-split by ticket as follows: CPU-1 9, CPU-2 27, CPU-3 15, CPU-7 8, CPU-8 7, CPU-9 6, EXP-2 1, IM-2 2, IM-3 2, SC-8 3, SC-9 7, SC-10 5, SC-11 1. Files of kind build, script, target-manifest, and topology
+Each imported function appears once and maps to exactly one ticket. The 97 entries
+split by ticket as follows: CPU-1 12, CPU-2 28, CPU-3 15, CPU-7 8, CPU-8 7, CPU-9 6, EXP-2 1, IM-2 2, IM-3 2, SC-8 3, SC-9 7, SC-10 5, SC-11 1. Files of kind build, script, target-manifest, and topology
 have no functions.
 
 Ticket reasoning:
 
-- CPU-1 reconciles the shared SA core. The `sa_msc`, `sa_sampler`, `sampler_core`, and `coloring` entries, and the `clusters` and `unit_encoding` helpers, belong to it.
-- CPU-2 ports the weighted dimer sampler. `validate_common`, `MAX_READS`, `MAX_BETA`, `check_beta`, and `energy_f64` go here. The first four bound the inputs of the sampler. `energy_f64` is the parity oracle in the tests.
+- CPU-1 reconciles the shared SA core. The `sa_msc`, `sa_int`, `sa_sampler`, `sampler_core`, and `coloring` entries (`sa_int` is the shared integer SA core used by the unit arm of `sample_dimer`), and the `clusters` and `unit_encoding` helpers, belong to it.
+- CPU-2 ports the weighted dimer sampler and its fractional path (`sample_fractional` in `dimer_fractional.rs`, the arm of `sample_dimer` taken for fractional weights). `validate_common`, `MAX_READS`, `MAX_BETA`, `check_beta`, and `energy_f64` go here. The first four bound the inputs of the sampler. `energy_f64` is the parity oracle in the tests.
 - CPU-3 ports the Otsuka cluster update and its graph preparation. CPU-4 exposes it as a binary, so no function maps to CPU-4.
 - `Exchange::step` maps to CPU-3. It is also a reference for CU-2. The `pair_bench` kernels are also a reference for CU-1.
 - `VARIANTS` and `set_pair_strength` map to SC-9. `VARIANTS` holds the w62-dimer1200 recipe and `set_pair_strength` sets the pair bond strength of the p500 recipe.
@@ -67,6 +67,10 @@ Ticket reasoning:
 | `MAX_BETA` | `cpu-sa-msc-f64` | CPU-2 |
 | `check_beta` | `cpu-sa-msc-f64` | CPU-2 |
 | `energy_f64` | `cpu-sa-msc-f64` | CPU-2 |
+| `IntGraph` | `cpu-sa-int` | CPU-1 |
+| `draw_row` | `cpu-sa-int` | CPU-1 |
+| `fill_threshold_row` | `cpu-sa-int` | CPU-1 |
+| `sample_fractional` | `cpu-dimer-fractional` | CPU-2 |
 | `MscState` | `cpu-sa-msc` | CPU-1 |
 | `LANES` | `cpu-sa-msc` | CPU-1 |
 | `read_rng` | `cpu-sa-sampler` | CPU-1 |
@@ -153,15 +157,15 @@ Algorithm deltas, none imported:
 
 Parameter deltas: P1 adds `--beta-knee` and `--knee-frac` (L9 and L13). P2 adds `--beta-knot` and `--knot-fraction` on the older non-CSR base. Both are off by default.
 
-Non-algorithm deltas: N1 is the older `pair_bench.rs` base. It has no CSR layout and no incremental boundary sums.
+Non-algorithm deltas: N1 is the older `pair_bench.rs` base. It has no CSR layout and no `init_hex` warm start. It also has no incremental boundary sums.
 The single-replica move set is the same. This was read, not run.
 
 N2 is output-only variants of `fast_bench.rs`.
 
 N3 is `sb_bench.rs`, which is unrelated.
 
-`fast_bench.rs` is a separate solver in the same family as `pair_bench` in soft pair mode. It adds a CSR layout, an
-incremental heat bath, replica exchange, and an exact strip polish. The strip polish lives in `examples/cluster/strips.rs`, which is
+`fast_bench.rs` is a separate solver in the same family as `pair_bench` in soft pair mode. Its additions over `pair_bench.rs` are
+the incremental heat bath, replica exchange, and the exact strip polish. The strip polish lives in `examples/cluster/strips.rs`, which is
 imported as `cpu-strips` and is identical in every tree.
 
 ## Dimer recipes and extended cohorts
@@ -182,19 +186,19 @@ The three recipes are `ice-twisted-w62-dimer1200`, `ice-twisted-w62-dimer1350`, 
 | w45-dimer1200 | 45 | 1200 | `wave_run.py --pairs 1200 --weak 45` |
 | w62-dimer1200-p500 | 62 | 1200 | `wave_run.py build --pairs 1200 --weak 62 --pair-milli -500`, `gen100.py` `wave` |
 
-The code does not check that pairs avoid tetrahedron bonds, although the `generate2.py` docstring says so.
-Pairs can share spins with tiles. SC-9 must not copy the docstring claim as a rule.
+The `|J| == 125` filter in `generate2.py` (line 52) is what keeps pairs off tetrahedron bonds, because tile bonds have magnitude `1000` (`ice.py` lines 99 to 100). The `tetra_spin` mask in `add_dimers` (lines 50 to 51) is computed and never read. It is not a second rule.
+Pairs can still share spins with tiles.
 
 Later parameter recipes: charged ice (`generate3.py`, scale `250`, background `+-31`, charge q drawn from
 `{0, +2, -2}` with p = `0.5, 0.25, 0.25`) and field ice h500 and h1000 (`ice_fields.py`, 285 field spins).
 
 Extended cohorts. The master list has 24 nonces (`qpu-suite/work/cells/ice-twisted/nonces.json`, made by
-`default_rng(20260920)`). The screen cohort is its first 12. Nonces from index 13 on are
-`sha256(b"new-pow/models-100/" + str(i))` (`gen100.py`, `nonce_for`). Each cell reaches 100
+`default_rng(20260920)`). The screen cohort is its first 12. Extension nonces are
+`sha256(b"new-pow/models-100/" + str(i))` (`gen100.py`, `nonce_for`), where `i` is an extension counter that starts at `13`. The counter is not the position of the nonce in the cell list. Each cell reaches 100
 nonces. The `record.json` file of each cell in `new-pow/models-100/` holds the `index_map` and the reproduction check. The README cohort table is
 incomplete, so use the `record.json` files. These fixtures are cited here and are not imported.
 
-| Cell | Saved models | Extension indices | Total |
+| Cell | Saved models | Extension counters | Total |
 |---|---|---|---|
 | w62-dimer1200 | 24 | 13 to 88 | 100 |
 | w62-dimer1350 | 24 | 13 to 88 | 100 |
@@ -205,9 +209,13 @@ incomplete, so use the `record.json` files. These fixtures are cited here and ar
 
 ## Provenance
 
-RNG. The CPU kernels use `rand` 0.8 `SmallRng`, seeded per read by `read_rng`. The dimer sampler
-salts, copied from `dimer_weighted.rs` lines 22 to 24, are `SINGLE_SALT` `0x5745_4947_4854_3031`, `GROUP_SALT` `0x4752_4f55_5053_3031`, and `ICE_SALT`
+RNG. Each file seeds its own streams. All CPU kernels use `rand` 0.8 `SmallRng`. The manifest `rng` field of each file holds the exact expressions, and these are the main ones.
+The shared helper is `read_rng(base, read_idx)` in `sa_sampler.rs` (lines 524 to 529): `SmallRng::seed_from_u64(base.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(read_idx as u64).wrapping_add(1))`.
+`dimer_weighted.rs` takes its initial words per 64-lane block from `read_rng(params.seed, read)` (lines 332 to 333).
+It then makes three move streams once per anneal, `SmallRng::seed_from_u64(params.seed ^ SALT)` (lines 353 to 355).
+The salts, copied from `dimer_weighted.rs` lines 22 to 24, are `SINGLE_SALT` `0x5745_4947_4854_3031`, `GROUP_SALT` `0x4752_4f55_5053_3031`, and `ICE_SALT`
 `0x4943_454c_4f4f_5031`. `threshold` draws u from `Open01` and returns `floor(-ln(u) * SCALE / (2 beta))`, capped at `i32::MAX`, as an `i32` (`SCALE` = 1000).
+The tempering variant uses `read_rng(params.seed, 0)` and four salted streams (`tempering.rs` lines 408 and 422 to 425). `dimer_fractional.rs` and `sa_msc.rs` have their own salts. `pair_bench.rs` uses `SmallRng::seed_from_u64(job.seed.wrapping_add(args.seed_offset))` (lines 1016 to 1017) and no `read_rng`.
 The Python generators use NumPy `default_rng` (PCG64). Tile order and gauges use
 `default_rng(int.from_bytes(sha256(bytes.fromhex(nonce)).digest(), "big"))` (`ice.py`). Dimer choice
 and charge draws use `rng_for(nonce, tag)`, which is
@@ -247,6 +255,8 @@ Evidence: `new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml` (license field).
 | `cpu-dimer-research` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_research.rs` |
 | `cpu-research` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/research.rs` |
 | `cpu-sa-msc-f64` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_msc_f64.rs` |
+| `cpu-sa-int` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_int.rs` |
+| `cpu-dimer-fractional` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_fractional.rs` |
 | `cpu-sa-msc` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_msc.rs` |
 | `cpu-sa-sampler` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_sampler.rs` |
 | `cpu-sampler-core` | `new-pow/ice-twisted-w62-dimer1200/cpu/src/sampler_core.rs` |
@@ -296,7 +306,7 @@ These items stay in the research root. The manifest lists each under `retained_e
 - CPU fork variants D1 to D4, P1, P2, and N1 to N3, the `src/bin`, `tests`, and other kernels, and the sibling solver directories.
 - QPU capture machinery, classical attack code, and optimizer reports.
 
-The manifest lists 218 duplicate paths. They point at the imported sources. The `Cargo.toml` and the dimer files appear in all 15 trees.
+The manifest lists 248 duplicate paths. They point at the imported sources. The `Cargo.toml` and the dimer files appear in all 15 trees.
 
 ## Skipped checks
 
