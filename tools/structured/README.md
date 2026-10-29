@@ -77,6 +77,21 @@ The header records `topology_hash`, the isingmark topology hash of the fixture.
 For `chain-h0` this value is `e66d3dfa3c9c6afb15efe29891cf9412498d94692ab5956af3ad98ba3693a02d`.
 The header also records `suite_topology_sha256`, the SHA-256 of the suite specification file.
 
+## Convert a frozen model
+
+`python -m isingmark_structured.convert` turns one research model (`.npz`) into a one-instance file.
+The file has the same header as a generated file, with `generator` set to `frozen-model`, plus `problem_family`, `model_blake3` (the BLAKE3 digest of the `.npz` bytes), and `source_model`.
+The converter maps the model to the fixture by qubit id, as the generator does.
+It stops with an error on a value outside -1,000 to 1,000, on qubits that the suite specification lacks, and on a model with another number of spins.
+The `reference` object of the instance holds the structure arrays of the model.
+Node groups (`tetrahedra`, `clusters`, and `pairs` when every pair is a model coupler) appear as fixture node ids.
+Every other array appears under `reference.unmapped`, unchanged, with `id_space` `suite`.
+
+```bash
+python -m isingmark_structured.convert path/to/model.npz --cell ice-glass-r8 \
+  --problem-family ice-glass --source-model qpu-suite/work/cells/ice-glass-r8/models/<nonce>.npz
+```
+
 ## Verify
 
 The verify step needs the suite workspace, which exists only on the research host.

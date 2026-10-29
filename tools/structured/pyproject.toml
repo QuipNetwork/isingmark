@@ -12,6 +12,7 @@ license = "AGPL-3.0-or-later"
 dependencies = [
     "numpy>=2.0",
     "scipy>=1.13",
+    "blake3>=1.0",
 ]
 
 [project.optional-dependencies]
