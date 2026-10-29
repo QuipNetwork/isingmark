@@ -1,0 +1,18 @@
+{
+  "schema": "isingmark.research-sources/1",
+  "research_root": "/home/carback1/quip-data/regimes",
+  "digest": "blake3",
+  "sources": [],
+  "duplicates": [],
+  "retained_evidence": [],
+  "skipped_checks": [
+    {
+      "check": "SC-2 golden format",
+      "reason": "The golden format is not defined yet (QUI-2000, Backlog)."
+    },
+    {
+      "check": "SC-7 conformance checks",
+      "reason": "The conformance check format is not defined yet (QUI-2019, Backlog)."
+    }
+  ]
+}
