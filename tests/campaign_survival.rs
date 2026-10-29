@@ -10,6 +10,7 @@ use std::{
 };
 
 use isingmark::campaign::{
+    analysis::confidence::{binomial_lower, binomial_upper},
     analysis::survival::{
         check_probability, estimate_curves, quantile, AnalysisDesign, AnalysisError, Censoring,
         Curve, Quantile,
@@ -262,6 +263,10 @@ fn empty_trials_or_either_empty_grid_are_rejected() {
             device_grid_s: vec![],
             ..AnalysisDesign::default()
         },
+        AnalysisDesign {
+            bootstrap_resamples: 0,
+            ..AnalysisDesign::default()
+        },
     ] {
         assert!(matches!(
             estimate_curves(&trials, &design),
@@ -373,6 +378,7 @@ fn success_times_extend_sorted_deduplicated_grids_within_the_limits() {
         wall_grid_s: vec![1_300.0, 10.0, 1.0, 10.0],
         device_grid_s: vec![35.0, 10.0, 1.0, 10.0, 30.0],
         censoring: Censoring::FixedWindow,
+        ..AnalysisDesign::default()
     };
     let curves = estimate_curves(&[first, tied, late], &design).expect("exact success times");
     let wall = curve(&curves, TimeBasis::WallClock);
@@ -383,16 +389,28 @@ fn success_times_extend_sorted_deduplicated_grids_within_the_limits() {
     assert_eq!(device.grid_s, vec![1.0, 2.5, 10.0, 30.0]);
     assert_eq!(quantile(device, 0.5), Quantile::Identified(2.5));
     close(device.estimate[point(device, 1.0)], 0.0);
-    close(device.upper[point(device, 1.0)], 1.0 / 3.0);
+    close(device.upper[point(device, 1.0)], 0.975);
 }
 
 #[test]
 fn accepted_device_costs_use_full_bounds_and_timing_status() {
     let dir = tempfile::tempdir().expect("temporary traces");
     let cases = [
-        (DeviceTime::from_exact_ns(30_000_000_000), 1.0, 1.0, 0),
-        (DeviceTime::from_exact_ns(31_000_000_000), 0.0, 0.0, 0),
-        (DeviceTime::from_truncated_us(30_000_000), 0.0, 1.0, 1),
+        (
+            DeviceTime::from_exact_ns(30_000_000_000),
+            1.0,
+            0.025,
+            1.0,
+            0,
+        ),
+        (
+            DeviceTime::from_exact_ns(31_000_000_000),
+            0.0,
+            0.0,
+            0.975,
+            0,
+        ),
+        (DeviceTime::from_truncated_us(30_000_000), 0.0, 0.0, 1.0, 1),
         (
             DeviceTime {
                 lower_ns: 29_000_000_000,
@@ -400,6 +418,7 @@ fn accepted_device_costs_use_full_bounds_and_timing_status() {
                 status: TimingStatus::ConservativeEstimate,
             },
             1.0,
+            0.025,
             1.0,
             0,
         ),
@@ -410,6 +429,7 @@ fn accepted_device_costs_use_full_bounds_and_timing_status() {
                 status: TimingStatus::Complete,
             },
             0.0,
+            0.0,
             1.0,
             1,
         ),
@@ -419,6 +439,7 @@ fn accepted_device_costs_use_full_bounds_and_timing_status() {
                 upper_ns: Some(0),
                 status: TimingStatus::Missing,
             },
+            0.0,
             0.0,
             1.0,
             1,
@@ -431,10 +452,11 @@ fn accepted_device_costs_use_full_bounds_and_timing_status() {
             },
             0.0,
             0.0,
+            0.975,
             0,
         ),
     ];
-    for (index, (cost, estimate, upper, unresolved)) in cases.into_iter().enumerate() {
+    for (index, (cost, estimate, lower, upper, unresolved)) in cases.into_iter().enumerate() {
         let mut accepted = trial(dir.path(), &index.to_string(), "one", Some(2));
         accepted.device_total = cost;
         let curves =
@@ -442,7 +464,7 @@ fn accepted_device_costs_use_full_bounds_and_timing_status() {
         let device = curve(&curves, TimeBasis::QpuDeviceAccess);
         let last = point(device, 30.0);
         close(device.estimate[last], estimate);
-        close(device.lower[last], estimate);
+        close(device.lower[last], lower);
         close(device.upper[last], upper);
         assert_eq!(device.unresolved, unresolved);
     }
@@ -464,7 +486,7 @@ fn halted_device_trials_are_unresolved_until_the_budget_is_spent() {
         halted.device_total = DeviceTime::from_exact_ns(10_000_000_000);
         let curves = estimate_curves(&[halted], &AnalysisDesign::default()).expect("joint bounds");
         let device = curve(&curves, TimeBasis::QpuDeviceAccess);
-        close(device.upper[point(device, 10.0)], 0.0);
+        close(device.upper[point(device, 10.0)], 0.975);
         close(device.upper[point(device, 30.0)], 1.0);
         close(device.estimate[point(device, 30.0)], 0.0);
         assert_eq!(device.unresolved, 1);
@@ -484,7 +506,7 @@ fn exhausted_device_budget_is_failure_even_without_timing() {
     let curves =
         estimate_curves(&[exhausted], &AnalysisDesign::default()).expect("exhausted budget");
     let device = curve(&curves, TimeBasis::QpuDeviceAccess);
-    close(device.upper[point(device, 30.0)], 0.0);
+    close(device.upper[point(device, 30.0)], 0.975);
     assert_eq!(device.unresolved, 0);
 }
 
@@ -516,4 +538,172 @@ fn probability_must_be_in_the_open_closed_unit_interval() {
     for probability in [f64::MIN_POSITIVE, 0.5, 1.0] {
         assert_eq!(check_probability(probability), Ok(()));
     }
+}
+
+#[test]
+fn zero_success_has_positive_exact_upper_at_every_point() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let trials = [
+        trial(dir.path(), "a1", "A", None),
+        trial(dir.path(), "a2", "A", None),
+        trial(dir.path(), "b1", "B", None),
+    ];
+    let expected = binomial_upper(0, 2, 0.025).expect("two independent instances");
+    for curve in estimate_curves(&trials, &AnalysisDesign::default()).expect("zero-success curves")
+    {
+        for (&lower, &upper) in curve.lower.iter().zip(&curve.upper) {
+            close(lower, 0.0);
+            assert!(upper > 0.0);
+            close(upper, expected);
+        }
+    }
+}
+
+#[test]
+fn unresolved_trials_widen_a_zero_success_device_band() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let mut trials = Vec::with_capacity(30);
+    for index in 0..30 {
+        let id = format!("instance-{index}");
+        let mut accepted = trial(dir.path(), &id, &id, Some(1));
+        accepted.device_total = DeviceTime::missing();
+        trials.push(accepted);
+    }
+
+    let curves = estimate_curves(&trials, &AnalysisDesign::default()).expect("missing timing");
+    let device = curve(&curves, TimeBasis::QpuDeviceAccess);
+    let at_30_seconds = point(device, 30.0);
+    close(device.estimate[at_30_seconds], 0.0);
+    assert_eq!(device.unresolved, 30);
+    close(device.upper[at_30_seconds], 1.0);
+}
+
+#[test]
+fn all_success_uses_exact_lower_at_the_limit() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let trials = [
+        trial(dir.path(), "a1", "A", Some(1)),
+        trial(dir.path(), "a2", "A", Some(2)),
+        trial(dir.path(), "b1", "B", Some(3)),
+    ];
+    let expected = binomial_lower(2, 2, 0.025).expect("two independent instances");
+    for curve in estimate_curves(&trials, &AnalysisDesign::default()).expect("all-success curves") {
+        let limit = point(&curve, curve.observation_limit_s);
+        close(curve.lower[limit], expected);
+        close(curve.estimate[limit], 1.0);
+        close(curve.upper[limit], 1.0);
+    }
+}
+
+#[test]
+fn unresolved_trials_widen_only_the_device_upper_band() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let mut stopped = trial(dir.path(), "stopped", "A", None);
+    stopped.device_total = DeviceTime::missing();
+    let trials = [trial(dir.path(), "accepted", "A", Some(1)), stopped];
+    let curves = estimate_curves(&trials, &AnalysisDesign::default()).expect("uncertain timing");
+    let wall = curve(&curves, TimeBasis::WallClock);
+    let device = curve(&curves, TimeBasis::QpuDeviceAccess);
+    let wall_point = point(wall, 30.0);
+    let device_point = point(device, 30.0);
+    close(device.estimate[device_point], wall.estimate[wall_point]);
+    close(device.lower[device_point], wall.lower[wall_point]);
+    assert!(device.upper[device_point] >= wall.upper[wall_point]);
+    close(wall.upper[wall_point], 0.5);
+    close(device.upper[device_point], 1.0);
+    assert_eq!(wall.unresolved, 0);
+}
+
+#[test]
+fn bootstrap_bands_use_equal_instance_weights_and_enclose_estimates() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let trials = [
+        trial(dir.path(), "a1", "A", Some(1)),
+        trial(dir.path(), "a2", "A", None),
+        trial(dir.path(), "a3", "A", None),
+        trial(dir.path(), "a4", "A", None),
+        trial(dir.path(), "b1", "B", Some(1)),
+    ];
+    let design = AnalysisDesign::default();
+    let curves = estimate_curves(&trials, &design).expect("cluster bands");
+    assert_eq!(
+        curves,
+        estimate_curves(&trials, &design).expect("repeatable bands")
+    );
+    for curve in curves {
+        let limit = point(&curve, curve.observation_limit_s);
+        close(curve.estimate[limit], 0.625);
+        close(curve.lower[limit], 0.25);
+        close(curve.upper[limit], 1.0);
+        for ((&lower, &estimate), &upper) in
+            curve.lower.iter().zip(&curve.estimate).zip(&curve.upper)
+        {
+            assert!(0.0 <= lower && lower <= estimate && estimate <= upper && upper <= 1.0);
+        }
+        assert!(curve.assumptions.iter().any(|text| {
+            text.contains("nearest rank")
+                && text.contains("0.025")
+                && text.contains("2000")
+                && text.contains("seed=0")
+                && text.contains("n=2")
+        }));
+    }
+}
+
+#[test]
+fn km_bootstrap_recomputes_each_drawn_instance() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let mut censored = trial(dir.path(), "a2", "A", None);
+    censored.wall_limit = Some(Duration::from_secs(3));
+    let trials = [
+        trial(dir.path(), "a1", "A", Some(2)),
+        censored,
+        trial(dir.path(), "b1", "B", Some(4)),
+    ];
+    let curves = estimate_curves(&trials, &km_design()).expect("instance KM bands");
+    let wall = curve(&curves, TimeBasis::WallClock);
+    let at_four = point(wall, 4.0);
+    close(wall.estimate[at_four], 0.75);
+    close(wall.lower[at_four], 0.5);
+    close(wall.upper[at_four], 1.0);
+}
+
+#[test]
+fn km_at_one_does_not_imply_every_trial_succeeded() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let mut censored = trial(dir.path(), "censor", "A", None);
+    censored.wall_limit = Some(Duration::from_secs(1));
+    let trials = [censored, trial(dir.path(), "accepted", "A", Some(2))];
+    let curves = estimate_curves(&trials, &km_design()).expect("censored KM endpoint");
+    let wall = curve(&curves, TimeBasis::WallClock);
+    close(wall.lower[point(wall, 2.0)], 1.0);
+}
+
+#[test]
+fn one_resample_encloses_the_estimate_and_uses_the_configured_seed() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let trials = [
+        trial(dir.path(), "a1", "A", Some(1)),
+        trial(dir.path(), "a2", "A", None),
+        trial(dir.path(), "b1", "B", Some(1)),
+    ];
+    let mut saw_lower_draw = false;
+    let mut saw_upper_draw = false;
+    for seed in 0..16 {
+        let design = AnalysisDesign {
+            bootstrap_resamples: 1,
+            bootstrap_seed: seed,
+            ..AnalysisDesign::default()
+        };
+        let curves = estimate_curves(&trials, &design).expect("single bootstrap draw");
+        for curve in curves {
+            let limit = point(&curve, curve.observation_limit_s);
+            close(curve.estimate[limit], 0.75);
+            assert!(curve.lower[limit] <= 0.75 && curve.upper[limit] >= 0.75);
+            assert!(curve.upper[limit] - curve.lower[limit] <= 0.25);
+            saw_lower_draw |= curve.lower[limit] < 0.75;
+            saw_upper_draw |= curve.upper[limit] > 0.75;
+        }
+    }
+    assert!(saw_lower_draw && saw_upper_draw);
 }
