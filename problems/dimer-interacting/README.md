@@ -55,4 +55,4 @@ Tileable: unknown for both cells. The tiled-generator protocol is blocked becaus
 | Fleet per link at 100 or 1,000 jobs | not recorded | 0.516 s |
 
 ## Provenance
-Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `regimes/new-pow/dimers-fullchip`, `regimes/new-pow/dimers-interacting`, `regimes/new-pow/retime/tier2/dimers-interacting`.
+Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `new-pow/dimers-fullchip`, `new-pow/dimers-interacting`, `new-pow/retime/tier2/dimers-interacting`.

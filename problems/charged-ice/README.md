@@ -13,7 +13,7 @@ Couplings are in units of the full-strength coupler (J = 1), with the milli valu
 - Topology use: 100 percent of qubits and 100 percent of couplers.
 
 ## Compact representations
-- Problem (256 bits: the nonce plus the generator version): summed tile terms `A/2 (sum g s - q)^2`. The terms depend on tile overlap. They also depend on random signs and on charges q.
+- Problem (256 bits: the nonce plus the generator version): summed tile terms `A/2 (sum g s - q)^2` over the suite tetrahedra, where each tetrahedron carries a charge q of 0, +2, or −2 set by the fields.
 - Solution (4,575 bits raw, compact size not measured): charge-2 tiles keep 4 states (1-in-4).
 - Explicit size of the largest of 12 models: 41,474 couplers × 2 bits = 82,948 bits (4 values).
 

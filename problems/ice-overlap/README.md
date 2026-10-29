@@ -6,7 +6,7 @@ This family lets the strong K4 tiles share couplers. Where two tiles share a cou
 ## Construction
 Couplings are in units of the full-strength coupler (J = 1), with the milli value in a code span. The working graph has 4,575 qubits and 41,474 couplers.
 
-- `ice-overlap-c2`: native tetrahedra share couplers, with at most 2 on each edge. Tetrahedron bonds are at 0.500 (`+500`). The background is ±0.062 (`±62`). The summary row says "per spin" where the page says per edge. Distinct couplers: {±0.062, ±0.500, ±1}.
+- `ice-overlap-c2`: native tetrahedra share couplers, with at most 2 on each edge. Tetrahedron bonds are at 0.500 (`+500`). The background is ±0.062 (`±62`). The source text says "per spin" in one place and per edge in another. This README uses per edge. Distinct couplers: {±0.062, ±0.500, ±1}.
 - `ice-overlap-c3`: at most 3 tetrahedra per edge. Tetrahedron bonds are at 0.333 (`+333`), and the background is ±0.042 (`±42`). Distinct couplers: {±0.042, ±0.333, ±0.666, ±0.999}.
 - `ice-all-k4`: every K4 of the working graph, 6,822 tiles at 0.250 each, with its own random gauge. The bond of tile t is `0.250 g_ta g_tb`, and the bonds add where tiles share a coupler, up to 8 tiles on one spin. Opposite contributions cancel, and the first nonce loses 1,075 couplers this way. Every coupler outside the tiles is ±0.031. The first model has 40,399 nonzero couplers: 295 at ±1, 243 at ±0.750, 1,365 at ±0.500, 28,149 at ±0.250, and 10,347 at ±0.031. Ten distinct values occur.
 - `ice-overlap2`: about 2,550 K4 tiles at 0.500 per edge, each with its own gauge, and one spin may sit in up to three tiles. The remaining couplers are ±0.031. Between 700 and 775 couplers per model cancel. The first nonce gives 40,713 nonzero couplers: 757 at ±1, 12,324 at ±0.500, and 27,632 at ±0.031.
@@ -31,6 +31,7 @@ Tier 3 and tier 4 mean that a classical run inside 120 s beats the postprocessed
 - `ice-all-k4`: built by `qpu-f17/generate3.py`, imported as [`generate3.py`](../charged-ice/sources/qpu-f17/generate3.py) under the charged-ice family. The nonce seeds the gauges and the glass signs.
 - `ice-overlap2`: the same [`generate3.py`](../charged-ice/sources/qpu-f17/generate3.py). It accepts K4s in nonce order while every coupler is used by at most two tiles.
 - `ice-overlap-c2` and `ice-overlap-c3`: `qpu-suite/work/ice_overlap.py` (research root), which is not imported.
+- No cell record names a generator file, so these mappings follow the family code of each cell.
 - Postprocess: `ice-tiles` ([`icetiles.py`](../shared/sources/new-pow/postprocess/optimizers/ice-tiles/icetiles.py), [`icetiles.c`](../shared/sources/new-pow/postprocess/optimizers/ice-tiles/icetiles.c), [`method.py`](../shared/sources/new-pow/postprocess/optimizers/ice-tiles/method.py)). For `ice-all-k4` the setting is `anneal:sa=1,b0=2,len=64,fe=16,nat48=1`. For `ice-overlap2` it is `anneal:sa=1,b0=2,len=32,fe=4,nat48=1`. Both use 0.25 s of one core per call. The setting for c2 and c3: not stated in the source.
 
 ## Results

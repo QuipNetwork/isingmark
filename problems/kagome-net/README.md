@@ -38,4 +38,4 @@ The generator and the postprocess are not imported. No source file in `sources/`
 Tileable: yes. All three tiled-generator conditions pass across 12 nonces. The protocol composes 4 hash-chained tiles. The largest absolute energy delta is 2.9375 units per tile, with tiled wins / ties / direct wins of 11 / 0 / 1. Seam strength is 0.125 and the total satisfied-seam benefit is 0.500 units. Chaining adds nothing. A single-flip anneal beats the call per link in 0.085 s (tier 1). One CPU job needs 0.093 s per link, and a fleet needs 0.086 s at 100 or 1,000 jobs.
 
 ## Provenance
-Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `regimes/qpu-suite/work/cells/kagome-net`, `regimes/new-pow/kagome-net`, `regimes/new-pow/tiled-generator/kagome-net`.
+Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `qpu-suite/work/cells/kagome-net`, `new-pow/kagome-net`, `new-pow/tiled-generator/kagome-net`.

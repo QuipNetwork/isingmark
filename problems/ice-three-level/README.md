@@ -15,7 +15,7 @@ Couplings are in units of the full-strength coupler (J = 1), with the milli valu
 - Topology use: 100 percent of qubits and 100 percent of couplers.
 
 ## Compact representations
-- Problem (256 bits: the nonce plus the generator version): `sum_t 0.500[(sum_{i in t} g_ti s_i)^2 - 4]` over 1,785 tiles, with a global gauge (F11) or a per-tile gauge (F12), plus a ±0.031 to ±0.250 glass. F14 adds a ±0.350 middle layer.
+- Problem (256 bits: the nonce plus the generator version): `sum_t 0.500[(sum_{i in t} g_ti s_i)^2 - 4]` over 1,785 tiles, with one global gauge per nonce, plus a ±0.350 middle layer and a ±0.045 weak layer.
 - Solution (3,035 bits compact, mean per qualifying state, at most 3,141): the strong layer obeys the ice rule with 6 of 16 states per tile. The Pauling count is about 2^1,560. The strong floor of −3,570 is closed form. The glass optimum has no closed form.
 
 ## Variants

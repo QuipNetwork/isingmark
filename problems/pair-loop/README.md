@@ -22,7 +22,7 @@ Topology use: 100% of qubits, 100% of couplers, 100% of the topology.
 The generator and the postprocess are not imported. No source file in `sources/` belongs to this family. The research generator is `generate.py` in the research cell directory `qpu-suite/work/cells/pair-loop`. The production postprocess is `dimers` plus `csa`, 0.25 s of one core per call, with a median gain of 1 (0) energy units. The attacks use pair contraction and cycle moves.
 
 ## Results
-- QPU: no capture.
+- QPU: the suite run took no QPU capture, because the Tier 3 rule omitted it. The new-pow recap holds 12 production calls (48 reads at 80 µs). The QPU energies below come from those 12 calls.
 - Strongest attack: both CPU attacks (pair contraction and cycle moves) beat the deepest GPU rung on 12 of 12 screened models.
 - Rank: QPU (0.046 s) < CPU (1.94 s) < CUDA (>75.9 s). CPU beats CUDA.
 - Best classical: CPU 6.5× (1.9×). CUDA gap: >256× (>75×).
@@ -39,4 +39,4 @@ The generator and the postprocess are not imported. No source file in `sources/`
 Tileable: yes. All three tiled-generator conditions pass across 12 nonces. The largest absolute energy delta is 1.15 units per tile, with tiled wins / ties / direct wins of 10 / 0 / 2. Seam strength is 0.060 and the total satisfied-seam benefit is 0.240 units. Chaining adds nothing. Pair moves or plain anneals beat the call per link at 0.08 to 6 s, so a chain only multiplies the classical lead.
 
 ## Provenance
-Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `regimes/qpu-suite/work/cells/pair-loop`, `regimes/new-pow/pair-loop`, `regimes/new-pow/tiled-generator/pair-loop`.
+Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `qpu-suite/work/cells/pair-loop`, `new-pow/pair-loop`, `new-pow/tiled-generator/pair-loop`.

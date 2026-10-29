@@ -46,7 +46,7 @@ Energy gaps are in energy units. The ratios compare time to the QPU access time.
 - Single-flip GPU ladder, first rung with a majority: 16,384 sweeps wins 10 of 12 models (`d1.5`), 9 of 12 (`d2`), and 11 of 12 (`d3`). At 8,192 sweeps the GPU wins 1 of 12, 5 of 12, and 5 of 12. The reliable 100-model rung for `d1.5` is 65,536 sweeps, which wins 98 of 100 (4.49 s per model). The 30-model rung for `d3` at 65,536 sweeps wins 30 of 30 (4.12 s).
 - New-pow verdict: a single-flip Metropolis anneal at 16,384 sweeps wins 8 / 0 / 4 of 12 (`d1.5`, 1.86 s wall), 10 / 0 / 2 of 12 (`d2`, 1.74 s), and 8 / 0 / 4 of 12 (`d3`, 1.69 s).
 - Deeper QPU anneals (48 reads each): at 2,000 us the call beats the production target on 12 of 12 models for `d1.5` (median `-5` energy units) and `d3` (median `-6`), and on 11 of 12 for `d2` (median `-6`).
-- Median energies after postprocess over 12 models, in energy units. `d1.5` has QPU `-4,456`, CUDA `-4,461`, CPU `-4,463`. `d2`: QPU `-4,900`, CUDA `-4,900`, CPU `-4,912`. `d3`: QPU `-5,706`, CUDA `-5,706`, CPU `-5,720`.
+- Median energies after postprocess over 12 models, in energy units. `d1.5` has QPU `-4,456`, CUDA `-4,461`, CPU `-4,463`. `d2` has QPU `-4,900`, CUDA `-4,900`, CPU `-4,912`. `d3` has QPU `-5,706`, CUDA `-5,706`, CPU `-5,720`.
 - CPU depth: the 120 s rung reaches a median of `-12`, `-16`, and `-18` energy units below the QPU target (`d1.5`, `d2`, `d3`) on 12 of 12 models. The 1,200 s rung covers 1 of 12 models (`-15` each).
 - The full-cohort crossing for the GPU is not measured.
 

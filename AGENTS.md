@@ -100,8 +100,10 @@ problems/
   <family>/params/    generation parameters per cell
   <family>/sources/   byte-identical copies of research sources the family owns
   shared/sources/     copies used by more than one family
-corpora/              chain corpora (chain-h0, chain-ternary) plus one
-                      frozen-model example per problem cell
+corpora/              chain corpora (chain-h0, chain-ternary) plus a
+                      frozen-model example per problem cell, except
+                      cbfm-p-f17 (no frozen model), sports-break, and
+                      paint-shop (own graphs)
 evaluation/qblock/    campaign configs, fixtures, and the evidence source list
 fixtures/             topology specs; suite-live-2026-09-21.spec.json is the
                       live suite topology

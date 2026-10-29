@@ -48,4 +48,4 @@ The QPU after postprocess reaches `-2,080` (`four-parity-interacting`), `-1,841`
 - `ldpc-small-row` has an unknown tiling status. The tiled-generator protocol is blocked because the generator has 3,394 nonzero fields and tiling needs zero local fields. Chaining is possible, but the CPU beats one call per link. A 1-thread annealer matches all 12 models in a median 0.035 s against 0.046 s of access, so a chain multiplies the classical lead.
 
 ## Provenance
-Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `regimes/new-pow/four-parity-interacting`, `regimes/new-pow/retime/four-parity-interacting`, `regimes/qpu-f17/work/cells/parity-k44`, `regimes/new-pow/parity-k44`, `regimes/new-pow/ldpc-small-row`, `regimes/new-pow/tiled-generator/four-parity-interacting`.
+Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `new-pow/four-parity-interacting`, `new-pow/retime/four-parity-interacting`, `qpu-f17/work/cells/parity-k44`, `new-pow/parity-k44`, `new-pow/ldpc-small-row`, `new-pow/tiled-generator/four-parity-interacting`.

@@ -26,7 +26,7 @@ Topology use: 100% of qubits, 100% of couplers, 100% of the topology (both cells
 The generators are not imported. No source file in `sources/` belongs to this family. The research generators are `generate.py` in the research cell directories `qpu-suite/work/cells/frust-dense-k12` and `qpu-suite/work/cells/frust-dense-k16`. Both use the block builder `qpu-suite/work/dense_blocks.py`. The production postprocess is `glasses` plus `block_sa`, 0.76 s of one core per call for k12 and 0.25 s for k16. It lifts the QPU median from `-7,068` to `-7,104` (k12) and from `-7,870` to `-7,903` (k16) energy units.
 
 ## Results
-Neither cell has a QPU capture. Both closed with the classical calibration complete.
+Neither cell has a suite-run QPU capture, because the Tier 3 rule omitted it. The new-pow recap holds 12 production calls for each cell, and the QPU energies below come from those calls. Both closed with the classical calibration complete.
 
 | Measure | `frust-dense-k12` | `frust-dense-k16` |
 | --- | --- | --- |
@@ -49,4 +49,4 @@ GPU detail: for k12 the single-flip ladder first reaches a majority at 524,288 s
 Tileable: no for both cells. Condition 1 fails under an explicit dense-block exclusion, because the full graph stays coupled by `±0.125` bonds and prevents an exact product. Condition 2 (paired energy measurement) is unknown. Chaining adds nothing. CPU at 128 sweeps beats the deepest GPU rung per link.
 
 ## Provenance
-Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `regimes/qpu-suite/work/cells/frust-dense-k12`, `regimes/qpu-suite/work/cells/frust-dense-k16`, `regimes/new-pow/frust-dense-k12`, `regimes/new-pow/frust-dense-k16`, `regimes/qpu-suite/work/dense_blocks.py`.
+Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `qpu-suite/work/cells/frust-dense-k12`, `qpu-suite/work/cells/frust-dense-k16`, `new-pow/frust-dense-k12`, `new-pow/frust-dense-k16`, `qpu-suite/work/dense_blocks.py`.

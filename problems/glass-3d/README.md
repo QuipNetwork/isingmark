@@ -44,7 +44,7 @@ Energy gaps are in energy units.
 - No single-flip GPU rung reaches the target on a majority of `diamond-3d` models on the idle card at 8,192 sweeps over 30 models (3 wins, 1 tie, 26 losses, CUDA bound `>0.297 s`). On the 12 production models the verdict rung wins 10 / 1 of 12 (0.599 card-seconds). The CPU reaches the target at the 30 s 100-model rung (26.8 s).
 - For `cubic-no-dimer` the GPU at 8,192 sweeps on 30 models gives 9 wins and 11 ties (0.382 card-seconds). The 32,768-sweep rung over 30 models is reliable, with 22 wins and 7 ties (1.22 s).
 - In the new-pow campaign, a population anneal at 3,072 sweeps wins 7 / 1 / 4 of 12 on `diamond-3d` (0.045 s wall). A multi-spin coded anneal at 2,048 sweeps wins 10 / 1 / 1 of 12 on `cubic-no-dimer` (0.046 s wall, 64 replicas per word).
-- Median energies after postprocess over 12 models, in energy units. `diamond-3d` has QPU `-6,290`, CUDA `-6,283`, CPU `-6,302`. `cubic-no-dimer`: QPU `-3,137`, CUDA `-3,137`, CPU `-3,143`.
+- Median energies after postprocess over 12 models, in energy units. `diamond-3d` has QPU `-6,290`, CUDA `-6,283`, CPU `-6,302`. `cubic-no-dimer` has QPU `-3,137`, CUDA `-3,137`, CPU `-3,143`.
 - Deeper QPU anneals (48 reads each) go below the production target on only some models. `diamond-3d`: 7, 9, and 7 of 12 below the production target at 200, 2,000, and 500 us. `cubic-no-dimer`: 7, 6, and 6 of 12.
 - CPU depth: the 120 s rung reaches a median of `-25` (`diamond-3d`) and `-11` (`cubic-no-dimer`) energy units below the QPU target on 12 of 12 models. The 1,200 s rung covers 1 of 12 models (`-10` and `-14`).
 - The full-cohort GPU crossing is not measured.

@@ -22,7 +22,7 @@ The first model has 4,575 spins, of which 1,952 are active (888 at `+0.440` and 
 ## Variants
 | Cell | Parameters | Example corpus | Status | Tier | New-pow verdict |
 | --- | --- | --- | --- | --- | --- |
-| `wsc` | Fields `+0.440` and `-1`, J `+-1` | [`corpora/wsc.jsonl`](../../corpora/wsc.jsonl) | Closed | 2 | none |
+| `wsc` | Fields `+0.440` and `-1`, J `+-1` | [`corpora/wsc.jsonl`](../../corpora/wsc.jsonl) | Closed | 2 | not recorded |
 
 ## Generator and postprocess
 Generator: not imported. The research script is `work/cells/wsc/generate.py` in the `qpu-suite` research directory, and it follows the LANL `dwig` `wscn` construction. No structured generator exists under `tools/structured` for this family, and no source file is owned by this family under `sources/`.

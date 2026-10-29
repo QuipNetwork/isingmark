@@ -8,15 +8,7 @@ Two industrial scheduling problems form this family. One is sports break minimiz
 Each instance is a published mirrored double round-robin timetable of 4 to 48 teams. The second half of the season repeats the first half with venues swapped. One bit per team pair fixes the home side of the pair's two matches. Every bit assignment is valid. The Ising model counts breaks exactly (two home or two away games in a row for one team).
 
 | Layer | Content |
-Each queue holds every car type twice. One spin per car type picks the color of its first car, and the second car takes the other color, so the Ising model counts the color changes along the queue. The register fixes the three input queues, so no nonce sets the structure.
-
-| Queue | Weak couplers (`+0.500` and `-0.500`) | Strong couplers (`-1`) | Offset |
-| --- | --- | --- | --- |
-| 128 types | 250 (85 at `+0.500` and 165 at `-0.500`) | 1 | 128 units |
-| 256 types | 504 | 3 | 256 units |
-- Solution, paint shop: 512 bits raw, one per type at 512 types. The answer is the coloring with the fewest changes. No closed form exists. HiGHS proves the optimum only on the 128-type queue.
-
-Every field is 0. Topology use: 64.3% of qubits (including chains), 8.3% of couplers, 13.9% of the topology.
+| --- | --- |
 | Strong | couplers of size 1, which are 92,000 of the 94,990 couplers over the 115 models |
 | Weak | the 2,990 couplers of size 0.500 |
 | Fields | every linear field is 0 |
@@ -26,13 +18,21 @@ Every field is 0. Topology use: 64.3% of qubits (including chains), 8.3% of coup
 Topology use: 74.8% of qubits (including chains), 11.9% of couplers, 18.1% of the topology.
 
 ### Binary paint shop (`paint-shop`)
-Each queue holds every car type twice. One spin per car type picks the color of its first car, and the second car takes the other color, so the Ising model counts the color changes along the queue. The weak layer is the `+0.500` and `-0.500` couplers. 250 on the 128-type queue (85 at `+0.500` and 165 at `-0.500`), 504 on the 256-type queue and 1,021 on the 512-type queue. The strong layer is the `-1` couplers. 1 on the 128-type queue, 3 on the 256-type queue and 1 on the 512-type queue. Every field is 0. The offset is 128, 256 and 512 units on the three queues. The register fixes the three input queues. Topology use: 64.3% of qubits (including chains), 8.3% of couplers, 13.9% of the topology.
+Each queue holds every car type twice. One spin per car type picks the color of its first car, and the second car takes the other color, so the Ising model counts the color changes along the queue. The register fixes the three input queues, so no nonce sets the structure. Every field is 0.
+
+| Queue | Weak couplers (`+0.500` and `-0.500`) | Strong couplers (`-1`) | Offset |
+| --- | --- | --- | --- |
+| 128 types | 250 (85 at `+0.500` and 165 at `-0.500`) | 1 | 128 units |
+| 256 types | 504 | 3 | 256 units |
+| 512 types | 1,021 | 1 | 512 units |
+
+Topology use: 64.3% of qubits (including chains), 8.3% of couplers, 13.9% of the topology.
 
 ## Compact representations
 - Problem, sports: 8 bits (instance id: a 5-bit team count of 23 sizes plus a 3-bit variant of 5 in the published register). Breaks = sum J_ij s_i s_j + sum h_i s_i + offset, over one spin per team pair.
 - Solution, sports: 1,128 bits raw, one per team pair at 48 teams. The answer is the schedule with the fewest breaks. No closed form exists, and the de Werra bound (138 at 48 teams) is far below the solver floor. On the 4-team instance `02_v0` the code is 6 bits against 6 raw bits, so a small instance has no compact gain.
 - Problem, paint shop: 9,216 bits (the car sequence of the largest queue: 1,024 cars × 9 bits per car type). Color changes = sum J_ij s_i s_j + sum h_i s_i + offset, over one spin per car type.
-- Solution, paint shop. 512 bits raw, one per type at 512 types. The answer is the coloring with the fewest changes. No closed form exists, and HiGHS proves the optimum only on the 128-type queue.
+- The paint-shop solution is 512 bits raw, one per type at 512 types. The answer is the coloring with the fewest changes. No closed form exists, and HiGHS proves the optimum only on the 128-type queue.
 
 ## Variants
 | Cell | Parameters | Example corpus | Status | Tier | New-pow verdict |
@@ -47,7 +47,7 @@ No generator exists. The inputs are published timetables (the source of the 115 
 No GPU ran on these workloads, so CUDA values are not measured.
 
 | Measure | `sports-break` | `paint-shop` |
-The tiling status is unknown for both cells. The tiling protocol is blocked because the construction has no nonce generator. The QPU call-to-call spread is not measured, because each instance has one call. A classical link takes 0.025 s (sports) or 0.005 s (paint shop). A QPU call takes 0.1 s. A chain amplifies the classical lead.
+| --- | --- | --- |
 | Rank | QPU (0.045 s) < CPU (0.132 s) | CPU (0.024 s) < QPU (0.094 s) |
 | Best classical (CPU gap) | CPU 1.7× (0.0×) | CPU 0.1× (0.0×) |
 | QPU TTS | 0.045 s (48 reads at 80 µs, one call per instance) | 0.094 s (256 reads at 80 µs, one call per queue) |
@@ -65,7 +65,7 @@ The tiling status is unknown for both cells. The tiling protocol is blocked beca
 On the sports instance `02_v0`, the CPU best state gives 6 breaks. That equals the QPU best, the proven best value and the de Werra bound. On the paint-shop queue `paint-128-10000`, the verdict state has 37 color changes, the proven best value.
 
 ## Limits and tiling
-Tileable. Unknown for both cells. The tiling protocol is blocked because the construction has no nonce generator. The QPU call-to-call spread is not measured, because each instance has one call. A classical link of 0.025 s (sports) or 0.005 s (paint shop) is shorter than the QPU link of 0.1 s per call, so a chain amplifies the classical lead.
+The tiling status is unknown for both cells. The tiling protocol is blocked because the construction has no nonce generator. The QPU call-to-call spread is not measured, because each instance has one call. A classical link takes 0.025 s (sports) or 0.005 s (paint shop). A QPU call takes 0.1 s, so a chain amplifies the classical lead.
 
 ## Provenance
-Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `regimes/new-pow/commercial/sports-break`, `regimes/new-pow/commercial/paint-shop`.
+Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `new-pow/commercial/sports-break`, `new-pow/commercial/paint-shop`.

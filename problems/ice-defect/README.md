@@ -29,7 +29,7 @@ Tier 3 and tier 4 mean that a classical run inside 120 s beats the postprocessed
 
 ## Generator and postprocess
 - Base instance: the twisted ice generator, imported in two forms. The structured port is [`ice_twisted.py`](../../tools/structured/isingmark_structured/families/ice_twisted.py). The original suite file is [`ice_twisted.py`](../twisted-ice/sources/qpu-suite/work/ice_twisted.py).
-- Defect step (reversing one strong bond in a fraction p of tetrahedra), research root, not imported: `qpu-suite/work/ice_defect.py` (F20 cells `ice-defect-p25` and `ice-defect-p50`), `qpu-suite/work/ice_sparse_defect.py` (F21 cells `ice-defect-p125` and `ice-defect-p0625`), and `qpu-suite/work/ice_rare_defect.py` (F23 cells `ice-defect-p03125` and `ice-defect-p015625`). No cell page names a generator file in its Sources section, so this mapping follows the family code in each page's Family property.
+- Defect step (reversing one strong bond in a fraction p of tetrahedra), research root, not imported: `qpu-suite/work/ice_defect.py` (F20 cells `ice-defect-p25` and `ice-defect-p50`), `qpu-suite/work/ice_sparse_defect.py` (F21 cells `ice-defect-p125` and `ice-defect-p0625`), and `qpu-suite/work/ice_rare_defect.py` (F23 cells `ice-defect-p03125` and `ice-defect-p015625`). No cell record names a generator file, so this mapping follows the family code of each cell.
 - Attack code used to close the family (Otsuka cluster anneal with exact defect bonds, signed conditional blocks with replica exchange, block tempering): not imported. The shared ice-tile postprocess is at `../shared/sources/new-pow/postprocess/optimizers/ice-tiles`. The postprocess setting for these cells: not stated in the source.
 
 ## Results

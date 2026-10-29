@@ -307,4 +307,5 @@ Measured in the October 2026 suite discovery run and the new-pow adversary campa
 - `qpu-suite/work/cells/ice-twisted` and `qpu-suite/qpu/ice-twisted` hold the base cell models and captures.
 - `qpu-f17/work/cells/<cell_id>` and `qpu-f17/qpu/<cell_id>` hold the models and captures of the other 24 cells.
 - `new-pow/<cell_id>`, `new-pow/gpu/measurements/<cell_id>`, `new-pow/tiled-generator/<cell_id>`, `new-pow/qpu-recap/qpu/<cell_id>`, and `new-pow/models-100/<cell_id>` exist for all 25 cells.
+- Example for the cell `ice-twisted-w62`: `qpu-f17/work/cells/ice-twisted-w62` and `new-pow/ice-twisted-w62`.
 - `new-pow/retime` holds the re-timed verdicts, and `qpu-f17/adversary` holds the adversary results.

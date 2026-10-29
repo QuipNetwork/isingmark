@@ -19,9 +19,9 @@ Worked example for `dcl-k44-l5` (nonce `e9717485...`): the exact solver certifie
 ## Variants
 | Cell | Parameters | Example corpus | Status | Tier | New-pow verdict |
 | --- | --- | --- | --- | --- | --- |
-| `dcl-k44-l7` | K4,4 cells, intra-cell `-0.143` (lambda 7) | [`corpora/dcl-k44-l7.jsonl`](../../corpora/dcl-k44-l7.jsonl) | Closed | 2 | none |
-| `dcl-k44-l5` | K4,4 cells, intra-cell `-0.200` (lambda 5) | [`corpora/dcl-k44-l5.jsonl`](../../corpora/dcl-k44-l5.jsonl) | Closed | 2 | none |
-| `dcl-k88` | K8,8 cells, intra-cell `-0.100` | [`corpora/dcl-k88.jsonl`](../../corpora/dcl-k88.jsonl) | Closed | 1 | none |
+| `dcl-k44-l7` | K4,4 cells, intra-cell `-0.143` (lambda 7) | [`corpora/dcl-k44-l7.jsonl`](../../corpora/dcl-k44-l7.jsonl) | Closed | 2 | not recorded |
+| `dcl-k44-l5` | K4,4 cells, intra-cell `-0.200` (lambda 5) | [`corpora/dcl-k44-l5.jsonl`](../../corpora/dcl-k44-l5.jsonl) | Closed | 2 | not recorded |
+| `dcl-k88` | K8,8 cells, intra-cell `-0.100` | [`corpora/dcl-k88.jsonl`](../../corpora/dcl-k88.jsonl) | Closed | 1 | not recorded |
 
 ## Generator and postprocess
 - K4,4 cells: [`dcl_k44.py`](../../tools/structured/isingmark_structured/families/dcl_k44.py). It ports the suite generator `work/dcl.py`. Intact K4,4 cells of a Chimera sublattice are rigid ferromagnetic clusters at -cell_milli. Random walks on the cell graph plant frustrated loops whose bonds become bundles of four +-1000 milli couplers. A random physical gauge hides the construction. Lambda 5 is 200 milli and lambda 7 is 143 milli. Cell parameters: [`params/dcl-k44-l5.json`](params/dcl-k44-l5.json) and [`params/dcl-k44-l7.json`](params/dcl-k44-l7.json).
@@ -42,7 +42,7 @@ The QPU production capture is 48 reads at 80 us and costs 0.046 s per call (12 c
   - `dcl-k44-l5`. The exact bucket elimination in Rust certifies the ground state of every model in a median 0.037 s on 6 threads and 0.07 s on 1 thread (11 / 1 / 0 of 12, median margin `-7` energy units, deepest `-13`). The secret-free single-flip anneal arm loses all 12 models at every depth from 2 s to 20 minutes (median margin `+51` at 2 s down to `+19` at 1,200 s).
   - `dcl-k44-l7`. The tree-decomposition solver certifies the ground state of every model in a median 0.526 s on 1 thread, 9 wins and 3 ties against the QPU (median margin `-5`, deepest `-9`). The anneal arm needs about 100 s to tie the QPU on 3 of 12 models and never matches a majority. The 120 s rung matches 4 of 12 models.
 - Single-flip GPU on 100 models: `dcl-k44-l5` shows 4 / 65 / 31 (wins / ties / losses against the QPU target) at 32,768 sweeps and 14 / 80 / 6 at 524,288 sweeps (22.7 s, reliable). `dcl-k44-l7` shows 5 / 47 / 48 and 9 / 83 / 8 (26.3 s, reliable). On the 12 production models every GPU rung up to 2,097,152 sweeps loses all models (median margins `+17` to `+32`). GPU parallel tempering with 24 replicas also loses all 12 models, from 16,384 to 4,194,304 sweeps.
-- Median energies after postprocess over 12 models, in energy units. `l5` has QPU `-2,112`, CUDA `-2,085`, CPU `-2,114`. `l7`: QPU `-1,820`, CUDA `-1,800`, CPU `-1,821`. `dcl-k88`: all three `-695`.
+- Median energies after postprocess over 12 models, in energy units. `l5` has QPU `-2,112`, CUDA `-2,085`, CPU `-2,114`. `l7` has QPU `-1,820`, CUDA `-1,800`, CPU `-1,821`. `dcl-k88`: all three `-695`.
 - `dcl-k88`. The CPU 120 s rung matches 12 of 12 models (4 / 8 / 0, median margin 0, deepest `-3`, 176 s wall, 1,055 core-seconds). The 2 s 100-model rung matches 25 of 30 (4.37 s). Single-flip GPU on 12 models first reaches a majority at 16,384 sweeps (1 win and 6 ties of 12, 0.753 card-seconds). On 100 models at 262,144 sweeps it shows 1 / 80 / 19 (12.4 s), and at 524,288 sweeps 1 / 87 / 12 (22.2 s). The QPU capture of the 100 models ran on 2026-10-27 (100 calls, 4.61 s of access).
 - `dcl-k88` QPU vs best classical, class, and profile: not measured. CPU vs CUDA: not measured. No new-pow verdict exists for the family.
 - The single-flip GPU comparison for the K4,4 cells at 131,072 sweeps is not measured, because no capture exists.

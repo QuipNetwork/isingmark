@@ -68,7 +68,7 @@ Two chain corpora ship with the crate: `chain-h0` (4658 instances) and
 same name, and isingmark refuses a mismatched pair rather than replaying the
 wrong problems. See `docs/datasets.md`.
 
-`corpora/` also holds one frozen-model example for each problem cell. The
+`corpora/` also holds a frozen-model example for each problem cell except three. `cbfm-p-f17` has no frozen model, and `sports-break` and `paint-shop` use their own graphs. The
 families, their cells, and their results are listed in `problems/README.md`.
 
 Replay explicit coefficients, such as the structured families, from an

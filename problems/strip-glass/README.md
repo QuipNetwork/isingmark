@@ -22,7 +22,7 @@ Topology use: 100% of qubits, 100% of couplers, 100% of the topology.
 The generator and the postprocess are not imported. No source file in `sources/` belongs to this family. The research generator is `generate.py` in the research cell directory `qpu-suite/work/cells/strip-glass`. The production postprocess is `glasses` plus `block_sa`, 0.76 s of one core per call. It lifts the QPU median from `-6,095` to `-6,116` energy units (gain 16 (4) units per model).
 
 ## Results
-- QPU: no capture. QPU access used is 0 s. The QPU time-to-target (TTS) of 0.046 s is the nominal one-call figure.
+- QPU: the suite run took no QPU capture, because the Tier 3 rule omitted it. The new-pow recap holds 12 production calls (48 reads at 80 µs, 0.046 s of access per call). The QPU energies below come from those 12 calls. The comparison against the single-flip GPU in the suite run is not measured.
 - Best classical attack: the CPU half-chip exact move at 8,192 sweeps beats the deepest GPU rung on 12 of 12 models (60.3 s per model).
 - Rank: QPU (0.046 s) < CPU (1.85 s) < CUDA (>8.19 s). CPU beats CUDA.
 - Best classical: CPU 2.3× (1.2×). CUDA gap: >10× (>5.4×).
@@ -46,4 +46,4 @@ Tileable: no. Chaining: no. The conditional ladder solve closes each link, so a 
 | Deepest classical result at 20 minutes | CPU median of `-22` energy units on 1 model |
 
 ## Provenance
-Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `regimes/qpu-suite/work/cells/strip-glass`, `regimes/new-pow/strip-glass`, `regimes/new-pow/tiled-generator/strip-glass`.
+Measured in the October 2026 suite discovery run and the new-pow adversary campaign. Research directories: `qpu-suite/work/cells/strip-glass`, `new-pow/strip-glass`, `new-pow/tiled-generator/strip-glass`.

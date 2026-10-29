@@ -17,7 +17,7 @@ All present couplers have the same size. The generator omits part of the native 
 
 Every energy step in `cbfm-p` is a multiple of 2 units, so a single-flip anneal has no strong block to break. In `cbfm-h2` most spins follow their field, so a field-aligned state is a cheap seed and the glass part decides the rest.
 
-Topology use over 12 models:
+Topology use is the largest count over 12 models. It differs from the first-nonce counts above, which describe one model of the first nonce.
 
 | Cell | Qubits | Couplers | Combined |
 | --- | --- | --- | --- |
@@ -59,13 +59,13 @@ Energy gaps are in energy units. The new-pow counts are in the form classical wi
 - Closed by (`cbfm-p`): exact CPU blocks and the single-flip GPU at 8,192 sweeps. A 48-model calibration over 12 class distributions found no distribution that holds. Closed by (`cbfm-h2`, `cbfm-p-f17`, `cbfm-z`): not recorded.
 - Strongest attack (`cbfm-p`): GPU single-flip at 8,192 sweeps, 12 / 0 / 0, 5.5 s per model. CPU exact blocks at 8,192 sweeps reject every captured setting. Against the single-flip GPU at 131,072 sweeps, the production call wins 0 of 12.
 - The single-flip GPU ladder at 8,192 sweeps on the idle card gives 23 / 1 of 30 models (`cbfm-p`), 26 / 0 of 30 (`cbfm-h2`), 22 / 1 of 30 (`cbfm-p-f17`), and 22 / 0 of 30 (`cbfm-z`). Each wins 12 of 12 at the verdict rung. At 16,384 sweeps the ladder reaches 29 / 1, 28 / 1, 25 / 2, and 25 / 3 of 30 models respectively.
-- Median energies after postprocess over 12 models, in energy units. `cbfm-p` has QPU `-10,623`, CUDA `-10,629`, CPU `-10,650`. `cbfm-h2`: QPU `-6,717`, CUDA `-6,720`, CPU `-6,727`. `cbfm-p-f17`: QPU `-12,837`, CUDA `-12,853`, CPU `-12,880`. `cbfm-z`: QPU `-11,363`, CUDA `-11,369`, CPU `-11,388`.
+- Median energies after postprocess over 12 models, in energy units. `cbfm-p` has QPU `-10,623`, CUDA `-10,629`, CPU `-10,650`. `cbfm-h2` has QPU `-6,717`, CUDA `-6,720`, CPU `-6,727`. `cbfm-p-f17` has QPU `-12,837`, CUDA `-12,853`, CPU `-12,880`. `cbfm-z` has QPU `-11,363`, CUDA `-11,369`, CPU `-11,388`.
 - Deeper QPU anneals (48 reads each, 12 models) reach the production target or lower on more models, but classical still leads. Models below the production target: `cbfm-p` 8 / 10 / 11 of 12 at 200 / 2,000 / 500 us. `cbfm-h2` 7 / 10 / 8. `cbfm-p-f17` 8 / 11 / 9. `cbfm-z` 4 / 8 / 7. The median improvement at 2,000 us is `-8`, `-4`, `-11`, and `-7` energy units.
 - CPU depth: the 120 s rung reaches a median of `-44` energy units below the QPU target on 12 of 12 models for `cbfm-p`, `-28` for `cbfm-h2`, `-56` for `cbfm-p-f17`, and `-44` for `cbfm-z`. The 1,200 s rung covers 1 of 12 models (`-50`, `-40`, `-48`, and `-24`).
 - Class: 1 (classical beats cheaply). Profile: classical cheap, CPU competitive.
 
 ## Limits and tiling
-- Tileable: no for `cbfm-p`. Condition 1 fails: the 12 saved nonce graphs have 1 to 2 independent active components, so the full Hamiltonian already separates. Condition 2 (a paired full-instance and joined-tile energy measurement) is unknown. Condition 3 holds for `cbfm-p`: the reference model has 481 cut couplers, and the cut bound B ranges from 481 to 521 units across 12 nonces. Target attainability is not measured.
+- `cbfm-p` is not tileable. Condition 1 fails. The 12 saved nonce graphs have 1 to 2 independent active components, so the full Hamiltonian already separates. Condition 2 (a paired full-instance and joined-tile energy measurement) is unknown. Condition 3 holds for `cbfm-p`. The reference model has 481 cut couplers. The cut bound B ranges from 481 to 521 units across 12 nonces. Target attainability is not measured.
 - Tileable: unknown for `cbfm-h2`, `cbfm-p-f17`, and `cbfm-z`. All three conditions are unknown. The generators have 3,884 nonzero fields, and the zero-field sign-alignment protocol needs zero local fields so tile signs can align without changing energy. The measurement needed is a zero-field tiled instance and a repeat of the paired experiment.
 - Chaining adds nothing. GPU single flips at 8,192 sweeps beat the call per link. CPU anneals do so in 0.09 to 0.26 s on 6 threads. One CPU job needs 0.089 s per link (0.064 s for `cbfm-z`), and 1,000 jobs keep the same time per link.
 - Verdict CPU wall by variant: 0.055 s for Pegasus density (9 of 12 models), 0.059 s for the f17 run (7 of 12), 0.053 s for Zephyr density (7 of 12), and 0.062 s for couplers at 0.500 (12 of 12).

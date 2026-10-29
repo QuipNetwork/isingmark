@@ -5,9 +5,9 @@ Each folder in this directory describes one problem family of the QPU suite disc
 
 ## Index
 
-The Code column holds the candidate code of the family. A dash means the family has no code. The Corpus files column counts cells that have a frozen-model example in `corpora/`. Best tier is the lowest suite tier among the cells. Tier 1 and tier 2 mean no classical run beats the QPU on the suite criteria. Tier 3 and tier 4 mean a classical run does. Each family README defines the tiers in full.
+The Code column holds the candidate code of the family. A dash means the family has no code. The Corpus files column counts cells that have a frozen-model example in `corpora/`. Lowest cell tier is the lowest value of the cell `tier` field among the family cells. Tier 1 and tier 2 mean no classical run beats the QPU on the criteria of that field. Tier 3 and tier 4 mean a classical run does. Each family README defines the tiers in full.
 
-| Family | Code | Cells | Corpus files | Status | Best tier |
+| Family | Code | Cells | Corpus files | Status | Lowest cell tier |
 | --- | --- | --- | --- | --- | --- |
 | [`ice-three-level`](ice-three-level/README.md) | F14 | 1 | 1 of 1 | Closed | 3 |
 | [`ice-planted`](ice-planted/README.md) | F13 | 1 | 1 of 1 | Closed | 4 |
@@ -37,7 +37,7 @@ The Code column holds the candidate code of the family. A dash means the family 
 | [`ice-pairs-constraint`](ice-pairs-constraint/README.md) | - | 1 | 1 of 1 | Closed | 4 |
 | [`ice-stack`](ice-stack/README.md) | - | 2 | 2 of 2 | Closed | 3 |
 
-The index lists 27 families and 87 cells. 84 cells have a frozen-model example in `corpora/`. The other cells have none, because no frozen model exists or the cell uses its own graph.
+The index lists 27 families and 87 cells. 84 cells have a frozen-model example in `corpora/`. The other cells have none. `cbfm-p-f17` has no frozen model. `sports-break` and `paint-shop` use their own small graphs, not the chain-h0 topology.
 
 ## Folder layout
 

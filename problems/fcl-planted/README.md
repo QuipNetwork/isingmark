@@ -22,8 +22,8 @@ Worked examples (nonce `e9717485...`): nonce replay gives the planted state of `
 ## Variants
 | Cell | Parameters | Example corpus | Status | Tier | New-pow verdict |
 | --- | --- | --- | --- | --- | --- |
-| `fcl-planted-a0.2` | alpha 0.2, J `+-1` | [`corpora/fcl-planted-a0.2.jsonl`](../../corpora/fcl-planted-a0.2.jsonl) | Closed | 4 | none |
-| `fcl-planted-a0.3` | alpha 0.3, J `+-1` | [`corpora/fcl-planted-a0.3.jsonl`](../../corpora/fcl-planted-a0.3.jsonl) | Closed | 2 | none |
+| `fcl-planted-a0.2` | alpha 0.2, J `+-1` | [`corpora/fcl-planted-a0.2.jsonl`](../../corpora/fcl-planted-a0.2.jsonl) | Closed | 4 | not recorded |
+| `fcl-planted-a0.3` | alpha 0.3, J `+-1` | [`corpora/fcl-planted-a0.3.jsonl`](../../corpora/fcl-planted-a0.3.jsonl) | Closed | 2 | not recorded |
 
 ## Generator and postprocess
 - Generator: [`fcl_planted.py`](../../tools/structured/isingmark_structured/families/fcl_planted.py). It ports the suite generator `work/fcl.py`. Random non-backtracking walks close simple cycles of 3 to 12 spins. Each cycle adds `-1` to its bonds and `+1` to one random bond. A cycle that would push any bond outside [-1, 1] is rejected whole. The generator plants floor(alpha x spins) loops, then a random planted state gauges the result. Only couplers with a nonzero sum appear. Cell parameters: [`params/fcl-planted-a0.2.json`](params/fcl-planted-a0.2.json) and [`params/fcl-planted-a0.3.json`](params/fcl-planted-a0.3.json).
@@ -36,7 +36,7 @@ The suite rejected both cells without a capture, because the planted state is re
 | Cell | Best classical | Rank | Energy gap | Strongest attack |
 | --- | --- | --- | --- | --- |
 | `fcl-planted-a0.2` | CPU 0.5x (0.1x) | QPU (0.046 s) < CPU (0.136 s) < CUDA (0.388 s) | not measured | 24 / 0 / 0 against the planted optimum, public-nonce recovery, under 1 ms (no capture) |
-| `fcl-planted-a0.3` | CPU 0.1x (0.0x) | CPU (0.042 s) = QPU (0.046 s) < CUDA (0.412 s) | 0 (1) energy unit, QPU 0 / tie 27 / CPU 3, 107 s, 30 models | 24 / 0 / 0 against the planted optimum, public-nonce recovery, under 1 ms (no capture) |
+| `fcl-planted-a0.3` | CPU 0.1x (0.0x) | CPU (0.042 s) < QPU (0.046 s) < CUDA (0.412 s) | 0 (1) energy unit, QPU 0 / tie 27 / CPU 3, 107 s, 30 models | 24 / 0 / 0 against the planted optimum, public-nonce recovery, under 1 ms (no capture) |
 
 - Closed by: planting leakage. Rerunning the public generator recovers s* and the planted energy on 24 of 24 models in under 1 ms per model. Any planted family is recoverable from a public nonce. Coefficient-only attacks are reported separately.
 - Nonce replay on 12 models (wins / ties / losses against the QPU target): `a0.2` reaches the planted ground in a median 0.131 s, 2 / 10 / 0. `a0.3` does so in a median 0.051 s on one thread, 9 / 3 / 0 (median margin `-4` energy units, deepest `-16`).

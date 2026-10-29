@@ -13,8 +13,8 @@ Couplings are in units of the full-strength coupler (J = 1), with the milli valu
 - Topology use: 100 percent of qubits and 100 percent of couplers.
 
 ## Compact representations
-- Problem (256 bits: the nonce plus the generator version): summed tile terms `A/2 (sum g s - q)^2`. The terms depend on tile overlap. They also depend on random signs and on charges q.
-- Solution (4,575 bits raw, compact size not measured): overlap and random signs cut tiles to 2 states or cancel bonds. Charge-2 tiles keep 4 states (1-in-4).
+- Problem (256 bits: the nonce plus the generator version): 1,785 K4 tiles, each with six independent bond signs at `±1000`, and a weak sign at `±125` on every other coupler. The compact formula is not recorded separately for this cell.
+- Solution (4,575 bits raw, compact size not measured): the random signs leave no ice manifold, so no compact state is recorded.
 - Explicit size of the largest of 12 models: 41,474 couplers × 2 bits = 82,948 bits (4 values).
 
 ## Variants
@@ -31,7 +31,7 @@ Generator: [`generate2.py`](../twisted-ice/sources/qpu-f17/generate2.py) builds 
 - Class and profile: not recorded. Tier 3. New-pow Tier 2.
 - Energies, median over models, in energy units: QPU −6,888, QPU after postprocess −6,896, CPU −6,924, CUDA −6,908.
 - Energy gap: +17 (8), QPU 0 / tie 0 / CPU 30, 118 s, 30 models.
-- Best classical: CUDA at 6.1 times the QPU access time (1.8 times the QPU wall time). Rank by time to the postprocessed target: QPU (0.046 s) < CUDA (1.81 s) < CPU (7.96 s). The CUDA arm is a cluster anneal at 8,192 sweeps over 100 models, and the page marks it not reliable. A single-flip GPU at 32,768 sweeps matches 85 of 100 models (2.30 card-seconds per model).
+- Best classical: CUDA at 6.1 times the QPU access time (1.8 times the QPU wall time). Rank by time to the postprocessed target: QPU (0.046 s) < CUDA (1.81 s) < CPU (7.96 s). The CUDA arm is a cluster anneal at 8,192 sweeps over 100 models, and the source record marks it not reliable. A single-flip GPU at 32,768 sweeps matches 85 of 100 models (2.30 card-seconds per model).
 - New-pow campaign (2026-10-20): 8 / 0 / 4 over 12 models for the single-flip population anneal (`glasssa`) at 8,192 sweeps. Median wall 0.289 s, which is 6.28 times the QPU access time.
 - Verdict date: 2026-10-26.
 
