@@ -133,6 +133,100 @@ the hash to `chain_fixtures_hash_to_their_recorded_bucket` in
 `tests/topology.rs`. That test is what catches a bucket copied to the wrong
 name.
 
+## Archived research fixtures
+
+An archived fixture records instances that came from research runs, with the
+witnesses that the research kept. One JSON file holds one cell, at
+`problems/<family>/fixtures/<cell>.json`. Numbers follow the SC-2 encoding:
+hex is lowercase without `0x`, every 64-bit value is a decimal string, and
+small counts are JSON integers.
+
+```json
+{
+  "schema_revision": 1,
+  "provenance": "archived-research",
+  "about": ["at least one string"],
+  "sources": [{ "path": "<repo-relative file>", "blake3": "<64 hex>" }],
+  "archived_instances": [
+    {
+      "name": "<unique within the file>",
+      "cell": "<cell id>",
+      "nonce": "<64 hex>",
+      "archive_origin": "<research-root-relative path>",
+      "archive_blake3": "<64 hex>",
+      "source_recipe": { "source": "<generator id in problems/sources.json>", "name": "<recipe>" },
+      "node_order": "physical",
+      "node_ids": [907, 41, 12],
+      "edges": [[0, 1], [0, 2]],
+      "h": [0, -500, 31],
+      "j": [-1000, 62],
+      "scale": 1000,
+      "offset_milli": "0",
+      "qubo_offset_milli": null,
+      "family_id": null,
+      "descriptor_digest": null,
+      "params_hex": null,
+      "postprocess_policy": { "family": "ice-tiles", "method": "anneal:b0=2", "budget_s": 0.25 },
+      "witnesses": [
+        { "name": "qpu-best", "spins": [1, -1, 1], "claimed_energy_milli": "1593" },
+        { "name": "pp-state", "missing": "state not stored in the archive" }
+      ]
+    }
+  ]
+}
+```
+
+The validator reports every violation it finds in a file, and each message
+names the file and the instance. Two kinds of fault differ. A parse failure
+(an unknown key, a missing field, or a wrong type) stops the check, so the
+validator reports it alone for that file. A fault in the file header or in
+`sources` names the file only. The rules are:
+
+- `schema_revision` is `1`, `provenance` is `archived-research`, and `about`
+  is not empty. The validator rejects unknown keys at every level.
+- Each `sources[].path` is a safe relative path with `/` separators and no
+  empty, `.`, or `..` part. The file exists in the repository, and its BLAKE3
+  hash equals `blake3`.
+- Instance names are unique within the file.
+- `nonce` and `archive_blake3` are 64 lowercase hex characters.
+  `archive_origin` is a safe relative path. The validator does not check that
+  it exists, because the research archive is not in the repository. It checks
+  the form of `archive_blake3` only.
+- `source_recipe.source` names a source of kind `generator` in
+  `problems/sources.json`, and `source_recipe.name` is not empty. `cell` is
+  not empty.
+- `node_ids` has no duplicates. With `node_order` `ascending`, the ids increase
+  at every step. No other `node_order` value is valid.
+- Each edge `[a, b]` has `a < b < len(node_ids)`, so no edge is a self-loop.
+  The edge list increases in lexicographic order, so it has no unsorted
+  or duplicate edges.
+- `h` has one entry per node, `j` has one entry per edge, and `scale` is
+  `1000`.
+- `offset_milli`, `qubo_offset_milli` when it is not null, and
+  `claimed_energy_milli` are decimal strings that parse as 64-bit integers. A
+  JSON number in any of these fields fails validation.
+- `family_id`, `descriptor_digest`, and `params_hex` are each null or valid:
+  a non-empty string, 64 lowercase hex characters, and even-length lowercase
+  hex.
+- `postprocess_policy` has a non-empty `family` and `method`, and `budget_s`
+  is zero or more.
+- A witness has either `spins` with `claimed_energy_milli`, or a `missing`
+  reason that is not empty. It never has both and never has neither. Witness names are unique
+  within the instance.
+- Every spin is `1` or `-1`, and `spins` has one entry per node. The energy
+  `offset_milli + sum(h[i] * s[i]) + sum(j[e] * s[a] * s[b])`, computed in
+  128-bit integers, equals `claimed_energy_milli`. `qubo_offset_milli` is
+  metadata and does not enter the energy.
+
+The validator lives in `tests/campaign_import_fixtures.rs`. Run it with:
+
+```bash
+cargo test --test campaign_import_fixtures
+```
+
+The test `recorded_fixtures_are_valid` checks every file that matches
+`problems/*/fixtures/*.json` against the real `problems/sources.json`.
+
 ## Limits
 
 - Only `throughput` mode reads `--corpus` today. The other modes derive from a
