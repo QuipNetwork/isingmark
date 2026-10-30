@@ -15,8 +15,15 @@
 
 include:
   - project: quip.network/ci-templates
-    ref: v1.0.0
+    ref: v1.1.0
     file: templates/dependency-gate.yml
+
+# The dependency gate image has no Rust, so the default before_script must not run there.
+dependency-gate:
+  before_script: []
+
+dependency-report:
+  before_script: []
 
 variables:
   CARGO_TERM_COLOR: always
