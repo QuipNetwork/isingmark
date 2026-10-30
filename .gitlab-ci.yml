@@ -13,6 +13,11 @@
 # CPU miners on Linux CI images; metal and dwave are not required for the
 # fail-by-default real-binary tests.
 
+include:
+  - project: quip.network/ci-templates
+    ref: v1.0.0
+    file: templates/dependency-gate.yml
+
 variables:
   CARGO_TERM_COLOR: always
   # Pinned toolchain (must match rust-toolchain.toml channel).
