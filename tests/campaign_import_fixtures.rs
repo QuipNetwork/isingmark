@@ -660,10 +660,17 @@ fn length_mismatch_fails() -> TestResult {
 
 #[test]
 fn i64_as_number_fails() -> TestResult {
-    expect_error(|f| inst(f)["offset_milli"] = json!(0), "offset_milli")?;
     expect_error(
-        |f| inst(f)["witnesses"][0]["claimed_energy_milli"] = json!(-1031),
-        "claimed_energy_milli",
+        |f| inst(f)["offset_milli"] = json!(0),
+        "offset_milli is a JSON number",
+    )?;
+    expect_error(
+        |f| inst(f)["qubo_offset_milli"] = json!(0),
+        "qubo_offset_milli is a JSON number",
+    )?;
+    expect_error(
+        |f| inst(f)["witnesses"][0]["claimed_energy_milli"] = json!(1593),
+        "claimed_energy_milli is a JSON number",
     )
 }
 

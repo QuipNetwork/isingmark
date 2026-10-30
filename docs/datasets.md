@@ -155,7 +155,7 @@ small counts are JSON integers.
       "archive_origin": "<research-root-relative path>",
       "archive_blake3": "<64 hex>",
       "source_recipe": { "source": "<generator id in problems/sources.json>", "name": "<recipe>" },
-      "node_order": "physical or ascending",
+      "node_order": "physical",
       "node_ids": [907, 41, 12],
       "edges": [[0, 1], [0, 2]],
       "h": [0, -500, 31],
@@ -176,8 +176,11 @@ small counts are JSON integers.
 }
 ```
 
-The validator reports every violation, not only the first. Each message names
-the file and the instance. The rules are:
+The validator reports every violation it finds in a file, and each message
+names the file and the instance. Two kinds of fault differ. A parse failure
+(an unknown key, a missing field, or a wrong type) stops the check, so the
+validator reports it alone for that file. A fault in the file header or in
+`sources` names the file only. The rules are:
 
 - `schema_revision` is `1`, `provenance` is `archived-research`, and `about`
   is not empty. The validator rejects unknown keys at every level.
@@ -190,15 +193,16 @@ the file and the instance. The rules are:
   it exists, because the research archive is not in the repository. It checks
   the form of `archive_blake3` only.
 - `source_recipe.source` names a source of kind `generator` in
-  `problems/sources.json`, and `source_recipe.name` is not empty.
+  `problems/sources.json`, and `source_recipe.name` is not empty. `cell` is
+  not empty.
 - `node_ids` has no duplicates. With `node_order` `ascending`, the ids increase
   at every step. No other `node_order` value is valid.
 - Each edge `[a, b]` has `a < b < len(node_ids)`, so no edge is a self-loop.
-  The edge list increases in lexicographic order, so it is sorted and has no
-  duplicates.
+  The edge list increases in lexicographic order, so it has no unsorted
+  or duplicate edges.
 - `h` has one entry per node, `j` has one entry per edge, and `scale` is
   `1000`.
-- `offset_milli`, `qubo_offset_milli` when it is not null, and
+- `offset_milli`, `qubo_offset_milli` when present, and
   `claimed_energy_milli` are decimal strings that parse as 64-bit integers. A
   JSON number in any of these fields fails validation.
 - `family_id`, `descriptor_digest`, and `params_hex` are each null or valid:
@@ -207,7 +211,7 @@ the file and the instance. The rules are:
 - `postprocess_policy` has a non-empty `family` and `method`, and `budget_s`
   is zero or more.
 - A witness has either `spins` with `claimed_energy_milli`, or a `missing`
-  reason. It never has both and never has neither. Witness names are unique
+  reason that is not empty. It never has both and never has neither. Witness names are unique
   within the instance.
 - Every spin is `1` or `-1`, and `spins` has one entry per node. The energy
   `offset_milli + sum(h[i] * s[i]) + sum(j[e] * s[a] * s[b])`, computed in
