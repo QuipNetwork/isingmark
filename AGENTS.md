@@ -93,7 +93,25 @@ src/
   modes/              throughput, sweep, comparative, ttt, scaling,
                       reproducibility, compare
   report/             text tables; plot.rs behind the plot feature
+problems/
+  README.md           index of problem families
+  sources.json        blake3 manifest of every copied research source
+  <family>/README.md  construction, variants, results, limits, provenance
+  <family>/params/    parameters for the 15 cells tools/structured generates
+  <family>/sources/   byte-identical copies of research sources the family owns
+  shared/sources/     copies used by more than one family
+corpora/              chain corpora (chain-h0, chain-ternary), the smoke
+                      file smoke-ice-glass.jsonl (smoke fixture), plus a
+                      frozen-model example per problem cell, except
+                      cbfm-p-f17 (no frozen model), sports-break, and
+                      paint-shop (own graphs)
+evaluation/qblock/    campaign configs, fixtures, and the evidence source list
+fixtures/             topology specs; suite-live-2026-09-21.spec.json is the
+                      live suite topology
+reports/              import-map.md: provenance and destination tickets
 ```
+
+`tests/campaign_source_inventory.rs` validates `problems/sources.json` against the copied files. Never edit a copied source in place. Copy a new snapshot from the research workspace and update its manifest entry.
 
 Solver deps (versions in `Cargo.toml`): `quip-proto`, `quip-protocol`, and `quip-solver-core`, published on crates.io from `quip.network/quip-solver-core`.
 
@@ -110,7 +128,8 @@ Prefer deleting `.cargo/config.toml` when you are not co-developing upstream.
 
 - **Backend**: add a registry entry in `src/backend/registry.rs` pointing at a miner binary that speaks the quip session protocol. New annealers are miner binaries, not in-process adapters.
 - **Topology**: ship a JSON `TopologySpec` under `fixtures/` or pass `--topology-file`.
-- **Dataset**: ship a JSONL corpus of chain nonces under `corpora/`. Add it to `corpus::BUNDLED` paired with its fixture. Pin that fixture's `topology_hash` in `tests/topology.rs`. See `docs/datasets.md`.
+- **Dataset**: ship a JSONL corpus of chain nonces under `corpora/`. Add it to `corpus::BUNDLED` paired with its fixture. Pin that fixture's `topology_hash` in `tests/topology.rs`. A frozen-model example for a problem cell is a JSONL instance file in `corpora/` that `--instances` replays, and it is not listed in `corpus::BUNDLED`. See `docs/datasets.md`.
+- **Problem family**: add `problems/<slug>/README.md` and `problems/<slug>/params/`, and add a row to `problems/README.md`. Add a corpus example for each cell with `python -m isingmark_structured.convert`. Then run `cargo test --test corpora_instances`.
 - **Mode**: add a module under `src/modes/`, a clap subcommand in `src/cli.rs`, and a branch in `src/main.rs`.
 - **Params**: edit `ParamCurve` defaults or supply `param_curve` in YAML for hardness mapping.
 

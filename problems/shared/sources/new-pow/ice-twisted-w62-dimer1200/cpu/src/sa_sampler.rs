@@ -1,0 +1,1647 @@
+//! Tabulated-threshold and multi-spin annealing backends.
+//!
+//! Two samplers from Isakov, Zintchenko, Rønnow and Troyer (Comput. Phys.
+//! Commun. 192, 265 (2015), arXiv:1401.1084), kept apart from
+//! [`crate::CpuSampler`] because both change the random stream and are
+//! therefore different samplers, not faster spellings of `cpu-sa`:
+//!
+//! - [`SaVariant::Tabulated`] moves the Metropolis test into its geometric
+//!   form and draws the thresholds from a table shared by every read.
+//! - [`SaVariant::MultiSpin`] packs 64 reads into each machine word, redraws
+//!   one shared threshold row per temperature, and sweeps in color order.
+//!
+//! Both need discrete couplings, and a problem that does not qualify falls
+//! back one step at a time, so either binary is safe to point at any job — it
+//! simply stops being fast. A problem the integer representation refuses runs
+//! on the ordinary `cpu-sa` kernel. A problem it accepts, but whose field or
+//! degree is too large to pack into a machine word, runs on the tabulated
+//! kernel of [`SaVariant::Tabulated`], which is still faster than `cpu-sa`.
+
+use quip_protocol::scoring::{energy_milli, ENERGY_MILLI_NON_FINITE};
+use quip_solver_core::adapt::AdaptBounds;
+use quip_solver_core::{
+    Algorithm, BackendIdentity, CancelToken, IsingGraph, SampleError, SampleParams, Sampler,
+    SamplerResult, StreamJob, StreamResult,
+};
+use rand::rngs::SmallRng;
+use rand::SeedableRng;
+use std::sync::atomic::AtomicUsize;
+use std::sync::{Arc, Mutex};
+
+use crate::coloring::Coloring;
+use crate::sa_int::{anneal_from, sweep_offsets, threshold_draws, threshold_table_fits, IntGraph};
+use crate::sa_msc::{anneal_words, bond_counts, MscState, LANES};
+use crate::sampler_core::{
+    build_beta_schedule, build_seeded_beta_schedule, effective_sweeps_per_beta,
+    sample_ising_cancellable, CpuGraph, SampleCancelled,
+};
+use crate::{run_stream_pump, CPU_ADAPT, DEFAULT_MAX_EDGES, DEFAULT_MAX_NODES};
+
+/// Backend identity for `quip-cpu-fsa` (tabulated-threshold annealing).
+///
+/// Experimental track; the binary builds only behind the `experimental` cargo
+/// feature. The adapt envelope is `CPU_ADAPT` unchanged, so reads and sweeps
+/// stay directly comparable with `quip-cpu-sa`, which is the whole point of
+/// this backend: it isolates the acceptance-table trick from the multi-spin
+/// packing.
+pub const CPU_FSA_IDENTITY: BackendIdentity = BackendIdentity {
+    backend: quip_proto::v1::Backend::Cpu,
+    algorithm: quip_proto::v1::Algorithm::Fsa,
+    max_nodes: DEFAULT_MAX_NODES,
+    max_edges: DEFAULT_MAX_EDGES,
+    features: &[],
+    adapt: CPU_ADAPT,
+};
+
+/// Backend identity for `quip-cpu-msa` (multi-spin coded annealing).
+///
+/// Experimental track. The adapt envelope matches CUDA `CUDA_MSA_ADAPT`:
+/// 128 reads and 7392..=29568 sweeps. A multiple of 64 is this kernel's
+/// natural read count — 64 reads cost what one read costs — so the pinned
+/// read count is two replica words rather than the scalar [`CPU_ADAPT`] range.
+pub const CPU_MSA_IDENTITY: BackendIdentity = BackendIdentity {
+    backend: quip_proto::v1::Backend::Cpu,
+    algorithm: quip_proto::v1::Algorithm::Msa,
+    max_nodes: DEFAULT_MAX_NODES,
+    max_edges: DEFAULT_MAX_EDGES,
+    features: &[],
+    adapt: CPU_MSA_ADAPT,
+};
+
+/// Adapt envelope for the multi-spin backend, matching CUDA `CUDA_MSA_ADAPT`.
+///
+/// Named separately from [`CPU_ADAPT`] so FSA and SA keep the scalar budget
+/// while MSA advertises the same mining envelope as `quip-cuda-msa`.
+pub(crate) const CPU_MSA_ADAPT: AdaptBounds = AdaptBounds {
+    min_sweeps: 7392,
+    max_sweeps: 29568,
+    min_reads: 128,
+    max_reads: 128,
+    reads_solution_min_factor: 0,
+    reads_solution_max_factor: 0,
+    reads_solution_floor_factor: 0,
+};
+
+/// Start states and the start point for a seeded anneal.
+///
+/// Read `r` starts from `spins[r]`. A read past the last state starts from a
+/// random configuration, as every read of a cold run does, and a state past
+/// the last read is not used.
+#[derive(Debug, Clone, Copy)]
+pub struct SeededStart<'a> {
+    /// One `{-1, +1}` entry per variable in each state, best state first.
+    pub spins: &'a [Vec<i8>],
+    /// Inverse temperature the anneal starts from. `None` takes the geometric
+    /// midpoint of the cold run's beta range. A seeded anneal that starts at
+    /// the hot end forgets its seed.
+    pub start_beta: Option<f64>,
+}
+
+/// Why a seeded run was refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SeedError {
+    /// State `index` does not have one spin per variable.
+    WrongLength {
+        /// Position of the state in [`SeededStart::spins`].
+        index: usize,
+        /// Variables in the problem.
+        expected: usize,
+        /// Spins in the state.
+        got: usize,
+    },
+    /// State `index` holds a value other than `-1` or `+1`.
+    BadSpin {
+        /// Position of the state in [`SeededStart::spins`].
+        index: usize,
+    },
+    /// The problem has a coupling or field the integer kernels do not take,
+    /// or its beta ladder needs a threshold table too large for the
+    /// tabulated kernel to build — either way, the run would have to fall
+    /// back to the scalar `cpu-sa` kernel, which has no seeded form.
+    UnsupportedProblem,
+}
+
+impl std::fmt::Display for SeedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WrongLength {
+                index,
+                expected,
+                got,
+            } => write!(
+                f,
+                "start state {index} has {got} spins; the problem has {expected} variables"
+            ),
+            Self::BadSpin { index } => {
+                write!(f, "start state {index} holds a value other than -1 or +1")
+            }
+            Self::UnsupportedProblem => f.write_str(
+                "the problem or the requested sweep depth needs the scalar SA fallback, \
+                 which cannot start from a state",
+            ),
+        }
+    }
+}
+
+impl std::error::Error for SeedError {}
+
+pub(crate) fn check_seeds(start: SeededStart<'_>, nodes: usize) -> Result<(), SeedError> {
+    for (index, state) in start.spins.iter().enumerate() {
+        if state.len() != nodes {
+            return Err(SeedError::WrongLength {
+                index,
+                expected: nodes,
+                got: state.len(),
+            });
+        }
+        if state.iter().any(|&s| s != 1 && s != -1) {
+            return Err(SeedError::BadSpin { index });
+        }
+    }
+    Ok(())
+}
+
+/// Which annealing kernel a binary drives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaVariant {
+    /// Scalar kernel with tabulated acceptance thresholds.
+    Tabulated,
+    /// Multi-spin coded kernel, 64 reads per machine word.
+    MultiSpin,
+}
+
+/// One immutable Welsh-Powell colouring, keyed by topology not by weights.
+///
+/// Fields and coupling values are omitted: `Coloring::new` walks every
+/// topology edge, including zero couplings, through `CpuGraph::from_base`.
+#[derive(Debug)]
+struct CachedColoring {
+    nodes: usize,
+    edges: Arc<[(usize, usize)]>,
+    colors: Coloring,
+}
+
+/// Annealing sampler for the tabulated-threshold and multi-spin kernels.
+#[derive(Debug, Clone)]
+pub struct SaSampler {
+    variant: SaVariant,
+    /// Operator core budget from `Configure.backend_toml`. 0 means the host.
+    ///
+    /// `apply_config` takes `&self`, so the budget needs interior mutability.
+    /// Behind an `Arc` rather than a bare atomic so that a clone shares the
+    /// stored budget instead of silently reverting to host parallelism, which
+    /// is how `CpuSampler` holds the same field. Taking this handle costs
+    /// `SaSampler` its `Copy`, `PartialEq` and `Eq` derives.
+    num_cpus: Arc<AtomicUsize>,
+    /// Single-entry topology cache shared by clones.
+    ///
+    /// The mutex is held only to clone or replace the `Arc`. Sampling reads
+    /// the immutable entry after the guard is dropped.
+    coloring: Arc<Mutex<Option<Arc<CachedColoring>>>>,
+}
+
+impl SaSampler {
+    /// Create a sampler for `variant`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use quip_miner_cpu::{IsingGraph, SaSampler, SaVariant, SampleParams};
+    /// use quip_solver_core::{SampleError, Sampler};
+    ///
+    /// # fn main() -> Result<(), SampleError> {
+    /// let sampler = SaSampler::new(SaVariant::MultiSpin);
+    /// let graph = IsingGraph::new(vec![0.0, 0.0], vec![-1.0], vec![(0, 1)]);
+    /// let params = SampleParams {
+    ///     num_reads: 3,
+    ///     num_sweeps: 64,
+    ///     seed: 1,
+    ///     ..Default::default()
+    /// };
+    /// let results = sampler.sample(&graph, &params)?;
+    /// assert_eq!(results.len(), 3);
+    /// assert!(results.iter().all(|r| r.spins.iter().all(|&s| s == 1 || s == -1)));
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn new(variant: SaVariant) -> Self {
+        Self {
+            variant,
+            num_cpus: Arc::new(AtomicUsize::new(0)),
+            coloring: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Anneal from `start` instead of from random configurations.
+    ///
+    /// The run keeps the sweep count of `params` and spreads it over the part
+    /// of the beta ladder above [`SeededStart::start_beta`]. It shares this
+    /// sampler's colouring cache with [`Sampler::sample`].
+    ///
+    /// # Errors
+    ///
+    /// [`SeedError`] when a state does not fit the problem, or when the
+    /// problem does not qualify for an integer kernel.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use quip_miner_cpu::{IsingGraph, SaSampler, SaVariant, SampleParams, SeededStart};
+    ///
+    /// # fn main() -> Result<(), quip_miner_cpu::SeedError> {
+    /// // A ferromagnetic pair, seeded with a ground state and started cold.
+    /// let graph = IsingGraph::new(vec![0.0, 0.0], vec![-1.0], vec![(0, 1)]);
+    /// let params = SampleParams {
+    ///     num_reads: 1,
+    ///     num_sweeps: 8,
+    ///     seed: 1,
+    ///     ..Default::default()
+    /// };
+    /// let seeds = vec![vec![-1i8, -1]];
+    /// let start = SeededStart { spins: &seeds, start_beta: Some(10.0) };
+    /// let results = SaSampler::new(SaVariant::MultiSpin).sample_seeded(&graph, &params, start)?;
+    /// assert_eq!(results[0].spins, vec![-1, -1]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn sample_seeded(
+        &self,
+        graph: &IsingGraph,
+        params: &SampleParams,
+        start: SeededStart<'_>,
+    ) -> Result<Vec<SamplerResult>, SeedError> {
+        check_seeds(start, graph.h.len())?;
+        let Some(int) = IntGraph::from_base(graph) else {
+            return Err(SeedError::UnsupportedProblem);
+        };
+        // The tabulated arm's shared threshold table declines past a beta
+        // ladder length and `sample_sa_variant_with_cache` then falls back to
+        // the scalar `cpu-sa` kernel, silently dropping the seed. Refuse here
+        // instead of letting that fallback answer cold. `MultiSpin` takes the
+        // same tabulated arm whenever `bond_counts` refuses the degree.
+        let counts = match self.variant {
+            SaVariant::MultiSpin => bond_counts(&int),
+            SaVariant::Tabulated => None,
+        };
+        let betas = build_seeded_beta_schedule(graph, params, start.start_beta);
+        if counts.is_none() && !threshold_table_fits(betas.len()) {
+            return Err(SeedError::UnsupportedProblem);
+        }
+        Ok(anneal_int(
+            graph,
+            params,
+            &int,
+            counts,
+            &betas,
+            None,
+            Some(&self.coloring),
+            Some(start),
+        )
+        .unwrap_or_default())
+    }
+}
+
+/// Recover a poisoned cache lock.
+///
+/// The guard is held only for an `Arc` clone or a single `Option` store, so a
+/// panic while it is held cannot leave a half-written entry. `into_inner`
+/// keeps later samples running on the still-valid slot.
+fn lock_cached_coloring(
+    cache: &Mutex<Option<Arc<CachedColoring>>>,
+) -> std::sync::MutexGuard<'_, Option<Arc<CachedColoring>>> {
+    cache
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Clone a matching cached colouring, or build one outside the lock.
+fn cached_coloring(
+    cache: &Mutex<Option<Arc<CachedColoring>>>,
+    graph: &IsingGraph,
+) -> Arc<CachedColoring> {
+    let nodes = graph.h.len();
+    let cached = {
+        let guard = lock_cached_coloring(cache);
+        guard.clone()
+    };
+    if let Some(entry) = cached {
+        if entry.nodes == nodes && entry.edges == graph.edges {
+            return entry;
+        }
+    }
+
+    let entry = Arc::new(CachedColoring {
+        nodes,
+        edges: graph.edges.clone(),
+        colors: Coloring::new(&CpuGraph::from_base(graph)),
+    });
+    let previous = {
+        let mut guard = lock_cached_coloring(cache);
+        guard.replace(Arc::clone(&entry))
+    };
+    drop(previous);
+    entry
+}
+
+/// Run one job on the selected kernel, or on `cpu-sa` when the problem does
+/// not qualify.
+///
+/// Direct callers skip the sampler cache. `SaSampler::sample` and
+/// `sample_stream` install a cache on the inner path.
+#[cfg(test)]
+pub(crate) fn sample_sa_variant(
+    graph: &IsingGraph,
+    params: &SampleParams,
+    variant: SaVariant,
+    cancel: Option<(&CancelToken, Option<u64>)>,
+) -> Result<Vec<SamplerResult>, SampleCancelled> {
+    sample_sa_variant_with_cache(graph, params, variant, cancel, None, None)
+}
+
+fn sample_sa_variant_with_cache(
+    graph: &IsingGraph,
+    params: &SampleParams,
+    variant: SaVariant,
+    cancel: Option<(&CancelToken, Option<u64>)>,
+    cache: Option<&Mutex<Option<Arc<CachedColoring>>>>,
+    start: Option<SeededStart<'_>>,
+) -> Result<Vec<SamplerResult>, SampleCancelled> {
+    let Some(int) = IntGraph::from_base(graph) else {
+        return sample_ising_cancellable(graph, params, Algorithm::Sa, cancel);
+    };
+    let betas = match start {
+        Some(s) => build_seeded_beta_schedule(graph, params, s.start_beta),
+        None => build_beta_schedule(graph, params),
+    };
+    let counts = match variant {
+        SaVariant::MultiSpin => bond_counts(&int),
+        SaVariant::Tabulated => None,
+    };
+    anneal_int(graph, params, &int, counts, &betas, cancel, cache, start)
+}
+
+/// Anneal an already-converted problem: `counts` selects the packed arm, and
+/// `None` selects the scalar tabulated arm. `sample_seeded` calls this
+/// directly, so its pre-checks do not build the graph and ladder twice.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a private arm with two callers; a struct here would exist only for the count"
+)]
+fn anneal_int(
+    graph: &IsingGraph,
+    params: &SampleParams,
+    int: &IntGraph,
+    counts: Option<Vec<u8>>,
+    betas: &[f64],
+    cancel: Option<(&CancelToken, Option<u64>)>,
+    cache: Option<&Mutex<Option<Arc<CachedColoring>>>>,
+    start: Option<SeededStart<'_>>,
+) -> Result<Vec<SamplerResult>, SampleCancelled> {
+    let num_reads = params.num_reads.max(1);
+    // Cut to the reads: a state past the last read has no read to seed.
+    let seeds: &[Vec<i8>] = start.map_or(&[], |s| &s.spins[..s.spins.len().min(num_reads)]);
+    let sweeps_per = effective_sweeps_per_beta(params.num_sweeps, params.sweeps_per_beta);
+
+    let mut results = Vec::with_capacity(num_reads);
+    match counts {
+        Some(counts) => {
+            let fresh;
+            let hit;
+            let colors = match cache {
+                Some(cache) => {
+                    hit = cached_coloring(cache, graph);
+                    &hit.colors
+                }
+                None => {
+                    fresh = Coloring::new(&CpuGraph::from_base(graph));
+                    &fresh
+                }
+            };
+            results = anneal_packed(int, &counts, colors, betas, params, seeds, graph, cancel)?;
+        }
+        None => {
+            // The scalar tabulated path retains its shared full-ladder table
+            // and falls back to ordinary SA if that table exceeds its cap.
+            let mut table_rng = SmallRng::seed_from_u64(params.seed ^ 0x5341_5F54_424C_4531);
+            let Some(draws) = threshold_draws(betas, int.max_field(), &mut table_rng) else {
+                return sample_ising_cancellable(graph, params, Algorithm::Sa, cancel);
+            };
+            for read in 0..num_reads {
+                if let Some((guard, watermark)) = cancel {
+                    if guard.is_cancelled(watermark) {
+                        return Err(SampleCancelled);
+                    }
+                }
+                let mut rng = read_rng(params.seed, read);
+                // Drawn even for a seeded read, so the offsets that follow
+                // come from the same point in the stream as a cold read's.
+                let mut spins = crate::sampler_core::random_spins(int.num_nodes(), &mut rng);
+                if let Some(seed) = seeds.get(read) {
+                    spins.clone_from(seed);
+                }
+                let offsets = sweep_offsets(betas.len(), sweeps_per, &mut rng);
+                anneal_from(int, &draws, sweeps_per, &mut spins, &offsets, cancel)?;
+                results.push(score(&spins, graph));
+            }
+        }
+    }
+    Ok(results)
+}
+
+/// The packed multi-spin arm: seed or draw every replica word, anneal, and
+/// score each word in one pass. `seeds` is already cut to the read count.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a private arm with two callers; a struct here would exist only for the count"
+)]
+fn anneal_packed(
+    int: &IntGraph,
+    counts: &[u8],
+    colors: &Coloring,
+    betas: &[f64],
+    params: &SampleParams,
+    seeds: &[Vec<i8>],
+    graph: &IsingGraph,
+    cancel: Option<(&CancelToken, Option<u64>)>,
+) -> Result<Vec<SamplerResult>, SampleCancelled> {
+    let num_reads = params.num_reads.max(1);
+    let mut states = Vec::with_capacity(num_reads.div_ceil(LANES));
+    for read in (0..num_reads).step_by(LANES) {
+        if let Some((guard, watermark)) = cancel {
+            if guard.is_cancelled(watermark) {
+                return Err(SampleCancelled);
+            }
+        }
+        let mut rng = read_rng(params.seed, read);
+        // This word's share of the seeds: reads `read..read + LANES`.
+        let word_seeds: Vec<&[i8]> = seeds
+            .iter()
+            .skip(read)
+            .take(LANES)
+            .map(Vec::as_slice)
+            .collect();
+        states.push(if word_seeds.is_empty() {
+            MscState::random(int.num_nodes(), &mut rng)
+        } else {
+            MscState::seeded(int.num_nodes(), &word_seeds, &mut rng)
+        });
+    }
+    anneal_words(int, counts, colors, betas, params, &mut states, cancel)?;
+    let mut results = Vec::with_capacity(num_reads);
+    for (word, state) in states.iter().enumerate() {
+        let word_reads = LANES.min(num_reads - word * LANES);
+        results.extend(score_word(state, graph, word_reads));
+    }
+    Ok(results)
+}
+
+/// The packed unit kernel with no fallback, for the research entry point.
+///
+/// `int` and `counts` come from the caller's own eligibility check, so this
+/// path cannot reach the tabulated or scalar arms. The caller rejects seeds
+/// beyond the read count; any left would be cut here as the sampler does.
+pub(crate) fn sample_unit_packed(
+    graph: &IsingGraph,
+    params: &SampleParams,
+    int: &IntGraph,
+    counts: &[u8],
+    start: Option<SeededStart<'_>>,
+    cancel: Option<(&CancelToken, Option<u64>)>,
+) -> Result<(Vec<SamplerResult>, Vec<f64>), SampleCancelled> {
+    let num_reads = params.num_reads.max(1);
+    let betas = match start {
+        Some(s) => build_seeded_beta_schedule(graph, params, s.start_beta),
+        None => build_beta_schedule(graph, params),
+    };
+    let seeds: &[Vec<i8>] = start.map_or(&[], |s| &s.spins[..s.spins.len().min(num_reads)]);
+    let colors = Coloring::new(&CpuGraph::from_base(graph));
+    let results = anneal_packed(int, counts, &colors, &betas, params, seeds, graph, cancel)?;
+    Ok((results, betas))
+}
+
+/// Per-read random stream, seeded the same way `cpu-sa` seeds its reads.
+pub(crate) fn read_rng(base: u64, read_idx: usize) -> SmallRng {
+    SmallRng::seed_from_u64(
+        base.wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            .wrapping_add(read_idx as u64)
+            .wrapping_add(1),
+    )
+}
+
+fn score(spins: &[i8], graph: &IsingGraph) -> SamplerResult {
+    SamplerResult {
+        spins: spins.to_vec(),
+        energy_milli: energy_milli(spins, &graph.h, &graph.j, &graph.edges),
+    }
+}
+
+/// Mirrors `quip_protocol::scoring::coefficient_milli`, which is private to
+/// that crate. Every wire coefficient is `v as f64 / 1000.0` for an `i32`
+/// milli value `v`, so this recovers the exact integer and, like the
+/// original, saturates a too-large finite value on the final cast rather than
+/// reporting the non-finite sentinel.
+fn coefficient_milli(c: f64) -> Option<i64> {
+    if !c.is_finite() {
+        return None;
+    }
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "round() is exact over the i32 wire range; larger finite values saturate by design"
+    )]
+    Some((c * 1000.0).round() as i64)
+}
+
+/// Score every lane of one replica word in a single pass over the graph,
+/// instead of one scalar `energy_milli` call per lane.
+///
+/// For a `u64` bit-plane pair, `sign(su) * sign(sv)` is `+1` where the bits
+/// agree and `-1` where they disagree, so one coefficient conversion per node
+/// or edge is shared by all `num_reads` lanes; only the cheap sign pick and
+/// the saturating add repeat per lane. Results match calling
+/// [`score`] on `state.lane(lane)` for `lane` in `0..num_reads`, including the
+/// non-finite sentinel and the saturation behavior.
+fn score_word(state: &MscState, graph: &IsingGraph, num_reads: usize) -> Vec<SamplerResult> {
+    debug_assert!(num_reads <= LANES);
+    let spin = state.spins();
+    let mut acc = [0i128; LANES];
+    let mut non_finite = false;
+
+    for (i, &w) in spin.iter().enumerate() {
+        let Some(&coeff) = graph.h.get(i) else {
+            continue;
+        };
+        let Some(milli) = coefficient_milli(coeff) else {
+            non_finite = true;
+            break;
+        };
+        let milli = i128::from(milli);
+        for (lane, a) in acc.iter_mut().enumerate().take(num_reads) {
+            let term = if (w >> lane) & 1 == 0 { milli } else { -milli };
+            *a = a.saturating_add(term);
+        }
+    }
+
+    if !non_finite {
+        for (k, &(u, v)) in graph.edges.iter().enumerate() {
+            let (Some(&coeff), Some(&wu), Some(&wv)) = (graph.j.get(k), spin.get(u), spin.get(v))
+            else {
+                continue;
+            };
+            let Some(milli) = coefficient_milli(coeff) else {
+                non_finite = true;
+                break;
+            };
+            let milli = i128::from(milli);
+            // Bits agree (bond satisfied) where the XOR is clear.
+            let disagree = wu ^ wv;
+            for (lane, a) in acc.iter_mut().enumerate().take(num_reads) {
+                let term = if (disagree >> lane) & 1 == 0 {
+                    milli
+                } else {
+                    -milli
+                };
+                *a = a.saturating_add(term);
+            }
+        }
+    }
+
+    (0..num_reads)
+        .map(|lane| {
+            let energy_milli = if non_finite {
+                ENERGY_MILLI_NON_FINITE
+            } else {
+                i64::try_from(acc[lane]).unwrap_or(if acc[lane].is_negative() {
+                    i64::MIN
+                } else {
+                    i64::MAX
+                })
+            };
+            SamplerResult {
+                spins: state.lane(lane),
+                energy_milli,
+            }
+        })
+        .collect()
+}
+
+impl Sampler for SaSampler {
+    fn sample(
+        &self,
+        graph: &IsingGraph,
+        params: &SampleParams,
+    ) -> Result<Vec<SamplerResult>, SampleError> {
+        Ok(sample_sa_variant_with_cache(
+            graph,
+            params,
+            self.variant,
+            None,
+            Some(&self.coloring),
+            None,
+        )
+        .unwrap_or_default())
+    }
+
+    /// One model per core, the same shape as `CpuSampler::stream_width`.
+    ///
+    /// `num_cpus` from `Configure.backend_toml` replaces host parallelism here,
+    /// exactly as it does for `cpu-sa`. Without this the two binaries would run
+    /// different concurrencies under the same operator configuration.
+    fn stream_width(&self) -> usize {
+        crate::core_budget(&self.num_cpus)
+    }
+
+    fn declared_stream_width() -> u32 {
+        u32::try_from(crate::host_parallelism()).unwrap_or(u32::MAX)
+    }
+
+    fn apply_config(&self, backend_toml: &str) {
+        if let Err(e) = crate::apply_num_cpus(&self.num_cpus, backend_toml) {
+            tracing::error!(error = %e, "cpu num_cpus rejected");
+            crate::reject_num_cpus(e);
+        }
+    }
+
+    fn sample_stream(
+        &self,
+        jobs: tokio::sync::mpsc::Receiver<StreamJob>,
+        out: tokio::sync::mpsc::Sender<StreamResult>,
+        cancel: CancelToken,
+    ) {
+        let variant = self.variant;
+        let coloring = Arc::clone(&self.coloring);
+        run_stream_pump(
+            || self.stream_width(),
+            move |g, p, token, watermark| {
+                sample_sa_variant_with_cache(
+                    g,
+                    p,
+                    variant,
+                    Some((token, watermark)),
+                    Some(&coloring),
+                    None,
+                )
+                .map_err(|_| crate::StreamKernelError::Cancelled)
+            },
+            jobs,
+            out,
+            cancel,
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::Rng;
+
+    fn zephyr_like(n: usize, seed: u64, fields: &[f64]) -> IsingGraph {
+        let mut rng = SmallRng::seed_from_u64(seed);
+        let h: Vec<f64> = (0..n)
+            .map(|_| fields[rng.gen_range(0..fields.len())])
+            .collect();
+        let mut edges = Vec::new();
+        let mut j = Vec::new();
+        for u in 0..n {
+            for v in (u + 1)..n {
+                if rng.gen::<f64>() < 0.3 {
+                    edges.push((u, v));
+                    j.push(if rng.gen::<bool>() { 1.0 } else { -1.0 });
+                }
+            }
+        }
+        IsingGraph::new(h, j, edges)
+    }
+
+    fn zephyr_like_p(n: usize, seed: u64, fields: &[f64], p: f64) -> IsingGraph {
+        let mut rng = SmallRng::seed_from_u64(seed);
+        let h: Vec<f64> = (0..n)
+            .map(|_| fields[rng.gen_range(0..fields.len())])
+            .collect();
+        let mut edges = Vec::new();
+        let mut j = Vec::new();
+        for u in 0..n {
+            for v in (u + 1)..n {
+                if rng.gen::<f64>() < p {
+                    edges.push((u, v));
+                    j.push(if rng.gen::<bool>() { 1.0 } else { -1.0 });
+                }
+            }
+        }
+        IsingGraph::new(h, j, edges)
+    }
+
+    fn params(num_reads: usize, num_sweeps: usize, seed: u64) -> SampleParams {
+        SampleParams {
+            num_reads,
+            num_sweeps,
+            seed,
+            ..Default::default()
+        }
+    }
+
+    fn result_spins(v: &[SamplerResult]) -> Vec<Vec<i8>> {
+        v.iter().map(|r| r.spins.clone()).collect()
+    }
+
+    fn cached_entry(s: &SaSampler) -> Option<Arc<CachedColoring>> {
+        s.coloring.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    /// The conformance driver's proof ring: `planted` satisfies every bond, so
+    /// it and its flip are the only ground states, at `-n` units.
+    fn planted_ring(n: usize) -> (IsingGraph, Vec<i8>) {
+        let spin = |i: usize| -> i8 {
+            if (i.wrapping_mul(2_654_435_761) >> 7) & 1 == 1 {
+                1
+            } else {
+                -1
+            }
+        };
+        let planted: Vec<i8> = (0..n).map(spin).collect();
+        let edges: Vec<(usize, usize)> = (0..n).map(|i| (i, (i + 1) % n)).collect();
+        let j = edges
+            .iter()
+            .map(|&(u, v)| -f64::from(planted[u]) * f64::from(planted[v]))
+            .collect();
+        (IsingGraph::new(vec![0.0; n], j, edges), planted)
+    }
+
+    fn ground_milli(n: usize) -> i64 {
+        -1000 * i64::try_from(n).expect("ring size fits i64")
+    }
+
+    #[test]
+    fn a_seeded_run_keeps_a_ground_state_that_a_cold_run_does_not_reach() {
+        // 1-D coarsening leaves domain walls behind, so a short cold anneal
+        // of a long ring never lands on the planted state. A seeded one that
+        // starts cold has nothing to repair and must not wander off.
+        let (graph, planted) = planted_ring(512);
+        let p = params(1, 64, 5);
+        for variant in [SaVariant::MultiSpin, SaVariant::Tabulated] {
+            let s = SaSampler::new(variant);
+            let cold = s.sample(&graph, &p).expect("cold");
+            assert!(cold[0].energy_milli > ground_milli(512), "{variant:?} cold");
+
+            let seeds = vec![planted.clone()];
+            let start = SeededStart {
+                spins: &seeds,
+                start_beta: Some(10.0),
+            };
+            let warm = s.sample_seeded(&graph, &p, start).expect("seeded");
+            assert_eq!(warm[0].energy_milli, ground_milli(512), "{variant:?}");
+            assert_eq!(warm[0].spins, planted, "{variant:?}");
+        }
+    }
+
+    #[test]
+    fn reads_past_the_last_seed_start_cold() {
+        let (graph, planted) = planted_ring(512);
+        let seeds = vec![planted];
+        let start = SeededStart {
+            spins: &seeds,
+            start_beta: Some(10.0),
+        };
+        for variant in [SaVariant::MultiSpin, SaVariant::Tabulated] {
+            let got = SaSampler::new(variant)
+                .sample_seeded(&graph, &params(3, 64, 5), start)
+                .expect("seeded");
+            assert_eq!(got.len(), 3);
+            assert_eq!(got[0].energy_milli, ground_milli(512), "{variant:?}");
+            // Started cold at beta 10, the other reads freeze where they are.
+            assert!(got[1].energy_milli > ground_milli(512), "{variant:?}");
+            assert!(got[2].energy_milli > ground_milli(512), "{variant:?}");
+        }
+    }
+
+    #[test]
+    fn seeds_past_the_last_read_are_not_used() {
+        let (graph, planted) = planted_ring(64);
+        let flipped: Vec<i8> = planted.iter().map(|s| -s).collect();
+        let seeds = vec![planted.clone(), flipped.clone(), flipped];
+        let start = SeededStart {
+            spins: &seeds,
+            start_beta: Some(10.0),
+        };
+        let got = SaSampler::new(SaVariant::MultiSpin)
+            .sample_seeded(&graph, &params(1, 8, 1), start)
+            .expect("seeded");
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].spins, planted);
+    }
+
+    #[test]
+    fn seeds_carry_across_the_boundary_between_replica_words() {
+        // 70 reads are two words: lanes 0..64 and lanes 0..6. A seed index
+        // that did not advance with the word would seed word two from state 0.
+        let (graph, planted) = planted_ring(64);
+        let flipped: Vec<i8> = planted.iter().map(|s| -s).collect();
+        let seeds: Vec<Vec<i8>> = (0..70)
+            .map(|r| {
+                if r < 64 {
+                    planted.clone()
+                } else {
+                    flipped.clone()
+                }
+            })
+            .collect();
+        let start = SeededStart {
+            spins: &seeds,
+            start_beta: Some(10.0),
+        };
+        let got = SaSampler::new(SaVariant::MultiSpin)
+            .sample_seeded(&graph, &params(70, 8, 1), start)
+            .expect("seeded");
+        assert_eq!(got.len(), 70);
+        assert_eq!(got[63].spins, planted);
+        assert_eq!(got[64].spins, flipped);
+        assert_eq!(got[69].spins, flipped);
+    }
+
+    /// Phase-timing profile: where does the fixed per-call cost of
+    /// [`SaVariant::MultiSpin`] actually go? Times setup (`IntGraph` build,
+    /// coloring, `bond_counts`), the sweep loop (`anneal_words`), and
+    /// finalisation (unpacking lanes and scoring) separately, on a graph
+    /// close to the 4,800-node / 45,864-coupler shape from the field
+    /// measurement. Run with:
+    /// `cargo test --lib sa_sampler::tests::zz_profile_finalise -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    #[expect(
+        clippy::print_stderr,
+        reason = "an ignored profiling test reports phase timings on stderr"
+    )]
+    fn zz_profile_finalise() {
+        use std::time::Instant;
+        let graph = zephyr_like_p(4800, 1, &[0.0], 0.003_982);
+        eprintln!(
+            "graph: {} nodes, {} couplers",
+            graph.h.len(),
+            graph.edges.len()
+        );
+        for sweeps in [1usize, 128, 1024] {
+            let params = SampleParams {
+                num_reads: 64,
+                num_sweeps: sweeps,
+                sweeps_per_beta: 1,
+                beta_range: Some((0.05, 4.0)),
+                seed: 7,
+            };
+
+            let t_setup = Instant::now();
+            let int = IntGraph::from_base(&graph).expect("qualifies");
+            let counts = bond_counts(&int).expect("degree within bounds");
+            let colors = Coloring::new(&CpuGraph::from_base(&graph));
+            let betas = build_beta_schedule(&graph, &params);
+            let setup_ns = t_setup.elapsed().as_nanos();
+
+            let num_reads = params.num_reads.max(1);
+            let t_states = Instant::now();
+            let mut states = Vec::with_capacity(num_reads.div_ceil(LANES));
+            for read in (0..num_reads).step_by(LANES) {
+                let mut rng = read_rng(params.seed, read);
+                states.push(MscState::random(int.num_nodes(), &mut rng));
+            }
+            let states_ns = t_states.elapsed().as_nanos();
+
+            let t_anneal = Instant::now();
+            anneal_words(&int, &counts, &colors, &betas, &params, &mut states, None)
+                .expect("no cancel token");
+            let anneal_ns = t_anneal.elapsed().as_nanos();
+
+            let t_finalize = Instant::now();
+            let mut results = Vec::with_capacity(num_reads);
+            for (word, state) in states.iter().enumerate() {
+                let word_reads = LANES.min(num_reads - word * LANES);
+                results.extend(score_word(state, &graph, word_reads));
+            }
+            let finalize_ns = t_finalize.elapsed().as_nanos();
+            std::hint::black_box(&results);
+
+            eprintln!(
+                "sweeps={sweeps:>4} setup={:>8.3}ms states={:>8.3}ms anneal={:>8.3}ms finalize={:>8.3}ms total={:>8.3}ms",
+                setup_ns as f64 / 1e6,
+                states_ns as f64 / 1e6,
+                anneal_ns as f64 / 1e6,
+                finalize_ns as f64 / 1e6,
+                (setup_ns + states_ns + anneal_ns + finalize_ns) as f64 / 1e6,
+            );
+        }
+    }
+
+    /// Energies captured from the scalar per-lane finalisation, before
+    /// [`score_word`] existed (commit f6e432c), on a 90-node graph with 70
+    /// reads — both a node count and a read count that are not multiples of
+    /// [`LANES`], so the run spans a partial word. The bit-parallel
+    /// finalisation must reproduce these exactly.
+    #[test]
+    fn finalisation_matches_the_pre_optimisation_baseline() {
+        const COLD: [i64; 70] = [
+            -313000, -301000, -293000, -313000, -295000, -269000, -291000, -327000, -273000,
+            -329000, -251000, -287000, -285000, -295000, -297000, -305000, -295000, -329000,
+            -295000, -285000, -279000, -285000, -311000, -303000, -293000, -317000, -275000,
+            -323000, -293000, -289000, -293000, -285000, -297000, -281000, -291000, -291000,
+            -295000, -321000, -255000, -323000, -307000, -287000, -275000, -263000, -285000,
+            -295000, -271000, -259000, -305000, -299000, -291000, -311000, -295000, -287000,
+            -285000, -295000, -311000, -313000, -285000, -315000, -303000, -289000, -317000,
+            -307000, -293000, -315000, -319000, -269000, -317000, -283000,
+        ];
+        const WARM: [i64; 70] = [
+            -311000, -295000, -293000, -311000, -309000, -313000, -305000, -291000, -307000,
+            -301000, -307000, -323000, -319000, -281000, -311000, -285000, -277000, -327000,
+            -269000, -285000, -279000, -295000, -267000, -277000, -277000, -309000, -327000,
+            -301000, -311000, -321000, -327000, -301000, -305000, -321000, -335000, -317000,
+            -297000, -323000, -305000, -327000, -309000, -303000, -327000, -317000, -309000,
+            -307000, -319000, -323000, -315000, -285000, -301000, -287000, -287000, -331000,
+            -333000, -305000, -297000, -285000, -325000, -297000, -303000, -299000, -295000,
+            -281000, -287000, -333000, -313000, -291000, -273000, -303000,
+        ];
+        let graph = zephyr_like(90, 77, &[-1.0, 0.0, 1.0]);
+        let cold = SaSampler::new(SaVariant::MultiSpin)
+            .sample(&graph, &params(70, 5, 123))
+            .expect("cold");
+        let got_cold: Vec<i64> = cold.iter().map(|r| r.energy_milli).collect();
+        assert_eq!(got_cold, COLD);
+
+        let seeds: Vec<Vec<i8>> = (0..70)
+            .map(|r| {
+                let mut rng = SmallRng::seed_from_u64(r as u64 + 900);
+                (0..90)
+                    .map(|_| if rng.gen::<bool>() { 1 } else { -1 })
+                    .collect()
+            })
+            .collect();
+        let start = SeededStart {
+            spins: &seeds,
+            start_beta: Some(3.0),
+        };
+        let warm = SaSampler::new(SaVariant::MultiSpin)
+            .sample_seeded(&graph, &params(70, 5, 123), start)
+            .expect("warm");
+        let got_warm: Vec<i64> = warm.iter().map(|r| r.energy_milli).collect();
+        assert_eq!(got_warm, WARM);
+    }
+
+    /// [`score_word`]'s bit-parallel finalisation must match the plain
+    /// scalar `energy_milli` reference exactly, on random graphs with
+    /// non-zero fields and non-unit couplings, at sizes that are and are not
+    /// multiples of [`LANES`], and at read counts that split a word.
+    #[test]
+    fn score_word_matches_scalar_energy_milli() {
+        fn weighted_graph(n: usize, seed: u64) -> IsingGraph {
+            let mut rng = SmallRng::seed_from_u64(seed);
+            let h: Vec<f64> = (0..n)
+                .map(|_| rng.gen_range(-3..=3) as f64 * 0.25)
+                .collect();
+            let mut edges = Vec::new();
+            let mut j = Vec::new();
+            for u in 0..n {
+                for v in (u + 1)..n {
+                    if rng.gen::<f64>() < 0.15 {
+                        edges.push((u, v));
+                        j.push(rng.gen_range(-4..=4) as f64 * 0.5);
+                    }
+                }
+            }
+            IsingGraph::new(h, j, edges)
+        }
+
+        for (n, reads, seed) in [
+            (8usize, 5usize, 1u64),
+            (64, 64, 2),
+            (100, 70, 3),
+            (200, 200, 4),
+        ] {
+            let graph = weighted_graph(n, seed);
+            let mut rng = SmallRng::seed_from_u64(seed ^ 0xABCD);
+            for word_start in (0..reads).step_by(LANES) {
+                let word_reads = LANES.min(reads - word_start);
+                let state = MscState::random(n, &mut rng);
+                let got = score_word(&state, &graph, word_reads);
+                assert_eq!(got.len(), word_reads);
+                for (lane, result) in got.iter().enumerate() {
+                    let spins = state.lane(lane);
+                    assert_eq!(result.spins, spins, "n {n} reads {reads} lane {lane}");
+                    let want = energy_milli(&spins, &graph.h, &graph.j, &graph.edges);
+                    assert_eq!(result.energy_milli, want, "n {n} reads {reads} lane {lane}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_state_that_does_not_fit_the_problem_is_refused() {
+        let (graph, planted) = planted_ring(64);
+        let s = SaSampler::new(SaVariant::MultiSpin);
+        let p = params(1, 8, 1);
+
+        let short = vec![planted[..63].to_vec()];
+        let got = s.sample_seeded(
+            &graph,
+            &p,
+            SeededStart {
+                spins: &short,
+                start_beta: None,
+            },
+        );
+        assert_eq!(
+            got.expect_err("short state"),
+            SeedError::WrongLength {
+                index: 0,
+                expected: 64,
+                got: 63
+            }
+        );
+
+        let mut zeroed = planted.clone();
+        zeroed[5] = 0;
+        let bad = vec![zeroed];
+        let got = s.sample_seeded(
+            &graph,
+            &p,
+            SeededStart {
+                spins: &bad,
+                start_beta: None,
+            },
+        );
+        assert_eq!(got.expect_err("bad spin"), SeedError::BadSpin { index: 0 });
+
+        // A bad state after a good one still reports its own position.
+        let mut zeroed_second = planted;
+        zeroed_second[5] = 0;
+        let mixed = vec![vec![1i8; 64], zeroed_second];
+        let got = s.sample_seeded(
+            &graph,
+            &p,
+            SeededStart {
+                spins: &mixed,
+                start_beta: None,
+            },
+        );
+        assert_eq!(
+            got.expect_err("bad spin at index 1"),
+            SeedError::BadSpin { index: 1 }
+        );
+    }
+
+    #[test]
+    fn a_beta_ladder_too_deep_for_the_tabulated_table_cannot_be_seeded() {
+        // The tabulated table declines past 8192 rungs and, unseeded, that
+        // falls back to the scalar cpu-sa kernel. A seeded run must not take
+        // that fallback silently: answering cold would report a seeded run
+        // that never used its seed, the same hole a non-integer problem has.
+        let graph = IsingGraph::new(vec![0.0, 0.0], vec![-1.0], vec![(0, 1)]);
+        let seeds = vec![vec![-1i8, -1]];
+        let got = SaSampler::new(SaVariant::Tabulated).sample_seeded(
+            &graph,
+            &params(1, 9000, 1),
+            SeededStart {
+                spins: &seeds,
+                start_beta: None,
+            },
+        );
+        assert_eq!(
+            got.expect_err("beta ladder too deep"),
+            SeedError::UnsupportedProblem
+        );
+    }
+
+    #[test]
+    fn a_problem_the_integer_kernels_refuse_cannot_be_seeded() {
+        // A coupling of 0.37 has no integer form, so a cold job falls back to
+        // scalar SA. That kernel has no seeded form, and answering cold would
+        // report a seeded run that never used its seed.
+        let graph = IsingGraph::new(vec![0.0, 0.0], vec![0.37], vec![(0, 1)]);
+        let seeds = vec![vec![1i8, 1]];
+        let got = SaSampler::new(SaVariant::MultiSpin).sample_seeded(
+            &graph,
+            &params(1, 8, 1),
+            SeededStart {
+                spins: &seeds,
+                start_beta: None,
+            },
+        );
+        assert_eq!(
+            got.expect_err("float problem"),
+            SeedError::UnsupportedProblem
+        );
+    }
+
+    #[test]
+    fn the_core_budget_tracks_cpu_sa_rather_than_the_bare_host() {
+        // An operator setting num_cpus must get the same concurrency from
+        // every CPU backend. Without apply_config these binaries would run one
+        // model per hardware thread while cpu-sa ran the configured number,
+        // oversubscribing the host against an explicit instruction.
+        for variant in [SaVariant::Tabulated, SaVariant::MultiSpin] {
+            // Both fresh each pass: apply_config stores through a shared
+            // atomic, so a reused instance would carry the budget forward.
+            let sa = crate::CpuSampler::new(Algorithm::Sa);
+            let s = SaSampler::new(variant);
+            assert_eq!(s.stream_width(), sa.stream_width(), "default budget");
+
+            // Clamped to the host, so a two-core CI box expects 2, not 3.
+            let want = 3.min(crate::host_parallelism());
+            s.apply_config("num_cpus = 3");
+            sa.apply_config("num_cpus = 3");
+            assert_eq!(s.stream_width(), want, "configured budget");
+            assert_eq!(s.stream_width(), sa.stream_width(), "configured budget");
+
+            // The budget lives behind a shared handle, so a clone taken after
+            // the handshake still sees what the handshake stored.
+            assert_eq!(s.clone().stream_width(), want);
+        }
+    }
+
+    #[test]
+    fn msa_matches_scalar_color_sweeps_across_replica_words() {
+        // The path's color order is [1, 3], then [0, 2, 4]. Updating in
+        // node order, or shifting the second word differently, changes spins.
+        let graph = IsingGraph::new(
+            vec![1.0, 0.0, -1.0, 0.0, 1.0],
+            vec![1.0, -1.0, 1.0, -1.0],
+            vec![(0, 1), (1, 2), (2, 3), (3, 4)],
+        );
+        let params = SampleParams {
+            num_reads: 70,
+            num_sweeps: 9,
+            sweeps_per_beta: 3,
+            beta_range: Some((0.05, 0.15)),
+            seed: 19,
+        };
+        let int = IntGraph::from_base(&graph).expect("unit graph");
+        let mut rng = SmallRng::seed_from_u64(19 ^ 0x5341_5F54_424C_4531);
+        let draws = threshold_draws(
+            &build_beta_schedule(&graph, &params),
+            int.max_field(),
+            &mut rng,
+        )
+        .expect("three rows");
+        // CUDA splitmix64(seed ^ (beta_idx << 20) ^ sweep) & 8191.
+        let offsets = [[6724, 4146, 4963], [4285, 4953, 6317], [3132, 4413, 1117]];
+        let actual = sample_sa_variant(&graph, &params, SaVariant::MultiSpin, None)
+            .expect("sampling succeeds");
+        for base in [0, 64] {
+            let mut rng = read_rng(params.seed, base);
+            let state = MscState::random(5, &mut rng);
+            for lane in 0..64.min(params.num_reads - base) {
+                let mut spins = state.lane(lane);
+                for (row, shifts) in draws.as_chunks::<8192>().0.iter().zip(offsets) {
+                    for off in shifts {
+                        for var in [1, 3, 0, 2, 4] {
+                            let mut field = graph.h[var];
+                            for (&(u, v), &j) in graph.edges.iter().zip(&graph.j) {
+                                if u == var {
+                                    field += j * f64::from(spins[v]);
+                                } else if v == var {
+                                    field += j * f64::from(spins[u]);
+                                }
+                            }
+                            let delta = -2.0 * f64::from(spins[var]) * field;
+                            if delta <= 2.0 * f64::from(row[(var + off) & 8191]) {
+                                spins[var] = -spins[var];
+                            }
+                        }
+                    }
+                }
+                assert_eq!(actual[base + lane].spins, spins, "read {}", base + lane);
+            }
+        }
+    }
+
+    #[test]
+    fn msa_sweep_budget_honors_small_requests_and_complete_rungs() {
+        // With no bonds or fields, every attempted flip is accepted. The
+        // final signs expose the sweep count without depending on randomness.
+        let graph = IsingGraph::new(vec![0.0; 5], vec![], vec![]);
+        let mut rng = read_rng(17, 0);
+        let initial = MscState::random(5, &mut rng).lane(0);
+        for (sweeps, per_beta, flips) in [(0, 0, 1), (0, 4, 4), (2, 4, 2), (7, 3, 6), (9, 3, 9)] {
+            let params = SampleParams {
+                num_reads: 1,
+                num_sweeps: sweeps,
+                sweeps_per_beta: per_beta,
+                seed: 17,
+                ..Default::default()
+            };
+            let actual = sample_sa_variant(&graph, &params, SaVariant::MultiSpin, None)
+                .expect("sampling succeeds");
+            let expected: Vec<i8> = initial
+                .iter()
+                .map(|&s| if flips % 2 == 0 { s } else { -s })
+                .collect();
+            assert_eq!(
+                actual[0].spins, expected,
+                "sweeps={sweeps}, per_beta={per_beta}"
+            );
+        }
+    }
+
+    #[test]
+    fn identities_advertise_their_algorithms() {
+        assert_eq!(CPU_FSA_IDENTITY.backend, quip_proto::v1::Backend::Cpu);
+        assert_eq!(CPU_FSA_IDENTITY.algorithm, quip_proto::v1::Algorithm::Fsa);
+        assert_eq!(CPU_MSA_IDENTITY.backend, quip_proto::v1::Backend::Cpu);
+        assert_eq!(CPU_MSA_IDENTITY.algorithm, quip_proto::v1::Algorithm::Msa);
+        assert_eq!(CPU_FSA_IDENTITY.adapt.min_reads, CPU_ADAPT.min_reads);
+        assert_eq!(CPU_FSA_IDENTITY.adapt.min_sweeps, 64);
+        assert_eq!(CPU_FSA_IDENTITY.adapt.max_sweeps, 1024);
+        assert_eq!(CPU_MSA_IDENTITY.adapt.min_sweeps, 7392);
+        assert_eq!(CPU_MSA_IDENTITY.adapt.max_sweeps, 29568);
+        assert_eq!(CPU_MSA_IDENTITY.adapt.min_reads, 128);
+        assert_eq!(CPU_MSA_IDENTITY.adapt.max_reads, 128);
+        assert_eq!(CPU_MSA_IDENTITY.adapt.reads_solution_min_factor, 0);
+        assert_eq!(CPU_MSA_IDENTITY.adapt.reads_solution_max_factor, 0);
+        assert_eq!(CPU_MSA_IDENTITY.adapt.reads_solution_floor_factor, 0);
+    }
+
+    #[test]
+    fn both_variants_return_exactly_num_reads_solutions() {
+        let graph = zephyr_like(30, 1, &[0.0]);
+        for variant in [SaVariant::Tabulated, SaVariant::MultiSpin] {
+            // 1 is below one word, 64 is exactly one, 70 spills into a second.
+            for reads in [1usize, 5, 64, 70] {
+                let out = SaSampler::new(variant)
+                    .sample(&graph, &params(reads, 64, 9))
+                    .expect("sampling succeeds");
+                assert_eq!(out.len(), reads, "{variant:?} with {reads} reads");
+                assert!(out
+                    .iter()
+                    .all(|r| r.spins.len() == 30 && r.spins.iter().all(|&s| s == 1 || s == -1)));
+            }
+        }
+    }
+
+    #[test]
+    fn energies_match_the_protocol_scoring() {
+        let graph = zephyr_like(24, 2, &[-1.0, 0.0, 1.0]);
+        for variant in [SaVariant::Tabulated, SaVariant::MultiSpin] {
+            for r in SaSampler::new(variant)
+                .sample(&graph, &params(8, 128, 3))
+                .expect("sampling succeeds")
+            {
+                assert_eq!(
+                    r.energy_milli,
+                    energy_milli(&r.spins, &graph.h, &graph.j, &graph.edges),
+                    "{variant:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn same_seed_same_result_and_different_seed_differs() {
+        let graph = zephyr_like(28, 5, &[0.0]);
+        for variant in [SaVariant::Tabulated, SaVariant::MultiSpin] {
+            let s = SaSampler::new(variant);
+            let a = s.sample(&graph, &params(4, 32, 11)).expect("sampling");
+            let b = s.sample(&graph, &params(4, 32, 11)).expect("sampling");
+            let c = s.sample(&graph, &params(4, 32, 12)).expect("sampling");
+            let spins = |v: &Vec<SamplerResult>| -> Vec<Vec<i8>> {
+                v.iter().map(|r| r.spins.clone()).collect()
+            };
+            assert_eq!(spins(&a), spins(&b), "{variant:?} is not deterministic");
+            assert_ne!(spins(&a), spins(&c), "{variant:?} ignores the seed");
+        }
+    }
+
+    #[test]
+    fn non_discrete_problems_fall_back_to_the_sa_kernel() {
+        // Couplings of 0.5 have no integer view, so both variants must still
+        // answer, by way of the ordinary cpu-sa kernel.
+        let graph = IsingGraph::new(vec![0.0, 0.0, 0.0], vec![0.5, -0.5], vec![(0, 1), (1, 2)]);
+        for variant in [SaVariant::Tabulated, SaVariant::MultiSpin] {
+            let out = SaSampler::new(variant)
+                .sample(&graph, &params(3, 64, 7))
+                .expect("sampling succeeds");
+            assert_eq!(out.len(), 3);
+            let expect = crate::sample_ising(&graph, &params(3, 64, 7), Algorithm::Sa);
+            assert_eq!(
+                out.iter().map(|r| r.spins.clone()).collect::<Vec<_>>(),
+                expect.iter().map(|r| r.spins.clone()).collect::<Vec<_>>(),
+                "{variant:?} fallback must be the cpu-sa kernel exactly"
+            );
+        }
+    }
+
+    #[test]
+    fn multi_spin_falls_back_when_the_field_is_too_large_for_a_ghost_bond() {
+        // |h| = 2 cannot be one ghost bond, so bond_counts refuses and the
+        // multi-spin variant runs the scalar tabulated kernel instead. It must
+        // still produce well-formed reads.
+        let graph = IsingGraph::new(vec![2.0, 0.0, -2.0], vec![1.0, -1.0], vec![(0, 1), (1, 2)]);
+        let out = SaSampler::new(SaVariant::MultiSpin)
+            .sample(&graph, &params(4, 64, 2))
+            .expect("sampling succeeds");
+        assert_eq!(out.len(), 4);
+        assert!(out.iter().all(|r| r.spins.len() == 3));
+    }
+
+    #[test]
+    fn a_problem_with_no_bonds_at_all_is_safe() {
+        // No couplings and no fields: every configuration has energy 0 and
+        // there is no uphill move, which is the edge the threshold table has
+        // to survive.
+        let graph = IsingGraph::new(vec![0.0; 5], vec![], vec![]);
+        for variant in [SaVariant::Tabulated, SaVariant::MultiSpin] {
+            let out = SaSampler::new(variant)
+                .sample(&graph, &params(3, 32, 1))
+                .expect("sampling succeeds");
+            assert_eq!(out.len(), 3);
+            assert!(out.iter().all(|r| r.energy_milli == 0));
+        }
+    }
+
+    #[test]
+    fn fields_only_problem_lands_on_the_exact_optimum() {
+        // No couplings, so every spin independently opposes its field and the
+        // optimum is -sum|h|. This is the test that exercises the multi-spin
+        // ghost bond: with no neighbours, the field is the only plane.
+        let n = 40usize;
+        let mut rng = SmallRng::seed_from_u64(6);
+        let h: Vec<f64> = (0..n)
+            .map(|_| if rng.gen::<bool>() { 1.0 } else { -1.0 })
+            .collect();
+        let optimum = -(h.iter().map(|v| v.abs()).sum::<f64>() as i64) * 1000;
+        let graph = IsingGraph::new(h, vec![], vec![]);
+        for variant in [SaVariant::Tabulated, SaVariant::MultiSpin] {
+            let best = SaSampler::new(variant)
+                .sample(&graph, &params(8, 256, 4))
+                .expect("sampling succeeds")
+                .iter()
+                .map(|r| r.energy_milli)
+                .min()
+                .expect("reads");
+            assert_eq!(best, optimum, "{variant:?}");
+        }
+    }
+
+    #[test]
+    fn ferromagnetic_clique_anneals_to_its_ground_state() {
+        // Every pair coupled at -1: the ground states are all-up and all-down
+        // at energy -C(n, 2), and single-flip descent reaches them from
+        // anywhere, so a kernel that anneals at all must find this.
+        let n = 8usize;
+        let mut edges = Vec::new();
+        for u in 0..n {
+            for v in (u + 1)..n {
+                edges.push((u, v));
+            }
+        }
+        let j = vec![-1.0; edges.len()];
+        let optimum = -((n * (n - 1) / 2) as i64) * 1000;
+        let graph = IsingGraph::new(vec![0.0; n], j, edges);
+        for variant in [SaVariant::Tabulated, SaVariant::MultiSpin] {
+            let best = SaSampler::new(variant)
+                .sample(&graph, &params(8, 256, 4))
+                .expect("sampling succeeds")
+                .iter()
+                .map(|r| r.energy_milli)
+                .min()
+                .expect("reads");
+            assert_eq!(best, optimum, "{variant:?}");
+        }
+    }
+
+    #[test]
+    fn public_cached_sample_matches_uncached_reference() {
+        let graphs = [
+            zephyr_like(20, 1, &[0.0]),
+            zephyr_like(16, 2, &[-1.0, 0.0, 1.0]),
+            IsingGraph::new(vec![0.0; 5], vec![], vec![]),
+            IsingGraph::new(
+                vec![1.0, 0.0, -1.0, 0.0, 1.0],
+                vec![1.0, -1.0, 1.0, -1.0],
+                vec![(0, 1), (1, 2), (2, 3), (3, 4)],
+            ),
+        ];
+        let s = SaSampler::new(SaVariant::MultiSpin);
+        for (i, graph) in graphs.iter().enumerate() {
+            let p = params(8, 16, 100 + i as u64);
+            let cached = s.sample(graph, &p).expect("cached");
+            let cold = sample_sa_variant(graph, &p, SaVariant::MultiSpin, None).expect("uncached");
+            assert_eq!(result_spins(&cached), result_spins(&cold), "graph {i}");
+        }
+    }
+
+    #[test]
+    fn cache_reuses_one_entry_across_field_and_coupling_changes() {
+        let edges = vec![(0, 1), (1, 2), (2, 3), (0, 3)];
+        let first = IsingGraph::new(vec![0.0; 4], vec![1.0, -1.0, 1.0, -1.0], edges.clone());
+        let second = IsingGraph::new(vec![1.0, -1.0, 0.0, 1.0], vec![-1.0, 0.0, 1.0, 0.0], edges);
+        let p = params(8, 16, 3);
+        let s = SaSampler::new(SaVariant::MultiSpin);
+        let a = s.sample(&first, &p).expect("first sample");
+        let ptr = Arc::as_ptr(cached_entry(&s).as_ref().expect("cold fill"));
+        let b = s.sample(&second, &p).expect("warm sample");
+        let warm = cached_entry(&s).expect("warm entry");
+        assert_eq!(
+            Arc::as_ptr(&warm),
+            ptr,
+            "fields and J are not part of the key"
+        );
+        assert_eq!(warm.nodes, 4);
+        assert_eq!(warm.edges, first.edges);
+        assert_eq!(
+            result_spins(&a),
+            result_spins(
+                &sample_sa_variant(&first, &p, SaVariant::MultiSpin, None).expect("uncached first")
+            )
+        );
+        assert_eq!(
+            result_spins(&b),
+            result_spins(
+                &sample_sa_variant(&second, &p, SaVariant::MultiSpin, None)
+                    .expect("uncached second")
+            )
+        );
+    }
+
+    #[test]
+    fn cache_invalidates_when_nodes_or_ordered_edges_change() {
+        let s = SaSampler::new(SaVariant::MultiSpin);
+        let p = params(4, 8, 11);
+        let base = IsingGraph::new(vec![0.0; 4], vec![1.0, 1.0], vec![(0, 1), (1, 2)]);
+        s.sample(&base, &p).expect("base");
+        let ptr = Arc::as_ptr(cached_entry(&s).as_ref().expect("base entry"));
+
+        let extra_node = IsingGraph::new(vec![0.0; 5], vec![1.0, 1.0], vec![(0, 1), (1, 2)]);
+        let extra = s.sample(&extra_node, &p).expect("extra node");
+        let ptr_nodes = Arc::as_ptr(cached_entry(&s).as_ref().expect("node entry"));
+        assert_ne!(ptr_nodes, ptr, "node count is part of the key");
+        assert_eq!(
+            result_spins(&extra),
+            result_spins(
+                &sample_sa_variant(&extra_node, &p, SaVariant::MultiSpin, None)
+                    .expect("uncached nodes")
+            )
+        );
+
+        let reordered = IsingGraph::new(vec![0.0; 4], vec![1.0, 1.0], vec![(1, 2), (0, 1)]);
+        let reordered_out = s.sample(&reordered, &p).expect("reordered");
+        let ptr_edges = Arc::as_ptr(cached_entry(&s).as_ref().expect("edge entry"));
+        assert_ne!(ptr_edges, ptr_nodes, "edge order is part of the key");
+        assert_eq!(
+            result_spins(&reordered_out),
+            result_spins(
+                &sample_sa_variant(&reordered, &p, SaVariant::MultiSpin, None)
+                    .expect("uncached edges")
+            )
+        );
+
+        let with_loop = IsingGraph::new(
+            vec![0.0; 4],
+            vec![1.0, 1.0, 0.0],
+            vec![(1, 2), (0, 1), (2, 2)],
+        );
+        let loop_out = s.sample(&with_loop, &p).expect("self-loop");
+        let ptr_loop = Arc::as_ptr(cached_entry(&s).as_ref().expect("loop entry"));
+        assert_ne!(ptr_loop, ptr_edges, "self-loops change the raw edge list");
+        assert_eq!(
+            result_spins(&loop_out),
+            result_spins(
+                &sample_sa_variant(&with_loop, &p, SaVariant::MultiSpin, None)
+                    .expect("uncached loop")
+            )
+        );
+    }
+
+    #[test]
+    fn clones_share_the_topology_cache() {
+        let s = SaSampler::new(SaVariant::MultiSpin);
+        let c = s.clone();
+        assert!(Arc::ptr_eq(&s.coloring, &c.coloring));
+        let graph = IsingGraph::new(vec![0.0; 3], vec![-1.0], vec![(0, 1)]);
+        let p = params(4, 8, 2);
+        s.sample(&graph, &p).expect("owner sample");
+        let owner = cached_entry(&s).expect("owner cache");
+        let clone = cached_entry(&c).expect("clone sees the fill");
+        assert!(Arc::ptr_eq(&owner, &clone));
+        let warm = c.sample(&graph, &p).expect("clone sample");
+        assert_eq!(
+            Arc::as_ptr(cached_entry(&s).as_ref().expect("still cached")),
+            Arc::as_ptr(&owner)
+        );
+        assert_eq!(
+            result_spins(&warm),
+            result_spins(
+                &sample_sa_variant(&graph, &p, SaVariant::MultiSpin, None).expect("uncached")
+            )
+        );
+    }
+
+    #[test]
+    fn concurrent_cached_samples_match_the_uncached_reference() {
+        let graph = zephyr_like(18, 9, &[0.0, 1.0, -1.0]);
+        let p = params(8, 16, 21);
+        let expect = sample_sa_variant(&graph, &p, SaVariant::MultiSpin, None).expect("uncached");
+        let sampler = SaSampler::new(SaVariant::MultiSpin);
+        std::thread::scope(|scope| {
+            let joins: Vec<_> = (0..8)
+                .map(|_| scope.spawn(|| sampler.sample(&graph, &p).expect("concurrent sample")))
+                .collect();
+            for join in joins {
+                let got = join.join().expect("thread");
+                assert_eq!(result_spins(&got), result_spins(&expect));
+            }
+        });
+        let entry = cached_entry(&sampler).expect("cache filled");
+        assert_eq!(entry.nodes, graph.h.len());
+        assert_eq!(entry.edges, graph.edges);
+    }
+
+    #[test]
+    fn tabulated_and_fallback_cached_paths_match_uncached() {
+        let discrete = zephyr_like(12, 4, &[0.0, 1.0]);
+        let fractional =
+            IsingGraph::new(vec![0.0, 0.0, 0.0], vec![0.5, -0.5], vec![(0, 1), (1, 2)]);
+        let too_large_field =
+            IsingGraph::new(vec![2.0, 0.0, -2.0], vec![1.0, -1.0], vec![(0, 1), (1, 2)]);
+        let p = params(4, 32, 7);
+        let tab = SaSampler::new(SaVariant::Tabulated);
+        let msa = SaSampler::new(SaVariant::MultiSpin);
+        for (s, graph, variant) in [
+            (&tab, &discrete, SaVariant::Tabulated),
+            (&tab, &fractional, SaVariant::Tabulated),
+            (&msa, &fractional, SaVariant::MultiSpin),
+            (&msa, &too_large_field, SaVariant::MultiSpin),
+        ] {
+            let cached = s.sample(graph, &p).expect("cached path");
+            let uncached = sample_sa_variant(graph, &p, variant, None).expect("uncached path");
+            assert_eq!(
+                result_spins(&cached),
+                result_spins(&uncached),
+                "{variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    #[expect(clippy::panic)]
+    fn poisoned_coloring_lock_recovers_for_later_samples() {
+        let s = SaSampler::new(SaVariant::MultiSpin);
+        let graph = IsingGraph::new(vec![0.0; 3], vec![1.0], vec![(0, 1)]);
+        let p = params(4, 8, 1);
+        let cache = Arc::clone(&s.coloring);
+        let join = std::thread::spawn(move || {
+            let _guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+            panic!("poison the coloring cache");
+        });
+        assert!(join.join().is_err());
+        let got = s.sample(&graph, &p).expect("recovered sample");
+        let expect = sample_sa_variant(&graph, &p, SaVariant::MultiSpin, None).expect("uncached");
+        assert_eq!(result_spins(&got), result_spins(&expect));
+    }
+
+    #[tokio::test]
+    #[expect(clippy::panic)]
+    async fn cached_sample_stream_matches_uncached_reference() {
+        use quip_solver_core::StreamOutcome;
+        use std::time::Duration;
+
+        let sampler = SaSampler::new(SaVariant::MultiSpin);
+        let probe = sampler.clone();
+        let graph = IsingGraph::new(
+            vec![1.0, 0.0, -1.0, 0.0],
+            vec![1.0, -1.0, 1.0],
+            vec![(0, 1), (1, 2), (2, 3)],
+        );
+        let p = params(4, 16, 5);
+        let expect = sample_sa_variant(&graph, &p, SaVariant::MultiSpin, None).expect("uncached");
+
+        let (job_tx, job_rx) = tokio::sync::mpsc::channel::<StreamJob>(1);
+        let (out_tx, mut out_rx) = tokio::sync::mpsc::channel::<StreamResult>(1);
+        job_tx
+            .send(StreamJob {
+                job_id: b"cached-stream".to_vec(),
+                graph,
+                params: p,
+                watermark: None,
+            })
+            .await
+            .expect("send StreamJob");
+        drop(job_tx);
+
+        let pump = tokio::task::spawn_blocking(move || {
+            sampler.sample_stream(job_rx, out_tx, CancelToken::default());
+        });
+
+        let got = tokio::time::timeout(Duration::from_secs(30), out_rx.recv())
+            .await
+            .expect("timeout waiting for StreamResult")
+            .expect("output channel closed without a result");
+        let results = match got.outcome {
+            StreamOutcome::Completed(result) => result.expect("stream job should succeed"),
+            StreamOutcome::Cancelled => {
+                panic!("expected Completed outcome, got Cancelled")
+            }
+        };
+        assert_eq!(result_spins(&results), result_spins(&expect));
+        assert!(cached_entry(&probe).is_some(), "stream fills the cache");
+
+        tokio::time::timeout(Duration::from_secs(30), pump)
+            .await
+            .expect("timeout waiting for sample_stream to exit")
+            .expect("spawn_blocking join");
+    }
+}

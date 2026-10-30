@@ -28,7 +28,7 @@ The module docstring of each file under `isingmark_structured/families/` describ
 
 ## Install
 
-The package needs Python 3.11 or later, NumPy, and SciPy.
+The package needs Python 3.11 or later, NumPy, SciPy, and blake3.
 It does not need the D-Wave Ocean packages or the miner's Python bindings.
 It carries its own ports of the protocol draw and of the Zephyr coordinate helpers.
 
@@ -41,19 +41,20 @@ python -m venv .venv
 ## Generate
 
 The generator reads the live topology specification of the suite.
-The default path is `/home/carback1/quip-data/regimes/topology-live-2026-09-21.spec.json` on the research host.
+The default path is `fixtures/suite-live-2026-09-21.spec.json` in this repository.
 Give another copy with `--suite-spec`.
 The specification has 4,575 qubits and 41,474 couplers.
 
 ```bash
-isingmark-structured --family ice-glass-r8 --out ../../corpora/structured
-isingmark-structured --family tri-match-r4 --family tri-match-r6 --out ../../corpora/structured --count 24
+isingmark-structured --family ice-glass-r8
+isingmark-structured --family tri-match-r4 --family tri-match-r6 --count 24
 ```
 
 Each run writes two files for each family:
 
-- `<out>/<family>.jsonl`: a header line, then one instance per nonce.
-- `<out>/<family>.manifest.json`: the nonces and parameters of the run.
+- `corpora/<cell>.jsonl` (set the directory with `--out`): a header line, then one instance per nonce.
+- `problems/<family>/params/<cell>.json`: the nonces and parameters of the run.
+  A cell with no params file yet needs `--problem-family <family>`.
   It also holds the package hash and the exactness flag.
 
 Add `--suite-dir <qpu-suite>` to copy the suite generator hash and the per-model census into the manifest.
@@ -75,6 +76,22 @@ The generator stops with an error when the fixture lacks a qubit or a coupler of
 The header records `topology_hash`, the isingmark topology hash of the fixture.
 For `chain-h0` this value is `e66d3dfa3c9c6afb15efe29891cf9412498d94692ab5956af3ad98ba3693a02d`.
 The header also records `suite_topology_sha256`, the SHA-256 of the suite specification file.
+
+## Convert a frozen model
+
+`python -m isingmark_structured.convert` turns one research model (`.npz`) into a one-instance file.
+The file has the header of a generated file, with `generator` set to `frozen-model`, plus `problem_family`, `model_blake3` (the BLAKE3 digest of the `.npz` bytes), and `source_model`.
+It omits `generator_sha256` and `nonce_rule`, which only generated files carry.
+The converter maps the model to the fixture by qubit id, as the generator does.
+It stops with an error on a value outside `-1000` to `1000`, on qubits that the suite specification lacks, and on a model with another number of spins.
+The `reference` object of the instance holds the structure arrays of the model.
+Node groups (`tetrahedra`, `clusters`, `strong_blocks`, and `pairs` when every pair is a model coupler) appear as fixture node ids, with `id_space` set to the fixture name.
+Every other array appears under `reference.unmapped`, unchanged, with `id_space` `suite`.
+
+```bash
+python -m isingmark_structured.convert path/to/model.npz --cell ice-glass-r8 \
+  --problem-family ice-glass --source-model qpu-suite/work/cells/ice-glass-r8/models/<nonce>.npz
+```
 
 ## Verify
 

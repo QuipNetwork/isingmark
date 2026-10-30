@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("research/qblock_eval/fixtures")
+        .join("evaluation/qblock/fixtures")
         .join(name)
 }
 
@@ -143,8 +143,7 @@ fn witness_spin_limit_is_checked_below_the_byte_limit() {
 #[test]
 fn source_manifest_requires_hashes() {
     assert!(validate_source_manifest(&fixture("manifest_unhashed.json")).is_err());
-    let path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("research/qblock_eval/sources/manifest.json");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("evaluation/qblock/sources.json");
     let manifest = validate_source_manifest(&path).expect("accept Task 1 manifest unchanged");
     assert_eq!(manifest.sources.len(), 4);
     assert!(manifest.sources.iter().all(|source| !source.reproduced));

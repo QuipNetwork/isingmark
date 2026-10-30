@@ -36,11 +36,6 @@ GEMINI.md
 docs/superpowers/plans/
 .plans/
 
-# Structured instance files are generated on demand (tools/structured).
-# Only the two-instance smoke file used by the tests is tracked.
-corpora/structured/*.jsonl
-!corpora/structured/smoke-ice-glass.jsonl
-
 # Python tooling caches under tools/structured
 __pycache__/
 .pytest_cache/

@@ -1,0 +1,2615 @@
+{
+  "schema": "isingmark.research-sources/2",
+  "research_root": "/home/carback1/quip-data/regimes",
+  "digest": "blake3",
+  "sources": [
+    {
+      "id": "cpu-cargo-toml",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml",
+      "kind": "build",
+      "bytes": 4993,
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "functions": [],
+      "provenance": {
+        "rng": "rand 0.8 dependency (small_rng feature); no seeding",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Crate manifest of the representative CPU tree: dependencies (rand 0.8, quip-solver-core 0.0.2) and the AGPL-3.0-or-later license field that covers the Rust files."
+    },
+    {
+      "id": "cpu-dimer-weighted",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_weighted.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_weighted.rs",
+      "kind": "solver",
+      "bytes": 35545,
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "functions": [
+        {
+          "name": "sample",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "anneal",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "threshold",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "Group::build",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "Group::minimize",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "State::apply",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "State::single",
+          "ticket": "CPU-2"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng; per 64-lane block, then three move streams once per anneal; seeds: src/dimer_weighted.rs:332-333 (per LANES block, read_rng defined at src/sa_sampler.rs:524-529), :353-355 (once per anneal: SINGLE_SALT, GROUP_SALT, ICE_SALT)",
+        "matching_library": null,
+        "topology": "ice, path, and frustrated-block topologies through IsingGraph groups",
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Weighted dimer sampler: integer milli weights (SCALE 1000), group and single-spin moves, thresholds -ln(u) * SCALE / (2 beta). Salts SINGLE_SALT, GROUP_SALT, ICE_SALT."
+    },
+    {
+      "id": "cpu-dimer-weighted-ice",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_weighted/ice.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_weighted/ice.rs",
+      "kind": "solver",
+      "bytes": 33773,
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "functions": [
+        {
+          "name": "IceTopology::new",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "IceWorkspace::step",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "IceWorkspace::defect_step",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "IceWorkspace::propose",
+          "ticket": "CPU-2"
+        }
+      ],
+      "provenance": {
+        "rng": "none: no own seeding call in non-test code (grep found seed_from_u64 only after the test module at src/dimer_weighted/ice.rs:348). It draws from the &mut SmallRng parameters at src/dimer_weighted/ice.rs:123, :192, :306, passed by src/dimer_weighted.rs",
+        "matching_library": null,
+        "topology": "ice, path, and frustrated-block topologies through IsingGraph groups",
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Ice-loop moves for the dimer sampler."
+    },
+    {
+      "id": "cpu-dimer-weighted-paths",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_weighted/paths.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_weighted/paths.rs",
+      "kind": "solver",
+      "bytes": 10566,
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "functions": [
+        {
+          "name": "Paths::new",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "Paths::minimize",
+          "ticket": "CPU-2"
+        }
+      ],
+      "provenance": {
+        "rng": "none: no seeding call in non-test code (only src/dimer_weighted/paths.rs:178, inside the test module at :148)",
+        "matching_library": null,
+        "topology": "ice, path, and frustrated-block topologies through IsingGraph groups",
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Path moves for the dimer sampler."
+    },
+    {
+      "id": "cpu-dimer-weighted-tempering",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_weighted/tempering.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_weighted/tempering.rs",
+      "kind": "solver",
+      "bytes": 42809,
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "functions": [
+        {
+          "name": "sample",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "sample_band",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "replica_move",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "exchange",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "adapt_ladder",
+          "ticket": "CPU-2"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng; once per anneal for the initial state and four move streams; seeds: src/dimer_weighted/tempering.rs:408 (read_rng, initial state), :422-425 (single_rng, loop_rng, swap_rng, cluster_rng, each salted with a literal constant)",
+        "matching_library": null,
+        "topology": "ice, path, and frustrated-block topologies through IsingGraph groups",
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Parallel tempering variant of the dimer sampler."
+    },
+    {
+      "id": "cpu-dimer-research",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_research.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_research.rs",
+      "kind": "solver",
+      "bytes": 37749,
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "functions": [
+        {
+          "name": "contract",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "sample_dimer",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "sample_clusters",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "DimerVariant",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "clusters",
+          "ticket": "CPU-1"
+        },
+        {
+          "name": "unit_encoding",
+          "ticket": "CPU-1"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng through read_rng; per 64-lane block (cluster path); seeds: src/dimer_research.rs:371 (loop stepping by LANES), :374 (read_rng). The unit and fractional arms seed in sa_sampler.rs and dimer_fractional.rs",
+        "matching_library": null,
+        "topology": "ice, path, and frustrated-block topologies through IsingGraph groups",
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Dimer contraction and cluster sampling. clusters and unit_encoding are the shared cluster helpers that CPU-1 reconciles."
+    },
+    {
+      "id": "cpu-research",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/research.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/research.rs",
+      "kind": "solver",
+      "bytes": 34168,
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "functions": [
+        {
+          "name": "validate_common",
+          "ticket": "CPU-2"
+        }
+      ],
+      "provenance": {
+        "rng": "none: no seeding call in non-test code (grep for seed_from_u64, read_rng, from_entropy found none before the test module)",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Dependency of dimer_weighted.rs. Only validate_common is used (input checks before sampling). It caps the graph at DEFAULT_MAX_NODES = 100000 and DEFAULT_MAX_EDGES = 1000000, both defined in src/lib.rs (not imported), and uses MAX_READS and check_beta from sa_msc_f64.rs."
+    },
+    {
+      "id": "cpu-sa-msc-f64",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_msc_f64.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_msc_f64.rs",
+      "kind": "solver",
+      "bytes": 38416,
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "functions": [
+        {
+          "name": "MAX_READS",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "MAX_BETA",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "check_beta",
+          "ticket": "CPU-2"
+        },
+        {
+          "name": "energy_f64",
+          "ticket": "CPU-2"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng; per 64-lane block for initial words, once per anneal for thresholds; seeds: src/sa_msc_f64.rs:345-346 (loop stepping by LANES, read_rng), :403 (THRESHOLD_SALT)",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Dependency of research.rs and dimer_weighted.rs. Seeding sites are listed in the rng field. THRESHOLD_SALT is defined at line 80 and the scheme name RNG_SCHEME at lines 76-77. MAX_READS (4096), MAX_BETA (1e100), and check_beta bound the inputs in validate_common. energy_f64 is the parity oracle used by the dimer_weighted and dimer_research tests."
+    },
+    {
+      "id": "cpu-sa-int",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_int.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_int.rs",
+      "kind": "solver",
+      "bytes": 23355,
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "functions": [
+        {
+          "name": "IntGraph",
+          "ticket": "CPU-1"
+        },
+        {
+          "name": "draw_row",
+          "ticket": "CPU-1"
+        },
+        {
+          "name": "fill_threshold_row",
+          "ticket": "CPU-1"
+        }
+      ],
+      "provenance": {
+        "rng": "none: no seeding call in non-test code (grep for seed_from_u64, read_rng, from_entropy found none before the test module) (only seed_from_u64 hits are in src/sa_int.rs:477 onward, inside the test module at :468); fill_threshold_row takes a caller &mut SmallRng",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Dependency of dimer_research.rs (unit arm of sample_dimer: IntGraph), sa_msc.rs (draw_row, fill_threshold_row), and dimer_fractional.rs (draw_row). Integer-weight SA core that CPU-1 reconciles. dimer_fractional.rs imports only draw_row from this file and defines its own fill_threshold_row (dimer_fractional.rs:139). fill_threshold_row is used by sa_msc.rs (import at line 83)."
+    },
+    {
+      "id": "cpu-dimer-fractional",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_fractional.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/dimer_fractional.rs",
+      "kind": "solver",
+      "bytes": 19122,
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "functions": [
+        {
+          "name": "sample_fractional",
+          "ticket": "CPU-2"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng; per 64-lane block for initial words, then move streams once per anneal; seeds: src/dimer_fractional.rs:286-287 (loop stepping by LANES, read_rng), :338-339 (single_rng with SINGLE_SALT, pair_rng with PAIR_SALT), :354 (single-spin sweep offset from params.seed, no PAIR_SALT), :361 (pair pass offset with PAIR_SALT)",
+        "matching_library": null,
+        "topology": "ice, path, and frustrated-block topologies through IsingGraph groups",
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Fractional arm of sample_dimer (dimer_research.rs lines 339 to 348): taken when the graph has J = -1 and a |J| of 0.031 or 0.062. Dimer sampler path, so CPU-2."
+    },
+    {
+      "id": "cpu-sa-msc",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_msc.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_msc.rs",
+      "kind": "solver",
+      "bytes": 43587,
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "functions": [
+        {
+          "name": "MscState",
+          "ticket": "CPU-1"
+        },
+        {
+          "name": "LANES",
+          "ticket": "CPU-1"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng; once per anneal; seeds: src/sa_msc.rs:229 (threshold stream, literal salt), :233-234 (pair_rng, PAIR_SALT); MscState::random and MscState::seeded take a caller &mut rng",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Dependency of dimer_weighted.rs. Multi-spin-coded state (64 lanes) is a shared SA core that CPU-1 reconciles."
+    },
+    {
+      "id": "cpu-sa-sampler",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_sampler.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/sa_sampler.rs",
+      "kind": "solver",
+      "bytes": 65497,
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "functions": [
+        {
+          "name": "read_rng",
+          "ticket": "CPU-1"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng; per read and per 64-lane block, plus a table stream once per anneal; seeds: src/sa_sampler.rs:426 (table_rng, literal salt), :430 and :436 (per read, read_rng), :470 and :476 (per LANES block, read_rng); read_rng defined at :524-529",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Dependency of dimer_weighted.rs. read_rng derives the per-read SmallRng and is part of the shared SA core that CPU-1 reconciles."
+    },
+    {
+      "id": "cpu-sampler-core",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/sampler_core.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/sampler_core.rs",
+      "kind": "solver",
+      "bytes": 33883,
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "functions": [
+        {
+          "name": "CpuGraph",
+          "ticket": "CPU-1"
+        },
+        {
+          "name": "build_beta_schedule",
+          "ticket": "CPU-1"
+        },
+        {
+          "name": "build_seeded_beta_schedule",
+          "ticket": "CPU-1"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng; per read; seeds: src/sampler_core.rs:402 (loop over reads), :409-413 (seed mixed from base_seed and read_idx, then seed_from_u64)",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Dependency of dimer_weighted.rs. CpuGraph and the beta schedules are the shared SA core that CPU-1 reconciles."
+    },
+    {
+      "id": "cpu-coloring",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/coloring.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/src/coloring.rs",
+      "kind": "solver",
+      "bytes": 5705,
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "functions": [
+        {
+          "name": "Coloring",
+          "ticket": "CPU-1"
+        }
+      ],
+      "provenance": {
+        "rng": "none: no seeding call in non-test code or tests (grep found none)",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": null,
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Dependency of dimer_weighted.rs. Graph coloring for the shared SA core that CPU-1 reconciles."
+    },
+    {
+      "id": "cpu-pair-bench",
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/examples/pair_bench.rs",
+      "path": "problems/shared/sources/new-pow/ice-twisted-w62-dimer1200/cpu/examples/pair_bench.rs",
+      "kind": "solver",
+      "bytes": 58030,
+      "blake3": "de630b7b4e0fea2868e5f154ceff6f1fbc1cb872a72c29959216e2d44af9adb0",
+      "functions": [
+        {
+          "name": "Graph::new",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "Workspace::partition",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "Workspace::sweep",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "unit_sweep",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "single_sweep",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "houdayer",
+          "ticket": "CPU-3"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng; per job; seeds: examples/pair_bench.rs:1016-1017 (job.seed combined with args.seed_offset); read_rng is not used",
+        "matching_library": null,
+        "topology": "ice-twisted pair cell (Otsuka tile bonds with -1000 milli pair bonds)",
+        "postprocess": "exact strip polish is not in this file; see fast_bench",
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Otsuka cluster anneal for the ice-twisted pair cells, newest base (CSR adjacency, incremental boundary sums, init_hex warm start). Also the CUDA cluster kernel reference (CU-1)."
+    },
+    {
+      "id": "cpu-strips",
+      "origin": "new-pow/diversity/solvers/fast_bench/examples/cluster/strips.rs",
+      "path": "problems/shared/sources/new-pow/diversity/solvers/fast_bench/examples/cluster/strips.rs",
+      "kind": "solver",
+      "bytes": 15517,
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "functions": [
+        {
+          "name": "StripTopology::new",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "StripTopology::sweep",
+          "ticket": "CPU-3"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng. No seeding of its own in non-test code. StripTopology::sweep takes a caller &mut SmallRng (examples/cluster/strips.rs:139). The caller seeds it at examples/fast_bench.rs:840",
+        "matching_library": null,
+        "topology": "ice-twisted pair cell (Otsuka tile bonds with -1000 milli pair bonds)",
+        "postprocess": "exact strip polish",
+        "license": "AGPL-3.0-or-later, declared in new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml (license field); no LICENSE file in the source tree",
+        "redistribution": "granted"
+      },
+      "notes": "Exact strip polish used by fast_bench.rs (mod strips, solve builds StripTopology). Identical in every tree."
+    },
+    {
+      "id": "cpu-fast-bench",
+      "origin": "new-pow/diversity/solvers/fast_bench/examples/fast_bench.rs",
+      "path": "problems/shared/sources/new-pow/diversity/solvers/fast_bench/examples/fast_bench.rs",
+      "kind": "solver",
+      "bytes": 32077,
+      "blake3": "338910fe2d252a161c4c34d54e48090db468971ad118b0045ba928aadde83d96",
+      "functions": [
+        {
+          "name": "Graph::new",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "Work::partition",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "Work::sweep",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "single_sweep",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "anneal_group",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "solve",
+          "ticket": "CPU-3"
+        },
+        {
+          "name": "Exchange::step",
+          "ticket": "CPU-3"
+        }
+      ],
+      "provenance": {
+        "rng": "rand 0.8 SmallRng; per replica, per exchange step, and once for the polish; seeds: examples/fast_bench.rs:701 (per replica id), :729 (exchange step), :840 (polish stream)",
+        "matching_library": null,
+        "topology": "ice-twisted pair cell (Otsuka tile bonds with -1000 milli pair bonds)",
+        "postprocess": "exact strip polish (StripTopology)",
+        "license": "AGPL-3.0-or-later, declared in new-pow/diversity/solvers/fast_bench/Cargo.toml (byte-identical to new-pow/ice-twisted-w62-dimer1200/cpu/Cargo.toml)",
+        "redistribution": "granted"
+      },
+      "notes": "Tailored Otsuka cluster anneal, same move set as pair_bench in soft pair mode. Needs examples/cluster/strips.rs, which is imported as cpu-strips. Exchange::step (replica population resampling) is a follow-up of CPU-3 and a reference for CU-2."
+    },
+    {
+      "id": "f17-generate2",
+      "origin": "qpu-f17/generate2.py",
+      "path": "problems/twisted-ice/sources/qpu-f17/generate2.py",
+      "kind": "generator",
+      "bytes": 8556,
+      "blake3": "68e14ee41faa5edc085efc75267b8ad4fad1c94459e8d3b208dfcfebde7f34d8",
+      "functions": [
+        {
+          "name": "VARIANTS",
+          "ticket": "SC-9"
+        },
+        {
+          "name": "add_dimers",
+          "ticket": "SC-9"
+        },
+        {
+          "name": "rescale_weak",
+          "ticket": "SC-9"
+        },
+        {
+          "name": "rng_for",
+          "ticket": "SC-9"
+        }
+      ],
+      "provenance": {
+        "rng": "NumPy default_rng (PCG64); per nonce and tag; seeds: qpu-f17/generate2.py:36-38 (rng_for, sha256 of tag and nonce), used at :53 (tag dimer), :110 (tag loop), :140 (tag random-k4)",
+        "matching_library": "none (greedy walk over a NumPy permutation)",
+        "topology": "topology-live-2026-09-21.spec.json",
+        "postprocess": null,
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Dimer pair placement and weak-layer rescale for the three twisted-ice dimer recipes. Step order matters: add_dimers before rescale_weak. VARIANTS (lines 149 to 165) holds only the w62-dimer1200 recipe of the three, built as rescale_weak(add_dimers(m, n, 1200), 62), next to other variants. w62-dimer1350 and w45-dimer1200 come from wave_run.py. The |J| == 125 filter (generate2.py line 52) is what keeps pairs off tetrahedron bonds, because tile bonds have magnitude 1000 (ice.py lines 99-100). The tetra_spin mask (lines 50-51) is computed and never read, so it is not a second rule. Pairs may still share spins with tiles."
+    },
+    {
+      "id": "f17-wave-run",
+      "origin": "qpu-f17/wave_run.py",
+      "path": "problems/twisted-ice/sources/qpu-f17/wave_run.py",
+      "kind": "generator",
+      "bytes": 13702,
+      "blake3": "be5bba2357ee87a7fabc5999c96f857e2144f5600865c7eb4bbb9a06a208f35a",
+      "functions": [
+        {
+          "name": "build",
+          "ticket": "SC-9"
+        },
+        {
+          "name": "set_pair_strength",
+          "ticket": "SC-9"
+        }
+      ],
+      "provenance": {
+        "rng": "none: no seeding call in the file (grep for default_rng, Random(, sha256, rng_for found none); set_pair_strength draws nothing",
+        "matching_library": "none",
+        "topology": "topology-live-2026-09-21.spec.json",
+        "postprocess": null,
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Builds the dimer1350 and w45-dimer1200 cells from CLI pairs and weak values. set_pair_strength sets the J of every pair (or loop) edge and is called by gen100.py wave whenever pair_milli != -1000, for example ice-twisted-w62-dimer1200-p500 at -500. The three main recipes keep -1000."
+    },
+    {
+      "id": "newpow-gen100",
+      "origin": "new-pow/models-100/gen100.py",
+      "path": "problems/shared/sources/new-pow/models-100/gen100.py",
+      "kind": "generator",
+      "bytes": 35977,
+      "blake3": "02e509d49f60762eb047d8440860e042cff0086f71d5e312784da3760617e44b",
+      "functions": [
+        {
+          "name": "wave",
+          "ticket": "SC-9"
+        },
+        {
+          "name": "k4_cell",
+          "ticket": "SC-10"
+        },
+        {
+          "name": "twisted_base",
+          "ticket": "IM-2"
+        },
+        {
+          "name": "nonce_for",
+          "ticket": "IM-2"
+        },
+        {
+          "name": "check",
+          "ticket": "IM-3"
+        },
+        {
+          "name": "compare",
+          "ticket": "IM-3"
+        }
+      ],
+      "provenance": {
+        "rng": "NumPy default_rng; per nonce; seeds: new-pow/models-100/gen100.py:54 (nonce_for hashes the cohort index with sha256), :226 (rng_for from generate3.py, per nonce and cell), :263 (default_rng for the parity cell)",
+        "matching_library": "scipy.sparse.csgraph.maximum_bipartite_matching (tile matching) through ice.py",
+        "topology": "topology-live-2026-09-21.spec.json",
+        "postprocess": null,
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Extends the cohorts to 100 nonces and checks that saved models regenerate array for array. nonce_for (line 54) derives the extension nonces from a counter that starts at 13."
+    },
+    {
+      "id": "f17-generate3",
+      "origin": "qpu-f17/generate3.py",
+      "path": "problems/charged-ice/sources/qpu-f17/generate3.py",
+      "kind": "generator",
+      "bytes": 7807,
+      "blake3": "0d0b45a545ba2031a1d03d4c6e8f61b9edf8c6a5fec3eb4ab6ab15a7846098e3",
+      "functions": [
+        {
+          "name": "build",
+          "ticket": "SC-10"
+        },
+        {
+          "name": "main",
+          "ticket": "SC-10"
+        },
+        {
+          "name": "load_graph",
+          "ticket": "SC-10"
+        },
+        {
+          "name": "rng_for",
+          "ticket": "SC-10"
+        }
+      ],
+      "provenance": {
+        "rng": "NumPy default_rng (PCG64); per nonce and cell; seeds: qpu-f17/generate3.py:61-63 (rng_for), :113 (rng_for with cell name)",
+        "matching_library": "none",
+        "topology": "topology-live-2026-09-21.spec.json",
+        "postprocess": null,
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Charged-ice recipe (scale 250, background +-31, charge q in {0, +2, -2}). Only the ice-charge branch is needed. The functions enumerate_k4 and select_overlap are not selected because they serve the rejected cells ice-overlap2 and ice-all-k4."
+    },
+    {
+      "id": "suite-ice",
+      "origin": "qpu-suite/work/ice.py",
+      "path": "problems/shared/sources/qpu-suite/work/ice.py",
+      "kind": "generator",
+      "bytes": 9392,
+      "blake3": "cfe52873dac0785127111733baa0052eefe94d329e337f15c053988555255e59",
+      "functions": [
+        {
+          "name": "topology",
+          "ticket": "SC-8"
+        },
+        {
+          "name": "generate_model",
+          "ticket": "SC-8"
+        }
+      ],
+      "provenance": {
+        "rng": "NumPy default_rng (PCG64) for tiles and gauges, plus regimes.draw_couplings for weak-layer signs; per nonce; seeds: qpu-suite/work/ice.py:56-58 (default_rng from sha256 of the nonce), :100 (regimes.draw_couplings, outside this file)",
+        "matching_library": "scipy.sparse.csgraph.maximum_bipartite_matching (tile matching)",
+        "topology": "topology-live-2026-09-21.spec.json",
+        "postprocess": null,
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "F11 ice base: crossing odd pairs, tile matching, weak layer."
+    },
+    {
+      "id": "suite-ice-twisted",
+      "origin": "qpu-suite/work/ice_twisted.py",
+      "path": "problems/twisted-ice/sources/qpu-suite/work/ice_twisted.py",
+      "kind": "generator",
+      "bytes": 6166,
+      "blake3": "e318a221bca4659b3bfc19f9817c9e02f7bb98ea9e237c6c8dbf448fc13029d2",
+      "functions": [
+        {
+          "name": "generate_model",
+          "ticket": "SC-8"
+        }
+      ],
+      "provenance": {
+        "rng": "NumPy default_rng (PCG64); per nonce; seeds: qpu-suite/work/ice_twisted.py:24-26 (default_rng from sha256 of the nonce)",
+        "matching_library": "scipy.sparse.csgraph.maximum_bipartite_matching (tile matching)",
+        "topology": "topology-live-2026-09-21.spec.json",
+        "postprocess": null,
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Twisted ice: independent tile gauges on the ice base."
+    },
+    {
+      "id": "suite-ice-fields",
+      "origin": "qpu-suite/work/ice_fields.py",
+      "path": "problems/ice-fields/sources/qpu-suite/work/ice_fields.py",
+      "kind": "generator",
+      "bytes": 6173,
+      "blake3": "29a0212c63b455d4b05538ce5bf41aa317a4780c92375f4279a3d13134fa23b6",
+      "functions": [
+        {
+          "name": "generate_model",
+          "ticket": "SC-11"
+        },
+        {
+          "name": "validate_baseline",
+          "ticket": "EXP-2"
+        }
+      ],
+      "provenance": {
+        "rng": "NumPy default_rng (PCG64) plus regimes.draw_couplings; per nonce; seeds: qpu-suite/work/ice_fields.py:24-26 (default_rng), :44-45 (field nonce from sha256 and FIELD_DOMAIN, then regimes.draw_couplings)",
+        "matching_library": "scipy.sparse.csgraph.maximum_bipartite_matching (tile matching)",
+        "topology": "topology-live-2026-09-21.spec.json",
+        "postprocess": null,
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Field ice h500 and h1000 recipes. validate_baseline needs f24-plan.json and f24-runtime.json, which are retained evidence for EXP-2."
+    },
+    {
+      "id": "pp-descent",
+      "origin": "new-pow/postprocess/descent.py",
+      "path": "problems/shared/sources/new-pow/postprocess/descent.py",
+      "kind": "postprocess",
+      "bytes": 14620,
+      "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+      "functions": [
+        {
+          "name": "Ising",
+          "ticket": "CPU-7"
+        },
+        {
+          "name": "natural_moves",
+          "ticket": "CPU-7"
+        },
+        {
+          "name": "MoveSet",
+          "ticket": "CPU-7"
+        },
+        {
+          "name": "GreedyC",
+          "ticket": "CPU-7"
+        },
+        {
+          "name": "ice_tiles",
+          "ticket": "CPU-7"
+        }
+      ],
+      "provenance": {
+        "rng": "none: no own seeding call. dwave_sa forwards a seed argument to dimod (new-pow/postprocess/descent.py:211, :218) and GreedyC.descend forwards a seed to greedy.c (:319, :331)",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "natural-move descent of all 48 reads",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Natural-move descent baseline (qpu80_greedy). Imports dimod, dwave.samplers, scipy.sparse, rescore, and prep_groups."
+    },
+    {
+      "id": "pp-greedy-c",
+      "origin": "new-pow/postprocess/greedy.c",
+      "path": "problems/shared/sources/new-pow/postprocess/greedy.c",
+      "kind": "postprocess",
+      "bytes": 9165,
+      "blake3": "58b3d747498791cacbeda191dc2826ea5c9d432b792ca3a3d76c57ac4fa9e82d",
+      "functions": [
+        {
+          "name": "greedy_descent",
+          "ticket": "CPU-7"
+        }
+      ],
+      "provenance": {
+        "rng": "xs64 generator (greedy.c:75); per call; seeds: new-pow/postprocess/greedy.c:105 (seed argument), :111 (state from seed, fixed default constant if 0)",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "natural-move descent kernel",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "C kernel behind GreedyC."
+    },
+    {
+      "id": "pp-prep-groups",
+      "origin": "new-pow/gpu/scripts/prep_groups.py",
+      "path": "problems/shared/sources/new-pow/gpu/scripts/prep_groups.py",
+      "kind": "postprocess",
+      "bytes": 5287,
+      "blake3": "ef2888c34401e299636c2bc560ba8942969cfb279e435bcef7473e1cf11ddf1b",
+      "functions": [
+        {
+          "name": "extract_groups",
+          "ticket": "CPU-7"
+        }
+      ],
+      "provenance": {
+        "rng": "none: no seeding call in the file",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "group extraction for descent",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Called by descent.py; part of its dependency closure."
+    },
+    {
+      "id": "pp-pairs-py",
+      "origin": "new-pow/postprocess/optimizers/ice-pairs/pairs.py",
+      "path": "problems/twisted-ice/sources/new-pow/postprocess/optimizers/ice-pairs/pairs.py",
+      "kind": "postprocess",
+      "bytes": 4335,
+      "blake3": "ab5aade653f4f5986ae2b941eab1c46662c1e3ee9040144931647465afb7c6bc",
+      "functions": [
+        {
+          "name": "PairWorm",
+          "ticket": "CPU-8"
+        }
+      ],
+      "provenance": {
+        "rng": "none of its own: forwards the caller seed to pairworm.c (new-pow/postprocess/optimizers/ice-pairs/pairs.py:47, :58)",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "pair worm",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Python wrapper for the pair worm kernel."
+    },
+    {
+      "id": "pp-pairworm-c",
+      "origin": "new-pow/postprocess/optimizers/ice-pairs/pairworm.c",
+      "path": "problems/twisted-ice/sources/new-pow/postprocess/optimizers/ice-pairs/pairworm.c",
+      "kind": "postprocess",
+      "bytes": 19600,
+      "blake3": "0313cb94d30b5cc6ade366067f64a009a12f9ba5b20ed13632062cc013dc04b4",
+      "functions": [
+        {
+          "name": "pair_worm_descent",
+          "ticket": "CPU-8"
+        },
+        {
+          "name": "crossover",
+          "ticket": "CPU-8"
+        },
+        {
+          "name": "defect_counts",
+          "ticket": "CPU-8"
+        }
+      ],
+      "provenance": {
+        "rng": "xs64 generator; per call; seeds: new-pow/postprocess/optimizers/ice-pairs/pairworm.c:344 (seed argument), :364 (state from seed, fixed default constant if 0)",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "pair worm descent, crossover",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Pair worm C kernels."
+    },
+    {
+      "id": "pp-pairs-run",
+      "origin": "new-pow/postprocess/optimizers/ice-pairs/run.py",
+      "path": "problems/twisted-ice/sources/new-pow/postprocess/optimizers/ice-pairs/run.py",
+      "kind": "postprocess",
+      "bytes": 9738,
+      "blake3": "cfbad164206386dbb7d60b1e0853a1e99e77b964121f226bcf37a80deb0856d7",
+      "functions": [
+        {
+          "name": "schedule_pw",
+          "ticket": "CPU-8"
+        },
+        {
+          "name": "alternate",
+          "ticket": "CPU-8"
+        },
+        {
+          "name": "Context",
+          "ticket": "CPU-8"
+        },
+        {
+          "name": "Budget",
+          "ticket": "CPU-7"
+        }
+      ],
+      "provenance": {
+        "rng": "none of its own beyond nonce-derived seed; seeds: new-pow/postprocess/optimizers/ice-pairs/run.py:208 (seed from the nonce prefix), :93, :134, :144, :159 (seed plus an offset forwarded to the worm)",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "pw schedule, 0.76 s CPU budget per QPU call",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "The pw schedule (48 reads, natural descent alternated with the pair worm, crossover, anneal-quench tail). Budget is generic CPU-time accounting."
+    },
+    {
+      "id": "pp-icetiles-py",
+      "origin": "new-pow/postprocess/optimizers/ice-tiles/icetiles.py",
+      "path": "problems/shared/sources/new-pow/postprocess/optimizers/ice-tiles/icetiles.py",
+      "kind": "postprocess",
+      "bytes": 7647,
+      "blake3": "5f0551c3535046cd3d49d9cd5f1f11aadba5c2e8cdaebe9b59964720cef9c2e5",
+      "functions": [
+        {
+          "name": "TileTables",
+          "ticket": "CPU-9"
+        },
+        {
+          "name": "WormC",
+          "ticket": "CPU-9"
+        }
+      ],
+      "provenance": {
+        "rng": "none of its own: forwards the caller seed to icetiles.c (new-pow/postprocess/optimizers/ice-tiles/icetiles.py:116, :136)",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "tile worm",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Tile worm for charge and field ice."
+    },
+    {
+      "id": "pp-icetiles-c",
+      "origin": "new-pow/postprocess/optimizers/ice-tiles/icetiles.c",
+      "path": "problems/shared/sources/new-pow/postprocess/optimizers/ice-tiles/icetiles.c",
+      "kind": "postprocess",
+      "bytes": 13251,
+      "blake3": "b4b0281aac979a68d0139bc7678c2b23539c7cc9633394f393e151dafe47cf1a",
+      "functions": [
+        {
+          "name": "worm_run",
+          "ticket": "CPU-9"
+        }
+      ],
+      "provenance": {
+        "rng": "xs64 generator; per call; seeds: new-pow/postprocess/optimizers/ice-tiles/icetiles.c:282 (state from seed, fixed default constant if 0)",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "tile worm",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Tile worm C kernel."
+    },
+    {
+      "id": "pp-icetiles-method",
+      "origin": "new-pow/postprocess/optimizers/ice-tiles/method.py",
+      "path": "problems/shared/sources/new-pow/postprocess/optimizers/ice-tiles/method.py",
+      "kind": "postprocess",
+      "bytes": 4849,
+      "blake3": "d204fcc720d65151c00912717dc069c5933461626efa26bd5ec447be626f8487",
+      "functions": [
+        {
+          "name": "parse",
+          "ticket": "CPU-9"
+        },
+        {
+          "name": "Prepared",
+          "ticket": "CPU-9"
+        },
+        {
+          "name": "run",
+          "ticket": "CPU-9"
+        }
+      ],
+      "provenance": {
+        "rng": "none of its own: forwards seed plus an offset to the worm (new-pow/postprocess/optimizers/ice-tiles/method.py:59, :84, :86, :90)",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "anneal and worm method strings",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Method string parser and runner for the ice-tiles optimizer."
+    },
+    {
+      "id": "pp-pairs-makefile",
+      "origin": "new-pow/postprocess/optimizers/ice-pairs/Makefile",
+      "path": "problems/twisted-ice/sources/new-pow/postprocess/optimizers/ice-pairs/Makefile",
+      "kind": "build",
+      "bytes": 270,
+      "blake3": "7603f53bf6e7fc3a980ffbfd883a9d942c998c29beab7f109635a70025276c59",
+      "functions": [],
+      "provenance": {
+        "rng": null,
+        "matching_library": null,
+        "topology": null,
+        "postprocess": null,
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Builds the pair worm shared library (the .so binary is not imported)."
+    },
+    {
+      "id": "pp-tiles-makefile",
+      "origin": "new-pow/postprocess/optimizers/ice-tiles/Makefile",
+      "path": "problems/shared/sources/new-pow/postprocess/optimizers/ice-tiles/Makefile",
+      "kind": "build",
+      "bytes": 270,
+      "blake3": "b80b7ba384739c8197d0240f65d285a95ae6223ae3f62616f97886a3e2a53008",
+      "functions": [],
+      "provenance": {
+        "rng": null,
+        "matching_library": null,
+        "topology": null,
+        "postprocess": null,
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Builds the tile worm shared library (the .so binary is not imported)."
+    },
+    {
+      "id": "newpow-rescore",
+      "origin": "new-pow/rescore.py",
+      "path": "problems/shared/sources/new-pow/rescore.py",
+      "kind": "script",
+      "bytes": 11056,
+      "blake3": "6c089a7dc8cd71418d328200612aa53015c4555ff508ed36040f9341bcf661c5",
+      "functions": [],
+      "provenance": {
+        "rng": "none: no seeding call in the file",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "integer milli rescoring",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Integer-milli rescoring convention of the A controls. Its CELLS table is imported by descent.py and gen100.py."
+    },
+    {
+      "id": "pp-write-targets-100",
+      "origin": "new-pow/postprocess/write_targets_pp_100.py",
+      "path": "problems/shared/sources/new-pow/postprocess/write_targets_pp_100.py",
+      "kind": "script",
+      "bytes": 7651,
+      "blake3": "758083178c1a75afd03a68835be973d3c45855c05cece8377a5c4a13e58f320b",
+      "functions": [],
+      "provenance": {
+        "rng": "none: no seeding call in the file",
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "target assembly",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Reference assembly of the 100-row target file (min of pp_best and qpu80_greedy)."
+    },
+    {
+      "id": "pp-icetiles-specs",
+      "origin": "new-pow/postprocess/optimizers/ice-tiles/specs.json",
+      "path": "problems/shared/sources/new-pow/postprocess/optimizers/ice-tiles/specs.json",
+      "kind": "target-manifest",
+      "bytes": 1708,
+      "blake3": "8b5a4eb7174dbd971ef1fd70cff9a7643321c3bdbdc87cde858477d29029ca7d",
+      "functions": [],
+      "provenance": {
+        "rng": null,
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "anneal:sa=1,b0=2,len=64,fe=16,nat48=1 (ice-charge); anneal:b0=2,nat48=1 (field ice)",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Method string per ice-tiles cell."
+    },
+    {
+      "id": "targets-pp",
+      "origin": "new-pow/targets-pp.json",
+      "path": "problems/shared/sources/new-pow/targets-pp.json",
+      "kind": "target-manifest",
+      "bytes": 419376,
+      "blake3": "c1d5e5a0c30b8f1510fc3d890fb8bd3c311a7e3a3f0e79c434dfb0559f68530c",
+      "functions": [],
+      "provenance": {
+        "rng": null,
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "ice-pairs pw 0.76 s; ice-tiles anneal 0.25 s",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Postprocess targets: family, method, budget_s, qpu80_* for 91 cells x 12 rows. The 100-row version is retained evidence."
+    },
+    {
+      "id": "f17-targets",
+      "origin": "qpu-f17/adversary/targets.json",
+      "path": "problems/twisted-ice/sources/qpu-f17/adversary/targets.json",
+      "kind": "target-manifest",
+      "bytes": 85496,
+      "blake3": "dcfe7a46dcb79da8fd8fc9ef66f6ffd9ac7cc563022361c7b2c2df604b63f812",
+      "functions": [],
+      "provenance": {
+        "rng": null,
+        "matching_library": null,
+        "topology": null,
+        "postprocess": "qpu80_best",
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "QPU best targets including the -ext rows (12 + 12 per w62 cell)."
+    },
+    {
+      "id": "topology-live",
+      "origin": "topology-live-2026-09-21.spec.json",
+      "path": "fixtures/suite-live-2026-09-21.spec.json",
+      "kind": "topology",
+      "bytes": 589231,
+      "blake3": "2249dc8aa95c67dbb09794e19efc1ebc2d2f8bfcfb4a1a79ff3bf76c33eb9bde",
+      "functions": [],
+      "provenance": {
+        "rng": null,
+        "matching_library": null,
+        "topology": "Advantage2 live topology, 2026-09-21",
+        "postprocess": null,
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Zephyr topology spec: 4575 nodes, 41474 edges. Loaded by every generator. Hash matches source_sha256 in the ice-twisted cell manifest."
+    }
+  ],
+  "duplicates": [
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/fast_bench/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/examples/pair_bench.rs",
+      "blake3": "de630b7b4e0fea2868e5f154ceff6f1fbc1cb872a72c29959216e2d44af9adb0",
+      "same_as": "cpu-pair-bench"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-stack-2/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L22/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-p500/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1350/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w90-dimer1200/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    },
+    {
+      "origin": "new-pow/postprocess/optimizers/constraints/descent.py",
+      "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+      "same_as": "pp-descent"
+    },
+    {
+      "origin": "new-pow/postprocess/optimizers/constraints/greedy.c",
+      "blake3": "58b3d747498791cacbeda191dc2826ea5c9d432b792ca3a3d76c57ac4fa9e82d",
+      "same_as": "pp-greedy-c"
+    },
+    {
+      "origin": "new-pow/postprocess/optimizers/dimers/descent.py",
+      "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+      "same_as": "pp-descent"
+    },
+    {
+      "origin": "new-pow/postprocess/optimizers/ice-pairs/descent.py",
+      "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+      "same_as": "pp-descent"
+    },
+    {
+      "origin": "new-pow/postprocess/optimizers/ice-pairs/greedy.c",
+      "blake3": "58b3d747498791cacbeda191dc2826ea5c9d432b792ca3a3d76c57ac4fa9e82d",
+      "same_as": "pp-greedy-c"
+    },
+    {
+      "origin": "new-pow/postprocess/optimizers/ice-tiles/descent.py",
+      "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+      "same_as": "pp-descent"
+    },
+    {
+      "origin": "new-pow/postprocess/optimizers/ice-tiles/greedy.c",
+      "blake3": "58b3d747498791cacbeda191dc2826ea5c9d432b792ca3a3d76c57ac4fa9e82d",
+      "same_as": "pp-greedy-c"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/constraints/descent.py",
+      "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+      "same_as": "pp-descent"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/constraints/greedy.c",
+      "blake3": "58b3d747498791cacbeda191dc2826ea5c9d432b792ca3a3d76c57ac4fa9e82d",
+      "same_as": "pp-greedy-c"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/dimers/descent.py",
+      "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+      "same_as": "pp-descent"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/ice-pairs/Makefile",
+      "blake3": "7603f53bf6e7fc3a980ffbfd883a9d942c998c29beab7f109635a70025276c59",
+      "same_as": "pp-pairs-makefile"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/ice-pairs/descent.py",
+      "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+      "same_as": "pp-descent"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/ice-pairs/greedy.c",
+      "blake3": "58b3d747498791cacbeda191dc2826ea5c9d432b792ca3a3d76c57ac4fa9e82d",
+      "same_as": "pp-greedy-c"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/ice-pairs/pairs.py",
+      "blake3": "ab5aade653f4f5986ae2b941eab1c46662c1e3ee9040144931647465afb7c6bc",
+      "same_as": "pp-pairs-py"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/ice-pairs/pairworm.c",
+      "blake3": "0313cb94d30b5cc6ade366067f64a009a12f9ba5b20ed13632062cc013dc04b4",
+      "same_as": "pp-pairworm-c"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/ice-tiles/Makefile",
+      "blake3": "b80b7ba384739c8197d0240f65d285a95ae6223ae3f62616f97886a3e2a53008",
+      "same_as": "pp-tiles-makefile"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/ice-tiles/descent.py",
+      "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+      "same_as": "pp-descent"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/ice-tiles/greedy.c",
+      "blake3": "58b3d747498791cacbeda191dc2826ea5c9d432b792ca3a3d76c57ac4fa9e82d",
+      "same_as": "pp-greedy-c"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/ice-tiles/icetiles.c",
+      "blake3": "b4b0281aac979a68d0139bc7678c2b23539c7cc9633394f393e151dafe47cf1a",
+      "same_as": "pp-icetiles-c"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/ice-tiles/icetiles.py",
+      "blake3": "5f0551c3535046cd3d49d9cd5f1f11aadba5c2e8cdaebe9b59964720cef9c2e5",
+      "same_as": "pp-icetiles-py"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/ice-tiles/method.py",
+      "blake3": "d204fcc720d65151c00912717dc069c5933461626efa26bd5ec447be626f8487",
+      "same_as": "pp-icetiles-method"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/ice-tiles/specs.json",
+      "blake3": "8b5a4eb7174dbd971ef1fd70cff9a7643321c3bdbdc87cde858477d29029ca7d",
+      "same_as": "pp-icetiles-specs"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/Cargo.toml",
+      "blake3": "f3fd76205388ff2545b01e5c19f3d4f20e15bb474712cfa5a5cdfcdd200e46a9",
+      "same_as": "cpu-cargo-toml"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/examples/cluster/strips.rs",
+      "blake3": "5f60b6df473e1ec880525b282c3816607120c505699b1a2b6dbb6d91c87a5b45",
+      "same_as": "cpu-strips"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/coloring.rs",
+      "blake3": "cb981b5f8616eeb7a3a7e5684575bf89c115c47b1d0199d90ac78c4f13312e50",
+      "same_as": "cpu-coloring"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/dimer_fractional.rs",
+      "blake3": "0debb1918497e69d359f7d9aa8bf7e5e625ef2e865c0d8d8e4b8becfb6e6225e",
+      "same_as": "cpu-dimer-fractional"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/dimer_research.rs",
+      "blake3": "9af69ac7ecbabb68add222158533ddc4ff0ba3869f056ae30f98206178215452",
+      "same_as": "cpu-dimer-research"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/dimer_weighted.rs",
+      "blake3": "5fe0c0011b83eb9d803943d37dba1f2ce107ccb4f6c413c7b6e53cc413402684",
+      "same_as": "cpu-dimer-weighted"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/dimer_weighted/ice.rs",
+      "blake3": "ef6a68d63e5cf3481bf7513fe9768b7756fb2420f34ac20fdbbdfdcc65a8d0e8",
+      "same_as": "cpu-dimer-weighted-ice"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/dimer_weighted/paths.rs",
+      "blake3": "46ca72d1e7e6452b58dae8ce9f2dca972e9bb8c076fb1b685be5db37b3e1629b",
+      "same_as": "cpu-dimer-weighted-paths"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/dimer_weighted/tempering.rs",
+      "blake3": "e0f143e33deb6f8b7cf99c1a55e160c7d495d52142d2bc107fa11ec6ae35cb07",
+      "same_as": "cpu-dimer-weighted-tempering"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/research.rs",
+      "blake3": "1a7a3fef66c473ab51b7bbec0e87c3e869499695de61ef41ca63934013e0e208",
+      "same_as": "cpu-research"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/sa_int.rs",
+      "blake3": "548d8bfb41972d68b755d084af5bb1bd69278632576ffdcdfef6035079d3fb8b",
+      "same_as": "cpu-sa-int"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/sa_msc.rs",
+      "blake3": "f7fcdde37a86cf70073f1fcb942163bd10d872e62840f909eda7069dbb70d1a2",
+      "same_as": "cpu-sa-msc"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/sa_msc_f64.rs",
+      "blake3": "61f7179dd5924c728227369b2d3ef7cf69be86fab8fca8500406ff265d73c759",
+      "same_as": "cpu-sa-msc-f64"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/sa_sampler.rs",
+      "blake3": "cbe4f31d13dce6ee206bbcb466eef5db3a06c6950f02446bff42966678ce8ba0",
+      "same_as": "cpu-sa-sampler"
+    },
+    {
+      "origin": "qpu-f17/adversary/cpu/src/sampler_core.rs",
+      "blake3": "7ed1a2059db029ef07adeea18b31aa298b9164bedfa81d819efdaf000cd7063d",
+      "same_as": "cpu-sampler-core"
+    }
+  ],
+  "retained_evidence": [
+    {
+      "origin": "qpu-suite/work/cells/ice-twisted/nonces.json",
+      "reason": "24-nonce master list (default_rng(20260920), 24 x rng.bytes(32)); frozen fixture, imported by EXP-2 (QUI-2002)"
+    },
+    {
+      "origin": "qpu-suite/work/cells/ice-fields-h500/nonces.json",
+      "reason": "byte-identical to the 24-nonce master list; frozen fixture, imported by EXP-2 (QUI-2002)"
+    },
+    {
+      "origin": "qpu-suite/work/cells/ice-fields-h1000/nonces.json",
+      "reason": "byte-identical to the 24-nonce master list; frozen fixture, imported by EXP-2 (QUI-2002)"
+    },
+    {
+      "origin": "qpu-f17/work/cells/*/nonces.json",
+      "reason": "12-nonce screen cohort (master[:12]) of the dimer1200, dimer1350, w45-dimer1200, and ice-charge cells; frozen fixture, imported by EXP-2 (QUI-2002)"
+    },
+    {
+      "origin": "new-pow/nonces-100.json",
+      "reason": "100-nonce extended cohort list; frozen fixture, imported by EXP-2 (QUI-2002)"
+    },
+    {
+      "origin": "qpu-suite/work/cells/*/manifest.json",
+      "reason": "cell manifests with weak, pairs, pair_milli, and source_sha256 fields; frozen fixture, imported by EXP-2 (QUI-2002)"
+    },
+    {
+      "origin": "qpu-f17/work/cells/*/manifest.json",
+      "reason": "cell manifests of the dimer and ice-charge cells; frozen fixture, imported by EXP-2 (QUI-2002)"
+    },
+    {
+      "origin": "new-pow/models-100/*/record.json",
+      "reason": "per-cell index_map and check records of the 100-nonce cohorts (24 of 24, 24 of 24, 12 of 12 reproduced); frozen fixture, imported by EXP-2 (QUI-2002)"
+    },
+    {
+      "origin": "qpu-suite/work/cells/*/models/*.npz",
+      "reason": "saved base and field-ice models; frozen fixture, imported by EXP-2 (QUI-2002)"
+    },
+    {
+      "origin": "qpu-f17/work/cells/*/models/*.npz",
+      "reason": "saved dimer and ice-charge models (12 to 24 per cell, about 132 KB each); frozen fixture, imported by EXP-2 (QUI-2002)"
+    },
+    {
+      "origin": "qpu-suite/work/f24-plan.json",
+      "reason": "frozen field-ice plan, input of validate_baseline; frozen fixture, imported by EXP-2 (QUI-2002)"
+    },
+    {
+      "origin": "qpu-suite/work/f24-runtime.json",
+      "reason": "frozen field-ice runtime record; frozen fixture, imported by EXP-2 (QUI-2002)"
+    },
+    {
+      "origin": "new-pow/targets-pp-100.json",
+      "reason": "measurement-scale data: 100 postprocess target rows per cell (3471993 bytes); not imported by maintainer ruling"
+    },
+    {
+      "origin": "new-pow/models-100/manifest.json",
+      "reason": "measurement-scale data: per-model record for all cells (1123984 bytes); not imported by maintainer ruling"
+    },
+    {
+      "origin": "new-pow/models-100/*/models/",
+      "reason": "bulk regenerated model archives of the 100-nonce cohorts"
+    },
+    {
+      "origin": "new-pow/models-100/build-report.md",
+      "reason": "documents the add-before-rescale trap and the generators that failed reproduction"
+    },
+    {
+      "origin": "new-pow/README.md",
+      "reason": "cohort history prose; its cohort table omits w45-dimer1200, so use the record.json files"
+    },
+    {
+      "origin": "solver-properties.json",
+      "reason": "chip properties (Advantage2_system1); not loaded by any selected generator"
+    },
+    {
+      "origin": "qpu-f17/work/cells/*/gpu/",
+      "reason": "raw GPU results"
+    },
+    {
+      "origin": "qpu-f17/work/cells/*/summary-*.json",
+      "reason": "per-run summaries"
+    },
+    {
+      "origin": "qpu-f17/queue/",
+      "reason": "QPU capture machinery and raw captures"
+    },
+    {
+      "origin": "qpu-f17/capture_worker_f17.py",
+      "reason": "QPU capture worker"
+    },
+    {
+      "origin": "qpu-f17/generate.py",
+      "reason": "cbfm, parity, 1800-pair, and window cells; not one of the selected recipes"
+    },
+    {
+      "origin": "qpu-f17/generate5.py",
+      "reason": "cell recipe outside the selected set"
+    },
+    {
+      "origin": "qpu-f17/generate6.py",
+      "reason": "cell recipe outside the selected set; repeats the wave body"
+    },
+    {
+      "origin": "qpu-f17/generate7.py",
+      "reason": "cell recipe outside the selected set"
+    },
+    {
+      "origin": "qpu-f17/window.py",
+      "reason": "window cell recipe outside the selected set"
+    },
+    {
+      "origin": "qpu-f17/adversary/*.py",
+      "reason": "classical attack code and analysis"
+    },
+    {
+      "origin": "qpu-suite/work/experiment.py",
+      "reason": "only model_hash is used, by main functions that are not selected"
+    },
+    {
+      "origin": "new-pow/postprocess/optimizers/*/report.md",
+      "reason": "optimizer reports and budget rationale"
+    },
+    {
+      "origin": "new-pow/postprocess/optimizers/*/measurements/",
+      "reason": "measurement archives"
+    },
+    {
+      "origin": "new-pow/postprocess/pp-symmetry/",
+      "reason": "symmetry experiment copies other than the byte-identical duplicates listed in this manifest"
+    },
+    {
+      "origin": "qpu-suite/quip-miner-cpu/LICENSE",
+      "reason": "GNU AGPL v3 text of a separate vendored miner subtree; it is not evidence for the selected files"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/examples/pair_bench.rs",
+      "reason": "parameter delta P1: --beta-knee and --knee-frac two-segment anneal (8d8832b987 in L9 and L13)"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/examples/pair_bench.rs",
+      "reason": "parameter delta P1, same content as L13"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L18/cpu/examples/pair_bench.rs",
+      "reason": "algorithm delta D2: Graph::pair_strength for pair bonds other than -1000 milli; same content in L22 and p500"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-loop4x300/cpu/examples/pair_bench.rs",
+      "reason": "algorithm delta D1: union-find loop units for closed 4-loops (CPU-3 evidence, CPU-12 conserved loops)"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/examples/pair_par.rs",
+      "reason": "algorithm delta D3: threaded replica anneal with synchronization segments (also in w62-dimer1350 and w90-dimer1200)"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w45-dimer1200/cpu/examples/pair_bench.rs",
+      "reason": "parameter delta P2: --beta-knot piecewise anneal on the older non-CSR base (also in w62-dimer1350 and w90-dimer1200)"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L13/cpu/examples/l9_fast.rs",
+      "reason": "algorithm delta D4: lean multi-thread Otsuka anneal with wall-deadline mode; CU-1 reference"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200-L9/cpu/examples/l9_fast.rs",
+      "reason": "algorithm delta D4 variant that differs only in state output"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/examples/pair_bench.rs",
+      "reason": "non-algorithm delta N1: older pair_bench base without CSR, boundary sums, or init_hex (also in w62-dimer, w90-dimer, adversary, diversity/fast_bench)"
+    },
+    {
+      "origin": "new-pow/ice-twisted-dimer/cpu/examples/fast_bench.rs",
+      "reason": "non-algorithm delta N2: adds --states NPY output"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer/cpu/examples/fast_bench.rs",
+      "reason": "non-algorithm delta N2: older fast_bench variant (also in w90-dimer)"
+    },
+    {
+      "origin": "new-pow/ice-twisted-*/cpu/examples/sb_bench.rs",
+      "reason": "non-algorithm delta N3: discrete SB bench driver, unrelated to the selected algorithms"
+    },
+    {
+      "origin": "new-pow/ice-twisted-w62-dimer1200/cpu/src/",
+      "reason": "all other kernels, src/bin, and tests of the representative tree; every src and tests file is byte-identical across the 15 trees"
+    },
+    {
+      "origin": "new-pow/diversity/solvers/*/",
+      "reason": "16 standalone sibling annealers and generators with their own Cargo.toml and no license field"
+    },
+    {
+      "origin": "qpu-f17/work/cells/ice-twisted-w62-dimer1200/models/",
+      "reason": "per-nonce models"
+    }
+  ],
+  "skipped_checks": [
+    {
+      "check": "SC-2 golden format",
+      "reason": "The golden format is not defined yet (QUI-2000, Backlog)."
+    },
+    {
+      "check": "SC-7 conformance checks",
+      "reason": "The conformance check format is not defined yet (QUI-2019, Backlog)."
+    },
+    {
+      "check": "sha256sum check",
+      "reason": "Replaced by the blake3 check in the Rust test, per maintainer ruling 2026-10-29."
+    }
+  ]
+}

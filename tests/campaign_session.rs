@@ -30,7 +30,7 @@ use serde_json::{json, Value};
 
 fn fixture(path: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("research/qblock_eval")
+        .join("evaluation/qblock")
         .join(path)
 }
 

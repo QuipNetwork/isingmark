@@ -1,0 +1,164 @@
+[package]
+name = "quip-miner-cpu"
+version = "0.3.4-rc3"
+edition = "2021"
+description = "CPU Ising miners: simulated annealing and single-site Gibbs (v0.3)"
+license = "AGPL-3.0-or-later"
+repository = "https://gitlab.com/quip.network/quip-miner-cpu"
+rust-version = "1.97"
+
+[lib]
+name = "quip_miner_cpu"
+path = "src/lib.rs"
+
+[[bin]]
+name = "quip-cpu-sa"
+path = "src/bin/quip_cpu_sa.rs"
+
+[[bin]]
+name = "quip-cpu-gibbs"
+path = "src/bin/quip_cpu_gibbs.rs"
+
+# Not feature-gated: discrete SB is the production track.
+[[bin]]
+name = "quip-cpu-sb"
+path = "src/bin/quip_cpu_sb.rs"
+
+# Ballistic SB. Experimental track, so this target names itself here rather than
+# relying on automatic discovery under src/bin: a discovered target carries no
+# required-features gate and would build on a plain cargo build.
+[[bin]]
+name = "quip-cpu-bsb"
+path = "src/bin/quip_cpu_bsb.rs"
+required-features = ["experimental"]
+
+# Heated discrete SB. Experimental track, gated for the same reason as bsb.
+[[bin]]
+name = "quip-cpu-hdsb"
+path = "src/bin/quip_cpu_hdsb.rs"
+required-features = ["experimental"]
+
+# Heated ballistic SB. Experimental track, gated for the same reason as bsb.
+[[bin]]
+name = "quip-cpu-hbsb"
+path = "src/bin/quip_cpu_hbsb.rs"
+required-features = ["experimental"]
+
+# Edge-of-chaos generalized bSB. Experimental track, gated for the same reason as bsb.
+[[bin]]
+name = "quip-cpu-gbsb"
+path = "src/bin/quip_cpu_gbsb.rs"
+required-features = ["experimental"]
+
+# Edge-of-chaos control on the discrete coupling. Experimental track.
+[[bin]]
+name = "quip-cpu-gdsb"
+path = "src/bin/quip_cpu_gdsb.rs"
+required-features = ["experimental"]
+
+# Tabu-enhanced dSB. Experimental track.
+[[bin]]
+name = "quip-cpu-tedsb"
+path = "src/bin/quip_cpu_tedsb.rs"
+required-features = ["experimental"]
+
+# Replica-ring dSB. Experimental track.
+[[bin]]
+name = "quip-cpu-sbqa"
+path = "src/bin/quip_cpu_sbqa.rs"
+required-features = ["experimental"]
+
+# Globally guided dSB. Experimental track.
+[[bin]]
+name = "quip-cpu-ggdsb"
+path = "src/bin/quip_cpu_ggdsb.rs"
+required-features = ["experimental"]
+
+# Tabulated-threshold annealing. Experimental track, gated for the same reason
+# as bsb.
+[[bin]]
+name = "quip-cpu-fsa"
+path = "src/bin/quip_cpu_fsa.rs"
+required-features = ["experimental"]
+
+# Multi-spin coded annealing. Experimental track.
+[[bin]]
+name = "quip-cpu-msa"
+path = "src/bin/quip_cpu_msa.rs"
+required-features = ["experimental"]
+
+# Tensor network. Experimental track, gated for the same reason as bsb.
+[[bin]]
+name = "quip-cpu-mps"
+path = "src/bin/quip_cpu_mps.rs"
+required-features = ["experimental"]
+
+# Mean-field annealing: the same kernel pinned to bond dimension 1.
+[[bin]]
+name = "quip-cpu-mfa"
+path = "src/bin/quip_cpu_mfa.rs"
+required-features = ["experimental"]
+
+# BP-gauged tensor network on the problem graph. Experimental track, gated
+# for the same reason as bsb.
+[[bin]]
+name = "quip-cpu-flatiron"
+path = "src/bin/quip_cpu_flatiron.rs"
+required-features = ["experimental"]
+
+# The experimental backends stay behind this feature, so a plain `cargo build`
+# produces only the three production binaries. CI builds, tests and lints with
+# --all-features, and a tag publishes every binary, with the release notes
+# naming the experimental ones. The feature is empty because the modules
+# compile unconditionally and only the [[bin]] targets are gated.
+[features]
+experimental = []
+
+# Single-crate package, so lints live here rather than in [workspace.lints].
+[lints.rust]
+nonstandard-style     = "warn"
+redundant-lifetimes   = "warn"
+rust-2018-idioms      = "deny"
+unreachable-pub       = "warn"
+unsafe-code           = "deny"
+unused-extern-crates  = "warn"
+unused-imports        = "warn"
+unused-must-use       = "warn"
+unused-qualifications = "warn"
+
+[lints.clippy]
+panic                 = "deny"
+panic-in-result-fn    = "deny"
+unimplemented         = "deny"
+allow-attributes      = "deny"
+dbg-macro             = "warn"
+todo                  = "deny"
+print-stdout          = "deny"
+print-stderr          = "deny"
+redundant-clone       = "warn"
+uninlined-format-args = "warn"
+manual-string-new     = "warn"
+use-self              = "warn"
+await-holding-lock    = "deny"
+large-futures         = "deny"
+exit                  = "deny"
+mem-forget            = "deny"
+
+# The Quip solver contract, published from crates.io (quip.network/quip-solver-core).
+[dependencies]
+quip-proto = "0.0.2"
+quip-protocol = "0.0.2"
+quip-solver-core = "0.0.2"
+clap = { version = "4", features = ["derive"] }
+crossbeam-channel = "0.5.16"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "io-util", "sync"] }
+rand = { version = "0.8", features = ["small_rng"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+tracing = "0.1"
+
+[dev-dependencies]
+proptest = "1.11.0"
+quip-solver-conformance = "0.0.2"
+serde_json = { version = "1", features = ["float_roundtrip"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "io-util", "sync", "process"] }

@@ -2,8 +2,8 @@
 
 ``<out>/<family>.jsonl`` holds a header line, then one line per nonce with
 ``h_milli`` and ``j_milli`` in the fixture's node and edge order.
-``<out>/<family>.manifest.json`` records the nonces, parameters, provenance
-and, with ``--suite-dir``, the suite's per-model census.
+``problems/<problem-family>/params/<cell>.json`` records the nonces, parameters,
+provenance and, with ``--suite-dir``, the suite's per-model census.
 """
 
 from __future__ import annotations
@@ -28,7 +28,10 @@ from isingmark_structured.topology import (
 )
 
 PACKAGE_DIR = Path(__file__).resolve().parent
-DEFAULT_FIXTURE = PACKAGE_DIR.parents[2] / "fixtures" / "chain-h0.spec.json"
+REPO_ROOT = PACKAGE_DIR.parents[2]
+DEFAULT_FIXTURE = REPO_ROOT / "fixtures" / "chain-h0.spec.json"
+DEFAULT_OUT = REPO_ROOT / "out" / "structured"
+DEFAULT_PROBLEMS = REPO_ROOT / "problems"
 FORMAT = 1
 MILLI_LIMIT = 1000
 # Census lists longer than this (component sizes that count every isolated spin) stay in the suite.
@@ -97,19 +100,40 @@ def suite_record(suite_dir: Path, cell: str, family: Family, nonces: list[str]) 
     return {"suite_generator_sha256": generator, "census": census}
 
 
+def params_file(problems: Path, cell: str, problem_family: str | None) -> Path:
+    """The ``problems/<family>/params/<cell>.json`` path for ``cell``.
+
+    ``problem_family`` names the folder when given. Otherwise the folder is the one that
+    already holds the cell; no match or several matches is an error.
+    """
+    if problem_family is not None:
+        return problems / problem_family / "params" / f"{cell}.json"
+    existing = sorted(problems.glob(f"*/params/{cell}.json"))
+    if len(existing) == 1:
+        return existing[0]
+    if not existing:
+        raise SystemExit(f"{cell}: no problems/*/params/{cell}.json yet; pass --problem-family")
+    raise SystemExit(f"{cell}: several params files match ({existing}); pass --problem-family")
+
+
 def build(
     cell: str,
     out: Path,
+    params_path: Path,
     count: int,
     suite: SuiteSpec,
     fixture_path: Path,
     suite_dir: Path | None,
     references: dict[str, Any],
+    update_params: bool = False,
 ) -> tuple[Path, Path]:
     family = FAMILIES[cell]
     fixture = load_fixture(fixture_path)
     mapping = FixtureMap(suite, fixture)
-    nonces = protocol.make_nonces(count)
+    if params_path.exists() and not update_params:
+        nonces = json.loads(params_path.read_text(encoding="utf-8"))["nonces"]
+    else:
+        nonces = protocol.make_nonces(count)
     port = package_sha256()
     nonce_rule = f"make_nonces({count}, {protocol.NONCE_SEED})"
     header = {
@@ -125,7 +149,6 @@ def build(
         "params": family.params,
         "nonce_rule": nonce_rule,
         "created": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "verdict": "provisional",
     }
 
     def instances() -> Iterable[dict[str, Any]]:
@@ -144,7 +167,6 @@ def build(
     manifest: dict[str, Any] = {
         "family": cell,
         "code": family.code,
-        "tier": family.tier,
         "params": family.params,
         "nonce_rule": nonce_rule,
         "nonces": nonces,
@@ -156,7 +178,6 @@ def build(
         "topology_fixture": fixture.name,
         "topology_hash": fixture.topology_hash(),
         "suite_topology_sha256": suite.sha256,
-        "verdict": "provisional",
     }
     if suite_dir is not None:
         manifest.update(suite_record(suite_dir, cell, family, nonces))
@@ -164,9 +185,10 @@ def build(
         manifest["references"] = {
             nonce: references[nonce] for nonce in nonces if nonce in references
         }
-    manifest_path = out / f"{cell}.manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    return jsonl, manifest_path
+    if update_params or not params_path.exists():
+        params_path.parent.mkdir(parents=True, exist_ok=True)
+        params_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return jsonl, params_path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -178,7 +200,22 @@ def main(argv: list[str] | None = None) -> int:
         choices=sorted(FAMILIES),
         help="cell name; repeatable",
     )
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=DEFAULT_OUT,
+        help="directory for <cell>.jsonl (default: out/structured/)",
+    )
+    parser.add_argument(
+        "--problems",
+        type=Path,
+        default=DEFAULT_PROBLEMS,
+        help="problems directory that holds <family>/params/<cell>.json (default: problems/)",
+    )
+    parser.add_argument(
+        "--problem-family",
+        help="problems/ folder for a cell that has no params file yet",
+    )
     parser.add_argument("--count", type=int, default=protocol.SUITE_MODELS)
     parser.add_argument(
         "--fixture",
@@ -195,14 +232,28 @@ def main(argv: list[str] | None = None) -> int:
         help="the qpu-suite directory; adds the suite generator hash and census",
     )
     parser.add_argument(
+        "--update-params",
+        action="store_true",
+        help="replace an existing problems/<family>/params/<cell>.json (kept by default)",
+    )
+    parser.add_argument(
         "--references", type=Path, help="JSON object mapping a nonce to its reference energies"
     )
     args = parser.parse_args(argv)
     suite = load_suite_spec(args.suite_spec)
     references = json.loads(args.references.read_text()) if args.references else {}
     for cell in args.family:
+        params_path = params_file(args.problems, cell, args.problem_family)
         jsonl, manifest = build(
-            cell, args.out, args.count, suite, args.fixture, args.suite_dir, references
+            cell,
+            args.out,
+            params_path,
+            args.count,
+            suite,
+            args.fixture,
+            args.suite_dir,
+            references,
+            args.update_params,
         )
         print(f"{cell}: wrote {jsonl} and {manifest}", flush=True)
     return 0

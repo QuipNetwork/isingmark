@@ -7,8 +7,9 @@ run. These are Ising problems with a designed structure on the live D-Wave Advan
 This page describes the families and their generation, replay, and the measurements that
 produced the verdicts.
 
-Every verdict on this page is **provisional**. The suite run was still in progress on
-2026-10-15, and the stronger classical attacks were not finished.
+The verdicts in the table below are a historical screen from 2026-10-15. The suite run was
+still in progress then, and the stronger classical attacks were not finished. For the current
+status of each cell, read `problems/<family>/README.md`.
 
 ## Why these families exist
 
@@ -32,7 +33,7 @@ The suite built 15 cells from nine families. Each cell has 24 models, drawn from
 `make_nonces(24, 20260920)`. Every model has 4,575 spins and 41,474 couplers on the live
 graph, integer couplings in milli units from −1,000 to 1,000, and zero fields.
 
-| Cell | Family | Tier | Construction | Parameters | Provisional verdict (2026-10-15) |
+| Cell | Family | Tier | Construction | Parameters | Verdict on 2026-10-15 (historical) |
 | --- | --- | --- | --- | --- | --- |
 | `ice-glass-r8` | F11 | 1 | Corner-sharing tetrahedra with antiferromagnetic strong bonds at 1,000 milli over a weak random background | `background_milli` 125 | Production QPU (48 reads, 80 µs) wins 23 of 24 against the GPU at 131,072 sweeps and 19 of 24 against CPU loops at 131,072 sweeps (700 s per model). Fails the 20-of-24 CPU gate. The 2,000 µs setting wins 24 of 24. |
 | `ice-glass-r5` | F11 | 1 | Same, stronger background | `background_milli` 200 | GPU wins 12 of 12 at 131,072 sweeps. Rejected. |
@@ -53,7 +54,7 @@ graph, integer couplings in milli units from −1,000 to 1,000, and zero fields.
 The construction of every cell is in the module docstring of its file under
 `tools/structured/isingmark_structured/families/`. The evidence for every verdict is under
 `/home/carback1/quip-data/regimes/qpu-suite/work/cells/<cell>/` on the research host, and
-the per-cell manifest in `corpora/structured/<cell>.manifest.json` records the suite's
+the per-cell parameter file in `problems/<family>/params/<cell>.json` records the suite's
 generator hash and the census of each model.
 
 ## Instance file format
@@ -61,7 +62,7 @@ generator hash and the census of each model.
 An instance file is JSONL. Line 1 is a header. Every later line is one instance.
 
 ```json
-{"kind":"header","format":1,"family":"ice-glass-r8","topology_hash":"e66d…a02d","topology_fixture":"chain-h0","nodes":4577,"edges":41515,"generator":"tools/structured","generator_sha256":"d84b…a00c","params":{"background_milli":125},"nonce_rule":"make_nonces(24, 20260920)","suite_topology_sha256":"65ef…47be","created":"2026-10-15T12:00:00Z","verdict":"provisional"}
+{"kind":"header","format":1,"family":"ice-glass-r8","topology_hash":"e66d…a02d","topology_fixture":"chain-h0","nodes":4577,"edges":41515,"generator":"tools/structured","generator_sha256":"d84b…a00c","params":{"background_milli":125},"nonce_rule":"make_nonces(24, 20260920)","suite_topology_sha256":"65ef…47be","created":"2026-10-15T12:00:00Z"}
 {"nonce":"e971…615f","h_milli":[0,0,…],"j_milli":[125,-125,1000,…]}
 ```
 
@@ -92,16 +93,18 @@ Zephyr coordinate helpers, so it does not need the D-Wave Ocean packages.
 cd tools/structured
 python -m venv .venv
 .venv/bin/pip install -e '.[test]'
-.venv/bin/isingmark-structured --family ice-glass-r8 --out ../../corpora/structured
+.venv/bin/isingmark-structured --family ice-glass-r8
 .venv/bin/isingmark-structured --family ice-twisted --family tri-match-r4 \
-  --out ../../corpora/structured --count 24
+  --count 24
 ```
 
 The generator reads the live topology specification. The default path is
-`/home/carback1/quip-data/regimes/topology-live-2026-09-21.spec.json` on the research host.
-Give another copy with `--suite-spec`. Each run writes `<out>/<cell>.jsonl` and
-`<out>/<cell>.manifest.json`. Git tracks the manifests. The generator produces the instance
-files on demand, and git ignores them, except the two-instance smoke file the tests use.
+`fixtures/suite-live-2026-09-21.spec.json` in this repository.
+Give another copy with `--suite-spec`. Each run writes `<out>/<cell>.jsonl` (default
+`out/structured/`). Git tracks `corpora/*.jsonl` and the parameter files at
+`problems/<family>/params/<cell>.json`. A full generator run writes under `out/structured/`,
+so it does not replace the tracked examples. The generator keeps an existing parameter file
+and reads its nonces. Pass `--update-params` to replace that file.
 
 The port is bit-exact with the suite generators. On 2026-10-15, the verify step matched 24 of
 24 models for every one of the 15 cells, and every shared extra array (tetrahedra, gauges,
@@ -122,9 +125,9 @@ full command reference.
 
 ```bash
 isingmark throughput --backend cpu-sa --topology-preset chain-h0 \
-  --instances corpora/structured/ice-glass-r8.jsonl --duration 10m
+  --instances corpora/ice-glass-r8.jsonl --duration 10m
 isingmark sweep --backend cpu-sa --topology-preset chain-h0 \
-  --instances corpora/structured/ice-twisted.jsonl --sweeps 8192,32768,131072
+  --instances corpora/ice-twisted.jsonl --sweeps 8192,32768,131072
 ```
 
 `--instances` and `--corpus` are mutually exclusive. An explicit `--instances` or
@@ -189,9 +192,7 @@ Until they are, this repository cannot reproduce the CPU arm.
 
 ## Limits
 
-- Verdicts are provisional until the suite run ends. The ice families were still under
-  attack on 2026-10-15.
-- The generator needs the live topology specification, which is not in this repository.
+- The table verdicts date from 2026-10-15. Current status is in `problems/<family>/README.md`.
 - The CPU kernels are not published.
 - The verify step runs only on the research host.
 - Bit-exactness depends on the NumPy and SciPy versions named in the Generate section.

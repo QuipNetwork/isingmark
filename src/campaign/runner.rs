@@ -368,7 +368,7 @@ pub async fn run_trial(
     budget: &TrialBudget,
 ) -> Result<Trial, CampaignError> {
     let profile = serde_json::from_str(include_str!(
-        "../../research/qblock_eval/configs/protocol.json"
+        "../../evaluation/qblock/configs/protocol.json"
     ))?;
     let mut runner = TrialRunner::new(
         resolve_backend(&policy.backend),
