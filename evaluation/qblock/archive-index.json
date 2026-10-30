@@ -3,7 +3,7 @@
     {
       "budget_s": 0.25,
       "cell": "ice-charge",
-      "family": "charged-ice",
+      "family": "ice-tiles",
       "method": "anneal:sa=1,b0=2,len=64,fe=16,nat48=1",
       "rows": [
         {
@@ -911,7 +911,7 @@
     {
       "budget_s": 0.25,
       "cell": "ice-fields-h500",
-      "family": "ice-fields",
+      "family": "ice-tiles",
       "method": "anneal:b0=2,nat48=1",
       "rows": [
         {
@@ -1819,7 +1819,7 @@
     {
       "budget_s": 0.25,
       "cell": "ice-fields-h1000",
-      "family": "ice-fields",
+      "family": "ice-tiles",
       "method": "anneal:b0=2,nat48=1",
       "rows": [
         {
@@ -2727,7 +2727,7 @@
     {
       "budget_s": 0.05,
       "cell": "two-commodity-routing",
-      "family": "reductions",
+      "family": "constraints",
       "method": "gadget-repair",
       "rows": [
         {
@@ -3635,7 +3635,7 @@
     {
       "budget_s": 0.76,
       "cell": "ice-twisted-w62-dimer1200",
-      "family": "twisted-ice",
+      "family": "ice-pairs",
       "method": "pw",
       "rows": [
         {
@@ -4543,7 +4543,7 @@
     {
       "budget_s": 0.76,
       "cell": "ice-twisted-w62-dimer1350",
-      "family": "twisted-ice",
+      "family": "ice-pairs",
       "method": "pw",
       "rows": [
         {
@@ -5451,7 +5451,7 @@
     {
       "budget_s": 0.76,
       "cell": "ice-twisted-w45-dimer1200",
-      "family": "twisted-ice",
+      "family": "ice-pairs",
       "method": "pw",
       "rows": [
         {

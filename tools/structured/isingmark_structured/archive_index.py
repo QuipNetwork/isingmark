@@ -20,16 +20,16 @@ SCHEMA_REVISION = 1
 DEFAULT_ROOT = Path("/home/carback1/quip-data/regimes")
 SOURCE = "new-pow/targets-pp-100.json"
 DEFAULT_OUT = Path(__file__).resolve().parents[3] / "evaluation" / "qblock" / "archive-index.json"
-# Cell id to problems/ family slug, in index order.
-CELLS = {
-    "ice-charge": "charged-ice",
-    "ice-fields-h500": "ice-fields",
-    "ice-fields-h1000": "ice-fields",
-    "two-commodity-routing": "reductions",
-    "ice-twisted-w62-dimer1200": "twisted-ice",
-    "ice-twisted-w62-dimer1350": "twisted-ice",
-    "ice-twisted-w45-dimer1200": "twisted-ice",
-}
+# The seven selected cells, in index order.
+CELLS = (
+    "ice-charge",
+    "ice-fields-h500",
+    "ice-fields-h1000",
+    "two-commodity-routing",
+    "ice-twisted-w62-dimer1200",
+    "ice-twisted-w62-dimer1350",
+    "ice-twisted-w45-dimer1200",
+)
 ENERGY_FIELDS = ("qpu80_best", "qpu80_greedy", "qpu80_pp")
 
 
@@ -51,7 +51,7 @@ def build_index(root: Path, cache: dict[str, str] | None = None) -> dict[str, An
     manifest = root / SOURCE
     targets = json.loads(manifest.read_text(encoding="utf-8"))
     cells = []
-    for cell, family in CELLS.items():
+    for cell in CELLS:
         if cell not in targets:
             raise ValueError(f"cell {cell} is not in {SOURCE}")
         target = targets[cell]
@@ -72,7 +72,7 @@ def build_index(root: Path, cache: dict[str, str] | None = None) -> dict[str, An
         cells.append(
             {
                 "cell": cell,
-                "family": family,
+                "family": target["family"],
                 "method": target["method"],
                 "budget_s": target["budget_s"],
                 "rows": rows,

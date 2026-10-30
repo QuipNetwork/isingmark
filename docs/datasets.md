@@ -242,7 +242,8 @@ The test `recorded_fixtures_are_valid` checks every file that matches
 `evaluation/qblock/archive-index.json` lists the archived research rows of seven cells. The cells
 are `ice-charge`, `ice-fields-h500`, `ice-fields-h1000`, `two-commodity-routing`,
 `ice-twisted-w62-dimer1200`, `ice-twisted-w62-dimer1350`, and `ice-twisted-w45-dimer1200`. Each cell
-has 100 rows in archive order.
+has the archive `family`, `method`, and `budget_s`, and 100 rows in archive order.
+The `family` is the archive value, not a `problems/` slug.
 
 A row holds the nonce, the model path relative to `research_root`, the blake3 digest of the model
 file, and the archived energies `qpu80_best`, `qpu80_greedy`, and `qpu80_pp`. Energies are decimal

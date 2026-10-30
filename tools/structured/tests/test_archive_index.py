@@ -55,7 +55,7 @@ def _archive(root: Path) -> dict[str, bytes]:
 
 @pytest.fixture
 def two_cells(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(archive_index, "CELLS", {"cell-a": "fam-a", "cell-b": "fam-b"})
+    monkeypatch.setattr(archive_index, "CELLS", ("cell-a", "cell-b"))
 
 
 def test_index_matches_archive(tmp_path: Path, two_cells: None) -> None:
@@ -65,7 +65,7 @@ def test_index_matches_archive(tmp_path: Path, two_cells: None) -> None:
     assert index["research_root"] == str(tmp_path)
     assert index["source"]["path"] == "new-pow/targets-pp-100.json"
     assert [c["cell"] for c in index["cells"]] == ["cell-a", "cell-b"]
-    assert [c["family"] for c in index["cells"]] == ["fam-a", "fam-b"]
+    assert [c["family"] for c in index["cells"]] == ["x", "y"]
     first = index["cells"][0]
     assert first["method"] == "pw"
     assert first["budget_s"] == 0.25
@@ -99,7 +99,7 @@ def test_model_outside_root_is_rejected(tmp_path: Path, two_cells: None) -> None
 
 def test_missing_cell_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _archive(tmp_path)
-    monkeypatch.setattr(archive_index, "CELLS", {"cell-z": "fam"})
+    monkeypatch.setattr(archive_index, "CELLS", ("cell-z",))
     with pytest.raises(ValueError, match="cell-z"):
         build_index(tmp_path)
 
