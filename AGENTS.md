@@ -113,6 +113,8 @@ reports/              import-map.md: provenance and destination tickets
 
 `tests/campaign_source_inventory.rs` validates `problems/sources.json` against the copied files. Never edit a copied source in place. Copy a new snapshot from the research workspace and update its manifest entry.
 
+`tests/campaign_import_fixtures.rs` validates every archived research fixture at `problems/<family>/fixtures/<cell>.json`. `docs/datasets.md` describes the format and the rejection rules.
+
 Solver deps (versions in `Cargo.toml`): `quip-proto`, `quip-protocol`, and `quip-solver-core`, published on crates.io from `quip.network/quip-solver-core`.
 
 Local override: copy `.cargo/config.toml.example` to `.cargo/config.toml` (gitignored) to patch those crates to a local `quip-solver-core` checkout. While the patch is active, cargo rewrites `Cargo.lock` to path sources. Before commit, confirm the lock is unchanged:
