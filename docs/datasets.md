@@ -236,3 +236,26 @@ The test `recorded_fixtures_are_valid` checks every file that matches
   `docs/backend-notes.md`.
 - `beit` cannot accept either topology. Its limit is 5000 combined non-zero
   coefficients, and these problems carry more than 46000.
+
+## Archive index
+
+`evaluation/qblock/archive-index.json` lists the archived research rows of seven cells. The cells
+are `ice-charge`, `ice-fields-h500`, `ice-fields-h1000`, `two-commodity-routing`,
+`ice-twisted-w62-dimer1200`, `ice-twisted-w62-dimer1350`, and `ice-twisted-w45-dimer1200`. Each cell
+has 100 rows in archive order.
+
+A row holds the nonce, the model path relative to `research_root`, the blake3 digest of the model
+file, and the archived energies `qpu80_best`, `qpu80_greedy`, and `qpu80_pp`. Energies are decimal
+strings. `pp_cpu_s` is a JSON number. The top level names `research_root` once and records the
+digest of the source manifest `new-pow/targets-pp-100.json`.
+
+Rebuild the index from a read-only research root:
+
+```bash
+cd tools/structured
+python -m isingmark_structured.archive_index --root /path/to/regimes
+```
+
+The test `tests/campaign_archive_index.rs` checks the index shape. It also checks that every
+archived fixture instance appears in the index with the same model path and digest. Last, it
+checks that no file under `src/` names a research path.
