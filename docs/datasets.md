@@ -202,7 +202,7 @@ validator reports it alone for that file. A fault in the file header or in
   or duplicate edges.
 - `h` has one entry per node, `j` has one entry per edge, and `scale` is
   `1000`.
-- `offset_milli`, `qubo_offset_milli` when present, and
+- `offset_milli`, `qubo_offset_milli` when it is not null, and
   `claimed_energy_milli` are decimal strings that parse as 64-bit integers. A
   JSON number in any of these fields fails validation.
 - `family_id`, `descriptor_digest`, and `params_hex` are each null or valid:
