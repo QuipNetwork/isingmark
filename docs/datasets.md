@@ -218,6 +218,16 @@ validator reports it alone for that file. A fault in the file header or in
   128-bit integers, equals `claimed_energy_milli`. `qubo_offset_milli` is
   metadata and does not enter the energy.
 
+The export command writes the fixtures of seven cells from the research
+archive. It copies each model without change and rejects a model that does not
+fit the format. It records the final postprocessed state as the witness
+`pp-final` when the archive stores it, and requires the energy of that state to
+equal `pp_best`.
+
+```bash
+python -m isingmark_structured.archive --research-root <path>
+```
+
 The validator lives in `tests/campaign_import_fixtures.rs`. Run it with:
 
 ```bash
