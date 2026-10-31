@@ -139,13 +139,16 @@ def test_fixture_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert first["archive_blake3"] == blake3(model.read_bytes()).hexdigest()
     assert first["archive_origin"] == f"models/{nonce}.npz"
     assert first["witnesses"] == [
-        {"name": "pp-final", "spins": spins, "claimed_energy_milli": "1711"}
+        {"name": "pp-final", "spins_packed": "05", "claimed_energy_milli": "1711"}
     ]
     assert first["postprocess_policy"] == {
         "family": "ice-tiles",
         "method": "anneal",
         "budget_s": 0.25,
     }
+    assert (first["n_nodes"], first["n_edges"]) == (4, 3)
+    assert "edges" not in first
+    assert first["model_digest"] == archive.model_digest(read_model(model))
     assert doc["sources"][1]["path"] == "gen.py"
     assert render(doc).endswith("}\n")
 
@@ -170,3 +173,45 @@ def test_bad_state_is_rejected(tmp_path: Path) -> None:
     fields = read_model(_write(tmp_path / "m.npz"))
     with pytest.raises(ArchiveError, match="not 1 or -1"):
         archive.witness(root, "ice-tiles", "toy", nonce, fields)
+
+
+def test_blake3_matches_known_value() -> None:
+    assert archive.blake3_hex(b"").startswith("af1349b9f5f9a1a6")
+
+
+# Pinned from the Rust upstream path (ising-generators 0.0.4) for the same synthetic instance as
+# `pinning::digests_match_the_pinned_values` in tests/campaign_import_fixtures.rs.
+PIN_TOPOLOGY_ORDER_DIGEST = "c30b0cb2b13ee310c3b6c896c68fd62641ae0221f70353af055b38a0f2e13a78"
+PIN_MODEL_DIGEST = "c421554f0a6d5d9e1df450809473ab23542b9c3b0ca1188803f05d641e9c720f"
+PIN_INSTANCE_DIGEST = "f20d5158084abd1651b738cfc304e4be7c54239553d178964feac0b6874956c5"
+PIN_FIELDS = {
+    "node_ids": [907, 41, 12],
+    "edges": [[0, 1], [0, 2]],
+    "h": [0, -500, 31],
+    "j": [-1000, 62],
+}
+
+
+def test_digests_match_the_rust_pins() -> None:
+    topology = archive.topology_order_digest(PIN_FIELDS["node_ids"], PIN_FIELDS["edges"])
+    assert topology == PIN_TOPOLOGY_ORDER_DIGEST
+    assert archive.model_digest(PIN_FIELDS, offset_milli=-5) == PIN_MODEL_DIGEST
+    # FAM-18: head (format byte, descriptor digest, topology order digest, nonce) plus body.
+    head = b"\x01" + bytes([0x22] * 32) + bytes.fromhex(topology) + bytes([0x11] * 32)
+    assert len(head) == 97
+    body = archive.instance_body(PIN_FIELDS, offset_milli=-5)
+    instance = blake3(head + body, derive_key_context="quip family instance v1").hexdigest()
+    assert instance == PIN_INSTANCE_DIGEST
+
+
+def test_pack_spins_is_lsb_first_with_zero_padding() -> None:
+    assert archive.pack_spins([1, -1, 1]) == "05"
+    assert archive.pack_spins([1] * 8 + [-1, 1]) == "ff02"
+    assert archive.pack_spins([-1] * 9) == "0000"
+    assert archive.pack_spins([1] * 12) == "ff0f"
+
+
+def test_out_of_range_coefficient_is_rejected(tmp_path: Path) -> None:
+    path = _write(tmp_path / "m.npz", h_milli=np.array([0, 2**31, 0, 0], dtype=np.int64))
+    with pytest.raises(ArchiveError, match="i32"):
+        read_model(path)

@@ -3,10 +3,11 @@
 One file per cell goes to ``problems/<family>/fixtures/<cell>.json``.
 
 For each selected cell the export takes the first two rows of the cell in ``targets-pp-100.json``,
-reads the model ``.npz`` as the research stored it, and writes its couplings unchanged: edges, h,
-and j are copied, never sorted or repaired. A model that does not fit the fixture format is
-rejected with an error. The witness of each instance is the postprocessed final state when the
-research stored it, and its energy must equal the recorded ``pp_best``.
+reads the model ``.npz`` as the research stored it, and records digests of it: the topology order
+digest (FAM-19) and the model digest over the FAM-30 instance body. The arrays stay in the
+archive. Edges, h, and j are hashed as stored, never sorted or repaired. A model that does not fit
+the format is rejected with an error. The witness of each instance is the postprocessed final
+state when the research stored it, and its energy must equal the recorded ``pp_best``.
 
 Format and rules: ``docs/datasets.md``, section "Archived research fixtures".
 """
@@ -16,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import struct
 import sys
 from pathlib import Path
 from typing import Any
@@ -43,12 +45,66 @@ CELLS: dict[str, tuple[str, str]] = {
 }
 
 
+TOPOLOGY_CONTEXT = "quip family topology order v1"
+MODEL_CONTEXT = "isingmark archived model v1"
+# FAM-30 metadata region of an instance with no sections.
+EMPTY_METADATA = b"\x00\x00"
+U32_MAX = 2**32 - 1
+I32_MAX = 2**31 - 1
+
+
 class ArchiveError(ValueError):
     """The model or its state does not fit the archived fixture format."""
 
 
 def blake3_hex(data: bytes) -> str:
     return blake3(data).hexdigest()
+
+
+def _u32(values: list[int]) -> bytes:
+    return struct.pack(f"<{len(values)}I", *values)
+
+
+def _i32(values: list[int]) -> bytes:
+    return struct.pack(f"<{len(values)}i", *values)
+
+
+def topology_order_digest(node_ids: list[int], edges: list[list[int]]) -> str:
+    """FAM-19 over native ids in instance order. ``edges`` hold dense positions."""
+    native = [node_ids[end] for edge in edges for end in edge]
+    data = _u32([len(node_ids)]) + _u32(node_ids) + _u32([len(edges)]) + _u32(native)
+    return blake3(data, derive_key_context=TOPOLOGY_CONTEXT).hexdigest()
+
+
+def instance_body(fields: dict[str, Any], offset_milli: int = 0) -> bytes:
+    """The FAM-30 body: everything after the 97-byte head, with the empty metadata region."""
+    node_ids, edges = fields["node_ids"], fields["edges"]
+    return b"".join(
+        [
+            _u32([len(node_ids)]),
+            _u32(node_ids),
+            _u32([len(edges)]),
+            _u32([end for edge in edges for end in edge]),
+            _i32(fields["h"]),
+            _i32(fields["j"]),
+            struct.pack("<q", offset_milli),
+            EMPTY_METADATA,
+        ]
+    )
+
+
+def model_digest(fields: dict[str, Any], offset_milli: int = 0) -> str:
+    body = instance_body(fields, offset_milli)
+    return blake3(body, derive_key_context=MODEL_CONTEXT).hexdigest()
+
+
+def pack_spins(spins: list[int]) -> str:
+    """Wire packing: spin i is bit ``i % 8`` of byte ``i // 8``, 1 for +1. Padding bits are 0."""
+    packed = bytearray((len(spins) + 7) // 8)
+    for index, spin in enumerate(spins):
+        if spin == 1:
+            packed[index // 8] |= 1 << (index % 8)
+    return packed.hex()
 
 
 def _int_array(model: Any, key: str, ndim: int) -> np.ndarray:
@@ -84,6 +140,11 @@ def read_model(path: Path) -> dict[str, Any]:
             )
         if j.shape[0] != edges.shape[0]:
             raise ArchiveError(f"j_milli: shape {j.shape} differs from edges {edges.shape}")
+        if nodes.size and (nodes.min() < 0 or nodes.max() > U32_MAX):
+            raise ArchiveError("physical_nodes: an id does not fit u32")
+        for key, values in (("h_milli", h), ("j_milli", j)):
+            if values.size and np.abs(values).max() > I32_MAX:
+                raise ArchiveError(f"{key}: a value does not fit i32")
         if len(set(nodes.tolist())) != nodes.size:
             raise ArchiveError("physical_nodes: duplicate node id")
         if edges.size and (edges.min() < 0 or edges.max() >= nodes.size):
@@ -150,7 +211,11 @@ def witness(root: Path, family: str, cell: str, nonce: str, fields: dict[str, An
         raise ArchiveError(
             f"{cell} {nonce}: state energy {computed} differs from pp_best {recorded}"
         )
-    return {"name": WITNESS_NAME, "spins": spins, "claimed_energy_milli": str(recorded)}
+    return {
+        "name": WITNESS_NAME,
+        "spins_packed": pack_spins(spins),
+        "claimed_energy_milli": str(recorded),
+    }
 
 
 def source_entry(repo: Path, source_id: str, sources: dict[str, dict]) -> dict[str, str]:
@@ -177,11 +242,10 @@ def build_fixture(root: Path, repo: Path, cell: str) -> dict[str, Any]:
                 "archive_blake3": blake3_hex(model_path.read_bytes()),
                 "source_recipe": {"source": source_id, "name": cell},
                 "node_order": "physical",
-                "node_ids": fields["node_ids"],
-                "edges": fields["edges"],
-                "h": fields["h"],
-                "j": fields["j"],
-                "scale": 1000,
+                "n_nodes": len(fields["node_ids"]),
+                "n_edges": len(fields["edges"]),
+                "topology_order_digest": topology_order_digest(fields["node_ids"], fields["edges"]),
+                "model_digest": model_digest(fields),
                 "offset_milli": "0",
                 "qubo_offset_milli": fields["qubo_offset_milli"],
                 "family_id": None,
@@ -201,8 +265,8 @@ def build_fixture(root: Path, repo: Path, cell: str) -> dict[str, Any]:
         "about": [
             f"Rows 0 and {ROWS_PER_CELL - 1} of {cell} in {TARGETS}, exported by "
             "tools/structured/isingmark_structured/archive.py.",
-            "Couplings are copied from the archived model without change. The witness is the "
-            "postprocessed final state, checked against pp_best.",
+            "The arrays stay in the archive. Digests follow docs/datasets.md. The witness is the "
+            "postprocessed final state, packed, and checked against pp_best.",
             f"Conversion environment: Python {platform.python_version()}, NumPy {np.__version__}, "
             f"export script blake3 {script_hash}.",
         ],
