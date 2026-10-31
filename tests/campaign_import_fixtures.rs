@@ -81,6 +81,7 @@ mod fixtures {
         family: String,
         method: String,
         budget_s: f64,
+        sources: Vec<FileRef>,
     }
 
     #[derive(Deserialize)]
@@ -90,6 +91,28 @@ mod fixtures {
         spins_packed: Option<String>,
         claimed_energy_milli: Option<String>,
         missing: Option<String>,
+        origin: Option<Origin>,
+    }
+
+    /// The archive file a spins witness came from. `array` and `index` are required keys that
+    /// may hold null.
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Origin {
+        path: String,
+        blake3: String,
+        #[serde(deserialize_with = "required")]
+        array: Option<String>,
+        #[serde(deserialize_with = "required")]
+        index: Option<i64>,
+    }
+
+    fn required<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+        T: Deserialize<'de>,
+    {
+        Option::deserialize(deserializer)
     }
 
     /// Names each i64 field written as a JSON number. The typed parse rejects these too, but
@@ -183,6 +206,54 @@ mod fixtures {
         }
     }
 
+    fn check_policy_sources(at: &str, sources: &[FileRef], errors: &mut Vec<String>) {
+        if sources.is_empty() {
+            errors.push(format!("{at}: postprocess_policy sources is empty"));
+        }
+        for source in sources {
+            if !is_safe_path(&source.path) {
+                errors.push(format!(
+                    "{at}: postprocess_policy sources has an unsafe path {:?}",
+                    source.path
+                ));
+            }
+            if !is_digest(&source.blake3) {
+                errors.push(format!(
+                    "{at}: postprocess_policy source {}: blake3 is not 64 lowercase hex characters",
+                    source.path
+                ));
+            }
+        }
+        if !sources.windows(2).all(|w| w[0].path <= w[1].path) {
+            errors.push(format!(
+                "{at}: postprocess_policy sources are not sorted by path"
+            ));
+        }
+        let unique: BTreeSet<_> = sources.iter().map(|s| s.path.as_str()).collect();
+        if unique.len() != sources.len() {
+            errors.push(format!(
+                "{at}: postprocess_policy sources has a duplicate path"
+            ));
+        }
+    }
+
+    fn check_origin(at: &str, origin: &Origin, errors: &mut Vec<String>) {
+        if !is_safe_path(&origin.path) {
+            errors.push(format!("{at}: origin has an unsafe path {:?}", origin.path));
+        }
+        if !is_digest(&origin.blake3) {
+            errors.push(format!(
+                "{at}: origin blake3 is not 64 lowercase hex characters"
+            ));
+        }
+        if origin.array.as_deref().is_some_and(str::is_empty) {
+            errors.push(format!("{at}: origin array is empty"));
+        }
+        if origin.index.is_some_and(|i| i < 0) {
+            errors.push(format!("{at}: origin index is negative"));
+        }
+    }
+
     fn check_optional(at: &str, inst: &Instance, errors: &mut Vec<String>) {
         if inst.family_id.as_deref().is_some_and(str::is_empty) {
             errors.push(format!("{at}: family_id is empty"));
@@ -212,6 +283,7 @@ mod fixtures {
         if policy.budget_s < 0.0 {
             errors.push(format!("{at}: postprocess_policy budget_s is negative"));
         }
+        check_policy_sources(at, &policy.sources, errors);
     }
 
     fn parse_i64(at: &str, field: &str, text: &str, errors: &mut Vec<String>) -> Option<i64> {
@@ -264,10 +336,17 @@ mod fixtures {
                 (Some(packed), Some(claimed), None) => {
                     parse_i64(&at, "claimed_energy_milli", claimed, errors);
                     check_packed(&at, packed, inst.n_nodes, errors);
+                    match &witness.origin {
+                        Some(origin) => check_origin(&at, origin, errors),
+                        None => errors.push(format!("{at}: a spins witness needs an origin")),
+                    }
                 }
                 (None, None, Some(reason)) => {
                     if reason.is_empty() {
                         errors.push(format!("{at}: missing reason is empty"));
+                    }
+                    if witness.origin.is_some() {
+                        errors.push(format!("{at}: a missing witness must not have an origin"));
                     }
                 }
                 _ => errors.push(format!(
@@ -411,9 +490,22 @@ fn baseline() -> Value {
             "family_id": null,
             "descriptor_digest": null,
             "params_hex": null,
-            "postprocess_policy": { "family": "ice-tiles", "method": "anneal:b0=2", "budget_s": 0.25 },
+            "postprocess_policy": {
+                "family": "ice-tiles",
+                "method": "anneal:b0=2",
+                "budget_s": 0.25,
+                "sources": [
+                    { "path": "opt/a.py", "blake3": hex('f') },
+                    { "path": "opt/b.py", "blake3": hex('1') }
+                ]
+            },
             "witnesses": [
-                { "name": "qpu-best", "spins_packed": "0f05", "claimed_energy_milli": "1593" },
+                {
+                    "name": "qpu-best",
+                    "spins_packed": "0f05",
+                    "claimed_energy_milli": "1593",
+                    "origin": { "path": "demo/qpu/a.npz", "blake3": hex('2'), "array": "spins", "index": 3 }
+                },
                 { "name": "pp-state", "missing": "state not stored in the archive" }
             ]
         }]
@@ -470,6 +562,14 @@ fn expect_error(edit: impl FnOnce(&mut Value), needle: &str) -> TestResult {
 
 fn expect_ok(edit: impl FnOnce(&mut Value)) -> TestResult {
     mutated(edit)?.map_err(|errors| format!("unexpected errors: {errors:#?}").into())
+}
+
+fn origin(fixture: &mut Value) -> &mut Value {
+    &mut inst(fixture)["witnesses"][0]["origin"]
+}
+
+fn sources(fixture: &mut Value) -> &mut Value {
+    &mut inst(fixture)["postprocess_policy"]["sources"]
 }
 
 fn inst(fixture: &mut Value) -> &mut Value {
@@ -740,6 +840,83 @@ fn bad_packed_spins_fail() -> TestResult {
         "padding bit",
     )?;
     expect_ok(|f| inst(f)["witnesses"][0]["spins_packed"] = json!("ff0f"))
+}
+
+#[test]
+fn origin_rules_fail() -> TestResult {
+    expect_error(
+        |f| {
+            if let Some(map) = inst(f)["witnesses"][0].as_object_mut() {
+                map.remove("origin");
+            }
+        },
+        "needs an origin",
+    )?;
+    expect_error(
+        |f| {
+            inst(f)["witnesses"][1]["origin"] =
+                json!({ "path": "a/b", "blake3": hex('2'), "array": null, "index": null });
+        },
+        "must not have an origin",
+    )?;
+    for path in ["/abs", "../x", "a//b"] {
+        expect_error(
+            |f| origin(f)["path"] = json!(path),
+            "origin has an unsafe path",
+        )?;
+    }
+    expect_error(
+        |f| origin(f)["blake3"] = json!("B".repeat(64)),
+        "origin blake3 is not 64 lowercase hex",
+    )?;
+    expect_error(|f| origin(f)["array"] = json!(""), "origin array is empty")?;
+    expect_error(
+        |f| origin(f)["index"] = json!(-1),
+        "origin index is negative",
+    )?;
+    for key in ["array", "index"] {
+        expect_error(
+            |f| {
+                if let Some(map) = origin(f).as_object_mut() {
+                    map.remove(key);
+                }
+            },
+            key,
+        )?;
+    }
+    expect_ok(|f| {
+        origin(f)["array"] = json!(null);
+        origin(f)["index"] = json!(null);
+    })
+}
+
+#[test]
+fn policy_sources_rules_fail() -> TestResult {
+    expect_error(|f| *sources(f) = json!([]), "sources is empty")?;
+    expect_error(
+        |f| sources(f)[0]["path"] = json!("../x"),
+        "sources has an unsafe path",
+    )?;
+    expect_error(
+        |f| sources(f)[1]["blake3"] = json!("a".repeat(63)),
+        "source opt/b.py: blake3 is not 64 lowercase hex",
+    )?;
+    expect_error(
+        |f| *sources(f) = json!([{ "path": "opt/b.py", "blake3": hex('1') }, { "path": "opt/a.py", "blake3": hex('f') }]),
+        "not sorted by path",
+    )?;
+    expect_error(
+        |f| *sources(f) = json!([{ "path": "opt/a.py", "blake3": hex('1') }, { "path": "opt/a.py", "blake3": hex('f') }]),
+        "duplicate path",
+    )?;
+    expect_error(
+        |f| {
+            if let Some(map) = inst(f)["postprocess_policy"].as_object_mut() {
+                map.remove("sources");
+            }
+        },
+        "sources",
+    )
 }
 
 #[test]
