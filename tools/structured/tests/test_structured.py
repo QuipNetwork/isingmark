@@ -173,12 +173,12 @@ def test_default_out_is_outside_the_tracked_examples() -> None:
     assert DEFAULT_OUT == ROOT / "out" / "structured"
 
 
-def _build(out: Path, params: Path, update: bool) -> None:
+def _build(out: Path, params: Path, update: bool, count: int = 1) -> None:
     build(
         "ice-glass-r8",
         out,
         params,
-        1,
+        count,
         load_suite_spec(DEFAULT_SUITE_SPEC),
         DEFAULT_FIXTURE,
         None,
@@ -206,3 +206,17 @@ def test_build_keeps_existing_params_unless_asked(tmp_path: Path) -> None:
     assert [row["nonce"] for row in instances] == [nonce]
     _build(tmp_path / "out", params, True)
     assert "port_sha256" in json.loads(params.read_text())
+
+
+def test_build_warns_when_count_is_ignored(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    params = tmp_path / "ice-glass-r8.json"
+    params.write_text(json.dumps({"nonces": ["ab" * 32]}))
+    _build(tmp_path / "out", params, False, count=1)
+    assert capsys.readouterr().err == ""
+    _build(tmp_path / "out", params, False, count=2)
+    err = capsys.readouterr().err
+    assert "--count 2 is ignored" in err
+    assert "1 nonces" in err
+    assert "--update-params" in err
