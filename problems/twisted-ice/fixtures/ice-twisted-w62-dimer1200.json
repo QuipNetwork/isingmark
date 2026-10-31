@@ -1,8 +1,8 @@
 {
   "about": [
     "Rows 0 and 1 of ice-twisted-w62-dimer1200 in new-pow/targets-pp-100.json, exported by tools/structured/isingmark_structured/archive.py.",
-    "The arrays stay in the archive. Digests follow docs/datasets.md. The witness is the postprocessed final state, packed, and checked against pp_best.",
-    "Conversion environment: Python 3.11.2, NumPy 2.4.6, export script blake3 642ecff67e1f4e83fc347150cee283381d1a32a1e00ecddcadcaef96cf50befa."
+    "The arrays stay in the archive. Digests follow docs/datasets.md. Every witness is an archived observation that was shown before: the best raw QPU read, the greedy state, and the postprocessed final state. Each energy was recomputed from the model and equals the recorded value.",
+    "Conversion environment: Python 3.11.2, NumPy 2.4.6, export script blake3 b3ff8893362773145e71e6daa4191ae3586fd25c4e6b60c25ddcdf906d4ec4ab."
   ],
   "archived_instances": [
     {
@@ -22,7 +22,29 @@
       "postprocess_policy": {
         "budget_s": 0.76,
         "family": "ice-pairs",
-        "method": "pw"
+        "method": "pw",
+        "sources": [
+          {
+            "blake3": "3bfb57fe598311b35af46dcb2d2bc8c4c551b40c7a98278c142ab0f256d21ee7",
+            "path": "new-pow/postprocess/optimizers/ice-pairs/campaign.py"
+          },
+          {
+            "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+            "path": "new-pow/postprocess/optimizers/ice-pairs/descent.py"
+          },
+          {
+            "blake3": "ab5aade653f4f5986ae2b941eab1c46662c1e3ee9040144931647465afb7c6bc",
+            "path": "new-pow/postprocess/optimizers/ice-pairs/pairs.py"
+          },
+          {
+            "blake3": "cfbad164206386dbb7d60b1e0853a1e99e77b964121f226bcf37a80deb0856d7",
+            "path": "new-pow/postprocess/optimizers/ice-pairs/run.py"
+          },
+          {
+            "blake3": "aacb5469bdab5ec06736579fdb6936a0e7f30e7e8dec06a63eec0fb50568a297",
+            "path": "new-pow/postprocess/optimizers/ice-pairs/summarize.py"
+          }
+        ]
       },
       "qubo_offset_milli": null,
       "source_recipe": {
@@ -32,8 +54,36 @@
       "topology_order_digest": "e12cffc9392cc502c5d065d6e1a3e2eabcc08247ffd55d2fe1b41988d2bc37e3",
       "witnesses": [
         {
+          "claimed_energy_milli": "-5022676",
+          "name": "qpu-best",
+          "origin": {
+            "array": "spins",
+            "blake3": "a8a028440cbcfce30240ca6ff7871fce79b07329c2baac17e030655f70016216",
+            "index": 0,
+            "path": "qpu-f17/qpu/ice-twisted-w62-dimer1200/qpu-80/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz"
+          },
+          "spins_packed": "84aae8b11b421986ba7b6a761a3e27e93038740d6e0d99c3bd995898cf77b80543eaa50ba0b55756c1ac6496ba81f7718b3ebcb914e19a80ea212486ba8060db282c8dc6047ba9118c53b9b5c7f50762c0a8857d2fa90beb897b1962a6b772030d286dc406f6523e4519be99b7d88badac9c57d43caa6f3061f9ba0698de9e4c49e27a123e55ee12ae52bedb701c5ed17f6511ccdc97e60cf220a65691682ef59b478f3a9377aa048fc833b862086fab45d12396713ec7e1000f6e2c4c52319db8216cfbf7eb769308b08c6d78187354cf7ae6ff592495491ceaa219adc20c4177d207c17070853a389922f2036f71b151f833cd13d9b0fc6e22747f78b7fd5a4b881e6b833e6f7301e5a0dca7010f6757bffd5d9c6a5294d1e7a12792d7afc2200f9ef88991d674775fb90f748b83e211076950e72beabde7d9bc02d00094866c7cbf300706cf3e2d5c1467f8b79f6c6718c7d699646f232614252e4a5bf23df8df6b29225ed317801e2cfab11c89f50a06d8693dfb251605b40633e1e769119f79595146aa8bee6d1e7d5acefce24a4fe94d1cb2c312b92115f1bf3697e0d54406db0170c3a4698d80d7d63ef780639be99892905b0d8b4ddbe9d6406f0afb55e9b10552a819b1ef26f0ae498c013d092fd5c9c2be5ab4992ce3bbf59f78463b21700c8a60e454dc147d82110ab914094b8cbe5e1afc8345b2bcc787da83e68e4c90d7ac10a02bc3a7d307d55c8c7d8dbcb48d2423cb6c3456e0313c7fc2b9e702133483de4673558070152f040d79a3d47336e15524c27397de2a"
+        },
+        {
+          "claimed_energy_milli": "-5026784",
+          "name": "greedy",
+          "origin": {
+            "array": "loop_strict",
+            "blake3": "d98cf4ba2b3fabec07ada6887ea936a72bd8a43b01054c24975d4dcf14378964",
+            "index": 0,
+            "path": "new-pow/postprocess/measurements/greedy-100/ice-twisted-w62-dimer1200/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.states.npz"
+          },
+          "spins_packed": "84aae8bd1b421986ba796a761a3e27e93038740d6e0d99c3bd995898cf77b80543eaa50ba0b55756c1ac6496ba81d7718b3ebcb914e19a80ea212486ba8060db282c8dc604fba9118c53b9b5c7f50762c0a8857d2fa90beb897b1962a6b372030d286dc40676523e4519be99b7d88badac9c57d43caa6f3061f9ba0698de9e4c49e27a123e55ee92ae52bedb701c5ed17f6511ccdc97e60cf220a65691682ef59b478f3a9377aa048fc833b862086fab45d12396713ec7e1000f6e2c4c523199b8216cfbf6eb769308b08c6d78187354cf7ae6ff592495491ceaa219adc20c4177d207c17070853a3c9922f2036f71b151f833cd13d990fc6e22747f78b7fd5a4b881e6b833e6f7301e5a0dca7010f6757bffd5d8d6a5294d1e7a12791d7afe2200f9ef88991d674775fb90f758b83e211076950e72beabde7d9bc02d00094866c7cbf300706cf3e2d5c1467f8b79f6c6708c7d699646f232614252e4a59f23df8df6b29225ed317801e2cfab11c89b50a06d8693dfb251605b40633e1e769119f79595146aa8bee6d1e7d5acefce24a4fe94d1cb2c312b92115f1bf3697e0d54406db0170c3a4698d80d7d63ef780639be99892905b0d8b4d1be9d5406f0afb55e9b10553a819b1ef26d0ae498c013d092dd5c9c2be5ab4992ce3bbf59f78463b21700c8a60e454dc147d82110ab914094b8cbe5e1afc8345b2bcc787da83e68e4c90d7ac10a02bc3a7d307f55c8d7d8dbcb48d2423cb6c3456e0313c7fc2b9e702133483de4673558070152f040d79a3f47336e15524ca7397ce2a"
+        },
+        {
           "claimed_energy_milli": "-5035060",
           "name": "pp-final",
+          "origin": {
+            "array": null,
+            "blake3": "ab6ce7da5cef6173e39b94107cd4dd30af004c9b96e57f76e134f32aac33256d",
+            "index": null,
+            "path": "new-pow/postprocess/measurements/optimizers-100/ice-pairs/ice-twisted-w62-dimer1200/states/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npy"
+          },
           "spins_packed": "066b97df197c35e48a88af686c56b8b5538838cd6a2a0902daa01c01cb03b81c4d1f2d2b885559fcfc046602bf6bb5320e3635ed79018d87dbe32ec902ce27edc9cf26012a7af269405b5a5568232322a4ca247ed90968eb1def7faa57e2e62ea9378f84083fe0ff5183be29cbf89c9f4482af2031b4eca0264beb1ea27bdcc0cde8e8422ac4c4be03fed90471887c68f9e1098d72f3f755c7c8b8f975a87307038ad6ade7a430314ef36946826ba98b64bb97d00f6f8dfa6bc493c4f30fcfe64584be400982df7cf8303395f66a8b9ef0ae473c01422f0cb909578c3608f94e4d2146fe0c4deacb4c37d5ac3c90a8ce5e87dda3fb0f57e586d76fa88af9a2ada5ff87943f66a0166f82d8f9c1eed191d036348df0d06cad12c05ede02e817012535cfdc88f2c77e364443bf2dc88b67553f2a70c10fa7d804c13a1218438386544c3be6ef0fccbfd41f0201f0356df477240944edc70e1a76b6adcdca3a86a884c0c098231bec3be3560cd2a999c691c13ffc9b1be5d80ebf4bfcac15f596e07286ba66c9d4783b09fb5ca6faab111e03ce330a111a0d168cc934c0704cbbf550c66b1cccfeca937228412735e1e6bec012610d7444435a88249071df91cb84118b9abf4dcf765242292fd24defa23aca75923083643864da206ccaaaf84a085b81d27d3963af603d94b802ffcc8e2ed302a286b7e7eb15b9ed423b58dd171dfd31735490fcb06db137b45bad8ec3e408bfb23d256dfb6c33caa029590d2ba6e6140f24c4d93ad64aae381154cc0e165e51678b249dbbbe8f011111"
         }
       ]
@@ -55,7 +105,29 @@
       "postprocess_policy": {
         "budget_s": 0.76,
         "family": "ice-pairs",
-        "method": "pw"
+        "method": "pw",
+        "sources": [
+          {
+            "blake3": "3bfb57fe598311b35af46dcb2d2bc8c4c551b40c7a98278c142ab0f256d21ee7",
+            "path": "new-pow/postprocess/optimizers/ice-pairs/campaign.py"
+          },
+          {
+            "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+            "path": "new-pow/postprocess/optimizers/ice-pairs/descent.py"
+          },
+          {
+            "blake3": "ab5aade653f4f5986ae2b941eab1c46662c1e3ee9040144931647465afb7c6bc",
+            "path": "new-pow/postprocess/optimizers/ice-pairs/pairs.py"
+          },
+          {
+            "blake3": "cfbad164206386dbb7d60b1e0853a1e99e77b964121f226bcf37a80deb0856d7",
+            "path": "new-pow/postprocess/optimizers/ice-pairs/run.py"
+          },
+          {
+            "blake3": "aacb5469bdab5ec06736579fdb6936a0e7f30e7e8dec06a63eec0fb50568a297",
+            "path": "new-pow/postprocess/optimizers/ice-pairs/summarize.py"
+          }
+        ]
       },
       "qubo_offset_milli": null,
       "source_recipe": {
@@ -65,8 +137,36 @@
       "topology_order_digest": "e12cffc9392cc502c5d065d6e1a3e2eabcc08247ffd55d2fe1b41988d2bc37e3",
       "witnesses": [
         {
+          "claimed_energy_milli": "-5026316",
+          "name": "qpu-best",
+          "origin": {
+            "array": "spins",
+            "blake3": "4f95d2b9127ae18046441168e9d6140e8620261f5b70999537fd195b5cb5bddc",
+            "index": 0,
+            "path": "qpu-f17/qpu/ice-twisted-w62-dimer1200/qpu-80/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz"
+          },
+          "spins_packed": "61ab5b234f2a7470decb2a4822965e7fdd02efae3172189b3342959eeb3e512d162e277da843188b04d448e1e99e119a228d859fa28ec7b1be3f7fa3a29d4c0558623da7461aadd82b7e3b3fa965c1398a13ad3aef1b7f7a11d5b081529747ce8ff031c370e2c211f0f1a16c74638daa4d02755024200ee23e8a4a6ce23cf908ab0fc90aaa5d5cc5577ebdd8dc9fad755bbcdfb4c633df00633c7aff79127e782c86feac9d0fbd201b0e11bb644f840534f5059ea7679ec79792cb5c9f8d99ff5c58f9c8455fe905b8921d98fd3a7d124141045a3dabdb312648f36977b8e35e29f7980a8768794bf9bdfa0ccf30044742c84ca97cb69c5db4b763e97c60417d9adb3c172c24a15f941f815eee625f8e5ac6f7c4965c1568d5b734a7242040a830098ee7ad5905eb348356e77f5cae0d0a808085e3fdd8e386a35b46703aa1b8bd99f583ea29c163a1151211619a2b6c8a7ec9b60c83b400170f0be1f902963b4545c5f4e483c261c2fa2b0bcecfea47736ed097f554d845172599653b80c1ef37290778208eb77325bcba7c6d997521ed0bed8269c47acd4390f418301bc07f04facda507c3c83a49ed554c013e1a19b181f30f2c907ea60076658f92d0c38267c975672f331e3f34778e7783aa91704f1ffe32a520addb1a6cc298791b55a6807d8b273744d2aec3120072d0af564dca5d3ad4384474ff8c820782af0f8b62782194792047a3552cc9a0a7dd512a5e3e5de352e2a54cc147351b9d85c8f4ff46071a30692659898a5f65a94705cc052ed18c46571f434a57ade01c"
+        },
+        {
+          "claimed_energy_milli": "-5034192",
+          "name": "greedy",
+          "origin": {
+            "array": "loop_strict",
+            "blake3": "7f5eb50cc50743d586405b85d51d196f8046d02d396091864b25637e857bef2a",
+            "index": 0,
+            "path": "new-pow/postprocess/measurements/greedy-100/ice-twisted-w62-dimer1200/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.states.npz"
+          },
+          "spins_packed": "61ab5b234f2a7470decb0a4862965e7fdd02efae3172189b3342959eeb3e512d162f277da843188904d548e1e99e119a228d859fa29ec7b1b63f7fa3a29d4c0558623da7463aadd82b7e3b3fa965c1398a13ad3aef1b7f7a11d5b081529747ce8ff031c370e2c211f0f1a16c74638daa4d02755024200ee23e8a4a6ce23cf908ab0fc90aaa5d5cc5577ebdd8dc9fad755bbcdf94c633df00633c7aff79127e782c86feac9d0fbd201b0e11bb644f840534f5059ea7679ec79792cb5c9f8d89ff5c58f9c8455fe905bc921d18fd3a7d124139045d3dbbdb330648f369f7b8e35e29f7980a8768794bfd9dfa0cdf30044742c84ca97cb69c5db4b763e97c60417d9adbbc162824a15f941f815eee625f8e5ac6f7c4965c1568d5b734a7242040a830019ee72d5905eb348356e77f5cae0d0a808085e3fdd8e386a35b46703a81b8bd99f583ea29c163a1141a51619aab6d8a7e49b60c83b400170f0be1f902963b4545c5f7e583c261c2fa2b0bcedfea47736ed097f554d845172599653b80c1ef37290778208eb77325bcba7c6d997521ed0bed8269c47acd4390f418301bc07f04facda507c3c83a49e5554c013e1a19b181f30f2c907ea60076658f92d0c38265e975672f331e3734778e7783aa91704f1ffe32a520addb1a6cc298793b55a7807d8b273744d2aec3160072d0af564dca5d3ad4384474ff8c820782af0f8b62782194792047a3552cc9a0a7dd512a5e3e5de352e2a54cc147351b9985c8f4ff46071a30692619898a5f65a94705cd052ed10c46571f4168d38de01c"
+        },
+        {
           "claimed_energy_milli": "-5042020",
           "name": "pp-final",
+          "origin": {
+            "array": null,
+            "blake3": "102e79e2cb534e48acb32489c3b254daa80d019667fd303288585bb1c8d9c807",
+            "index": null,
+            "path": "new-pow/postprocess/measurements/optimizers-100/ice-pairs/ice-twisted-w62-dimer1200/states/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npy"
+          },
           "spins_packed": "712b5b634f2a34f2ded31acb2216de7fd902efaa317218fb3342a59eea3a712d146f277ca843188944d548e1e99e119a238d859fa29ec7b1b63f7fa3a29d4c0558623da746baadd8ab7e3d3fa965c1398a93ad3a6f1b7d7a11d5b081529747ce8ff031c370e2c251f0f1a16c74638daa4d02775824200ee23e8a4a6ce23cf908bb8fc80aaa5d5cc5577ebdd8cc9fad755bbcdf14c633df0063343aff79127e782c86feac9d0fbd201b0e11bb644f840534f5059ea7679ec79792c35cdf8d89ff5c58f9c84557e905bef21d1c9d3a7d3241d9045a3dbac3310648736977b8e14e29f6980a8769794bf9adfa0dc730044542c84d897cb69c1db4b5e3e97840417d1adbbf1e2824a17f901e015aea625f8e1ac4f3c4965c056ab5b3f4a724204ca832019ee72d590deb148b76e77d5cae0f0a808185e3fdd82386a35b46761aa1b8b599d583e229c543a1111211619bab6d8a5ec9b40a83b408170f0be1f902923b454585f7e483c261c2fa2b03cedfea47736ed097f5d4d845172599a53b8041ef372b3778208ea773358cfa7d6d1977276d0befc269c47acd4390f51c205bc07d24facc8507c3c83a49e5f54d0f3e1b199181f10f2c907ea60076658f8250c38265e975672f331e37b4778e3783ae11704f1ffe32a520addb1a6cc298793b55a7807d8b273744d22ec3160072d0af56cdca5d3ad4384474ff8c820782af0f8b62782194792047a2552cc9a0a7dd512a5e3e5de352e2a54cd147751b9985c8f4ff46071a306926198d8a4fe5a94705cc053ed10cc6571b416ad78de63c"
         }
       ]
@@ -76,7 +176,7 @@
   "schema_revision": 1,
   "sources": [
     {
-      "blake3": "642ecff67e1f4e83fc347150cee283381d1a32a1e00ecddcadcaef96cf50befa",
+      "blake3": "b3ff8893362773145e71e6daa4191ae3586fd25c4e6b60c25ddcdf906d4ec4ab",
       "path": "tools/structured/isingmark_structured/archive.py"
     },
     {

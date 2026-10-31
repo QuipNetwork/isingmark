@@ -1,8 +1,8 @@
 {
   "about": [
     "Rows 0 and 1 of two-commodity-routing in new-pow/targets-pp-100.json, exported by tools/structured/isingmark_structured/archive.py.",
-    "The arrays stay in the archive. Digests follow docs/datasets.md. The witness is the postprocessed final state, packed, and checked against pp_best.",
-    "Conversion environment: Python 3.11.2, NumPy 2.4.6, export script blake3 642ecff67e1f4e83fc347150cee283381d1a32a1e00ecddcadcaef96cf50befa."
+    "The arrays stay in the archive. Digests follow docs/datasets.md. Every witness is an archived observation that was shown before: the best raw QPU read, the greedy state, and the postprocessed final state. Each energy was recomputed from the model and equals the recorded value.",
+    "Conversion environment: Python 3.11.2, NumPy 2.4.6, export script blake3 b3ff8893362773145e71e6daa4191ae3586fd25c4e6b60c25ddcdf906d4ec4ab."
   ],
   "archived_instances": [
     {
@@ -22,7 +22,33 @@
       "postprocess_policy": {
         "budget_s": 0.05,
         "family": "constraints",
-        "method": "gadget-repair"
+        "method": "gadget-repair",
+        "sources": [
+          {
+            "blake3": "1a871a8d9dcd4ed5c0aedf68a4053d26d284aeafb387bdc9b1cf5c1daec06ef9",
+            "path": "new-pow/postprocess/optimizers/constraints/combine.py"
+          },
+          {
+            "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+            "path": "new-pow/postprocess/optimizers/constraints/descent.py"
+          },
+          {
+            "blake3": "9541925ad2e55851cface8c43ea8343ea3c33bda0c36f93019ed29240e6cd3d3",
+            "path": "new-pow/postprocess/optimizers/constraints/gadgets.py"
+          },
+          {
+            "blake3": "909b7cb6101d9ec3ba902b7f4c7555d1678d24f995a0f04ed9a7e5e52adc5a7f",
+            "path": "new-pow/postprocess/optimizers/constraints/minima.py"
+          },
+          {
+            "blake3": "f86d30510477f8bf83353048d8e40c6a923616fb6b808ebea189724dff2ad130",
+            "path": "new-pow/postprocess/optimizers/constraints/run.py"
+          },
+          {
+            "blake3": "6cb2e189226ed1681c564791f689a2cf9f232144e6a47f8a9b54052d27ba64f1",
+            "path": "new-pow/postprocess/optimizers/constraints/summarize.py"
+          }
+        ]
       },
       "qubo_offset_milli": "446896",
       "source_recipe": {
@@ -32,8 +58,36 @@
       "topology_order_digest": "029aa7da6f688fecfc48a06536e4d40ca23d7cdd5177b3a86f5318ea23f4efb8",
       "witnesses": [
         {
+          "claimed_energy_milli": "-1248134",
+          "name": "qpu-best",
+          "origin": {
+            "array": "spins",
+            "blake3": "5d963a2d3a26e7bd0408dcff1fe7815aca8ca71a5065f3167f09114327fdce47",
+            "index": 0,
+            "path": "new-pow/qpu-recap/qpu/two-commodity-routing/qpu-80/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz"
+          },
+          "spins_packed": "a1efde46d62ce070da4d30fcffff77dffffbfffff5f485747fffeefb3f7cd8c077efeffeebeffeefeffe3b16bbd9cce4fcffedff7bfbffffeffdb76bff878a78fcff7f04d7f96fffdbc335fefff7ffeffffebbfdfcdfff55214162e77cdef9f9dffffff3fffefffffeffbf01debbfffbffdf7bdfffffff2c5bf4bffffffffffdfbfffcffff0010b0feef3ff7bc6ee31d8ae7fb3ffffa3f1a36f4bfffdfd7ffffbfffdefffffeff7fbb45c3fff7bfd5ffffd34f1f58d9395ce8f6fffbbffeffff7dfff6fdffb93088ffbf76f76fbfffbfff7adf77f6bf7b9203bb9b1ecdfefeffffffff7f7ffce77fffdfeffeff77b823f07dffef41ebf3dfbf7d7ebfffdf7dfefffeddffdb1938a4a50a5b5bffedf77fefff0a732b709c88fcd78c055acb730696b7f04f93cf49ea70e7fd9f7fbcffe555f7fbbfee35edf77ffffbaf57385bfeff3fbffe6feff9ff84e2feeff7feffff79fdff45f2abfffdfffdffff14f9c1bfffffefbf66fffff3ff3efeebff070795eafffe3be9a0feefb9efe79b7ff37f1a51749cffff77de70ec3ffeffef3ffef79ffefffdf7fbc6fcef97ce60f6feffe77ffeffffef9d64d3dfffcfdfff9ff6fe17d17adbddfd55fff7edffff53db2afe6fdffeffef7fdffb40f797ffffdf6ffffb47834ffffb3f5dbaecfddef7ffffffbfffdef77ff5ff7f7ffec746d8ffff7febcf7f10e0fd7fbfefff2f116af47de7e1fffff3bfffffff7bedff9fefb0fbffbfa336e9fffff77fffbfffff9fffdf1f7584f2fffffbc77cf8af805af9bfefae57e2d82324fe93d287aab431"
+        },
+        {
+          "claimed_energy_milli": "-1252350",
+          "name": "greedy",
+          "origin": {
+            "array": "gnat_c",
+            "blake3": "fc6d591988295f30d11d393a5224c397d003cda5e937c0b26fa163ff6a22a7e1",
+            "index": 2,
+            "path": "new-pow/postprocess/measurements/greedy-100/two-commodity-routing/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.states.npz"
+          },
+          "spins_packed": "2ffb0f8185e5bea4d4b845f4fffffbdffffbfffdbf6343fcfffffefb3f9a22cf77cfffffffe7ffefffffdfa6c9690dfffedffdff53ebdfbfecff9fffe74f15b8fcbf9f5f38f57bdffbfefd7ffff7fdfffffdfbfffeffef629b1cc31bfbf6ffffffffeffffffeefffffffbf956df3ffffbfdf7bcfffffffb794fadbfffefffffdfffffeffffa5c3b7fffffffffeffebb19efffffffffa3fe9c6fcaffff9dfffffffbfdcfffefeffff7befd4ffffbfffffbffbff7fad7d1e0fcefbfffff7fffbbdffdff6dfef4ca880fefb77ff7fb7eefefffffffffe7f77696c7859a7cafffef7bfffffff77fed77fffffffffff3f27c5f76dfda61e0dfffefffd7ffff7dfddffff7efdff3efbc218dd4c4fdb7ffcffffebcf2210a32e475d974b95ceeaaea588a752f127f8cc143986208cf6dffdd18ffefffffe8864e8f37ffffcef1724da9eff7fffff7feff97ff9cce5fffffffffff77fffd7e020bdfffffd9fff8245d8dffffffffff7ffff7ffffcf7ffffebdab3f9fffeffef967ff7ffdfefbbffefbf24a1f6beff7ff73e0de97ffd7f6f5ffffefffffffffffff7feefefd164f6fffffffffffeffff4383e0fff7effffffffff74ff15b55fdf5fdfff7a5dfff89b5cafe7ffffefffffedf3fdcb786ffffbbffff5f1cc9dd9ffb0b2e49fafddef7f7fffcffffdffffeecffffff7fc7f058f9ffffe7ffff3efbff7f3fefff8fa56ad35fffe5fdfff3bff77cb673fcff1ff1a4fdbfbf19db97feff3f7ffffdfffdffffffbf3959effffffecffff8ef1f48f29ffc6a05806bf245e0040f70012674"
+        },
+        {
           "claimed_energy_milli": "-1253714",
           "name": "pp-final",
+          "origin": {
+            "array": null,
+            "blake3": "2856533b669670902013a3e5180b978bd3237b4766a1033ea0aceb59ae11d47e",
+            "index": null,
+            "path": "new-pow/postprocess/measurements/optimizers-100/constraints/two-commodity-routing/states/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npy"
+          },
           "spins_packed": "3b8704a33ed454041cc11bfcffffffdffff7fffd7770c3fcf7f7fefbff68a2ce7fefefefefe7f6ffedbeff07a947c2e0fcdfe5ff33ebfffffeff9f63f75ff74bfdbfbfcb0dfb7aff7bdef57dffd7fffffffcfffdfedfff54a7008bba6bfaf9fddcdffff3dfffffbffeffffe1dbbdfffbffdf7bdfffff5f5ceaf5fffffcfffffdfffffcffff90bab6ffffbffef53f9b53b7fffbffffffd72cdcf1fffff9f71fefffbffdfffffcff7fe666dcffffdfd7ffffd77fdfacdc400d33f2fffffffffffdfdfff2cfff2f2ff8fcfff7ff6bffeeff7ffffee7fe7f7f8c4b890595ecfffffffff7fffffdfff7fffedffffeff7f7726fc6dff97d82ef5defff97fbffdfffffefffefdffff79055b38ababa3ffffffffefffe3d5a723acfc0b1b0723c159ae9c5eaf11c83ebaa1465f5656be6f3adfffbcf7fbbed188fafbffefffbf4f4e1bfcffffffffbdfff93ff513fafffff7fffff57fff698685bdffffffbfff663de1ffffffffffffffff77fffdfffbffb7f626fdfffedf2e897fffffffe79bffe71f6256f2ffffffff4f24e87ffeffeffffe66dffcffddfff3d6ffff3f312bf3fffff47ffffeffafffd4d5fff7dfdffffffeff6f93f5eafdff6dfff9ffffffff3de5ef7ffffeffef7fdf3bdbee88ffffff7effbf957c4fffffbf1f93f4fddff3ffffffffffdffffff7fffffd7f175f47dcff7f7bdf5b38b1ec7f3fefffdfaf9de27fffe7fffff3bff75dbe77fcffff3a1af5ffff7700ccfeff77ffffbfffffdfffffff154cf7fffffcc7fffc57cb34f53f01bae12ec4d0b943a76a78f12b3d"
         }
       ]
@@ -55,7 +109,33 @@
       "postprocess_policy": {
         "budget_s": 0.05,
         "family": "constraints",
-        "method": "gadget-repair"
+        "method": "gadget-repair",
+        "sources": [
+          {
+            "blake3": "1a871a8d9dcd4ed5c0aedf68a4053d26d284aeafb387bdc9b1cf5c1daec06ef9",
+            "path": "new-pow/postprocess/optimizers/constraints/combine.py"
+          },
+          {
+            "blake3": "ea5d09f63e1861b255a763412fc9139ba351e57731f838948ca1bfa8d74a753c",
+            "path": "new-pow/postprocess/optimizers/constraints/descent.py"
+          },
+          {
+            "blake3": "9541925ad2e55851cface8c43ea8343ea3c33bda0c36f93019ed29240e6cd3d3",
+            "path": "new-pow/postprocess/optimizers/constraints/gadgets.py"
+          },
+          {
+            "blake3": "909b7cb6101d9ec3ba902b7f4c7555d1678d24f995a0f04ed9a7e5e52adc5a7f",
+            "path": "new-pow/postprocess/optimizers/constraints/minima.py"
+          },
+          {
+            "blake3": "f86d30510477f8bf83353048d8e40c6a923616fb6b808ebea189724dff2ad130",
+            "path": "new-pow/postprocess/optimizers/constraints/run.py"
+          },
+          {
+            "blake3": "6cb2e189226ed1681c564791f689a2cf9f232144e6a47f8a9b54052d27ba64f1",
+            "path": "new-pow/postprocess/optimizers/constraints/summarize.py"
+          }
+        ]
       },
       "qubo_offset_milli": "445253",
       "source_recipe": {
@@ -65,8 +145,36 @@
       "topology_order_digest": "029aa7da6f688fecfc48a06536e4d40ca23d7cdd5177b3a86f5318ea23f4efb8",
       "witnesses": [
         {
+          "claimed_energy_milli": "-1244941",
+          "name": "qpu-best",
+          "origin": {
+            "array": "spins",
+            "blake3": "3f0f7a9f4445eea01ce978b9d091eecd0b51982464b542742de529d8a524742e",
+            "index": 0,
+            "path": "new-pow/qpu-recap/qpu/two-commodity-routing/qpu-80/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz"
+          },
+          "spins_packed": "5c859cb1da4041c9141b01f67ffff77ffffbfffdf5fa507ff7f7eade3f0df3e6ffdbeffeffffe7fefe7dfbd91465cee8fffff5ffd7fb7eb3fcbfdffbefefa295ffff5f8ea9fd3bdffddff7ffffffffffffffeffdbdfffbf51c557c2ffdfbffb9ffcfedebedfaffffbeff3f2dbfa8ffffed7fffffeff71f53c1ee7ffffefffdfdfffffc7fffdf0f05fffffffff7af857d8fffff3ffefecbaa60f6fffffbff1ff5fddffdffeffcff77dc3f9dffffffffffffdfff7f6421117466f2fffaeffffffbfffffecfef54cb7ede7b7ff5ffffeefd6fdefffdfeffef464edb026bdf7ffedbbff6ffffeff7d7ffffff7ffe7f5fd0a6f3edff5f17adb69eefdc7ffdfdff7f567db7ffb7ba6e99b825bd2a3c72edffff6ffffb31ddc6496957043d8b4f47677bc917f21e631c037f4c87ddf6df19ffeffffffb7efa77c3f77fffe9aff7136c9cff7ffffef7eeffff695ad07ffdf3ffff7fffeb954777f8fffffef5b5dc5eddfbfffffe6d73ffff7ebe7dfdfbff5533f9f5ffff95588dfef7afffef1f7feb3f6660f3ffffffffadf1f26ffef77b7fffeedfffddfffdfff7dfff84fc44febffefefffffdffbfa746c9ffffcfffffdfffff6f56a77edff7f7fffff3dfbf9d278cfb7fffedefffef5f7bd1eab3dbbf9fffff5fcde444edffdf328ce7ffdff7ff7fffffffdfebfeedffffbd7ea3ca91f9ea7ff3ff5f58d9eedf7fefff8fd364f3ffffe9fffff7ffffffbf7beefffb9ba8f8bfff8d71b8f67f8f7ffdbdffdeff7fffff65577afefffadffffc0782faf33fdfdd1b88f83f586654e3c719aa41"
+        },
+        {
+          "claimed_energy_milli": "-1250273",
+          "name": "greedy",
+          "origin": {
+            "array": "gnat_c",
+            "blake3": "a5a36d26714e538cc622beaace1ad10dd3f82608b4dc1f8e1d689a0601756448",
+            "index": 6,
+            "path": "new-pow/postprocess/measurements/greedy-100/two-commodity-routing/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.states.npz"
+          },
+          "spins_packed": "f40a181f0d372fb42b6e66fcfffffbfffffbfffdb5c17cef77fefffffffc92e0ffff7fee7fd7e7ffe8adbf3e3d25b4f6ffdfd7ff5bfffffbedbfdf7ff76f3de2fdffffb814f8ffdffffefffefefffffffffefbfffeffef8bb361cce7edf7fff9fafffffbdffbff7fffffffa6b8b4ffff7ffffb9fffff1f2198f3bffffedffdfdfffffeffffe6e809ffef3ffef5afc86ed5fffbfffffb5b0e44f3ffdffbdf1fedfffffdffeffefef771e1abffff9fffffffffff7fbd38182266fbfffee7efbffbffbff7cfef497eebfefbd7fcffbfeeffffffff7ffeff7bcfc3e513bbc47fffdbbffcfdfffdfef77ffeffffff7f1fd449ef7ffdb6d94ef2dadf7cffafffdffdffff7fbfff9fcb1876a4779329ffefffffcfffed6aaa0f8723137cbec27515d8fc1a4506e655a3c31831c02fdecf3bffefbefffb7f7160c9f7fbefe9bf3f192bd4bf3ffffe37efedfdf222e1fffffffffff9fffb31cfe0fcfffff99ffd59b3f6dffffffffdfffffff3fffdffffffdb4137ed7fff574eb5ffefbffff75ffeef7f50f0f1bffffff75ffef5ffffffff1ffefebfffffdfffffe7ffff675914f1fffffffffffeffff170bc0dfffdfffffbffeff0fec816dfff9dffff5edffffc66bd7ee7fffedff7ff7fbff9f38abdfff8ffeffffc04fd0efff3f92cee4fffefbffffddfefffdfdf7e5ff7fddffd55b8c5beffff3ff6ff0f9ffdf7fffff3f2b4efd7fffe7ffeffbffffdcfffbeeff3b29c1f6ffffbd64ccffff077ffdffffff9fffff5f087fe7fffffbdf7ffb47b95ef5ff114b855ebc0a04c5fda261f9343c"
+        },
+        {
           "claimed_energy_milli": "-1251203",
           "name": "pp-final",
+          "origin": {
+            "array": null,
+            "blake3": "55a41ca760447ec98693bba1a8cb5303c5a57a0d6c55987fa34d8c424cfe4bc8",
+            "index": null,
+            "path": "new-pow/postprocess/measurements/optimizers-100/constraints/two-commodity-routing/states/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npy"
+          },
           "spins_packed": "5c859cb1da4041c9141b01f67ffff77ffffbfffdf5fa507ff7f7eefe3f0df3e6ffdfeffeffffe7fffefdfbd91465cee8fffff5ffd7fbffbbfcbfdffbefefa295ffff5f8ea9fd7bdfffdff7fffffffffffffffffffdfffff51c557c2ffdfbfff9ffcfedfbeffaffffbeff3f2dbfa8fffffdffffffefff1f53c1fefffffefffdfdfffffcffffdf0f05fffffffff7af857d8fffff3ffffecbaa60f6fffffbff1ffdfddffdfffffcff7fdc3f9dffffffffffffffff7f6421117466f2fffaeffffffbfffffecfef54cb7efefb7ffdffffeeff7fdefffdfeffff464edb026bdf7ffedbbff6ffffffffd7ffffff7ffe7f5fd0a6f3edff5f17adf6deeffc7ffffdff7f7effbfffffbe6e99b825bd2a3c7eefffffeffffb31ddc6496957043d8b4f47677bc917f21e631c037f4c87ddf6df39ffeffffffb7efa77c3f77fffe9aff7136c9cff7ffffef7efffff695af0fffff7ffff7ffffb954777fcfffffff7bddc5eddfffffffffd77ffff7ffffdfffbff5733f9f5ffff95588dfef7bfffef1f7feb3f6660f3ffffffffaff1f27fffff7f7fffeedffffffffffff7dfff84fc44fefffffefffffdffbfa746c9ffffcfffffdfffff6f56a77edff7f7fffff3dfbf9d278cff7fffedefffef5f7fd1eab3fbbf9fffff5fcde444fdffdf328ce7ffdff7ff7fffffffdffffeedfffffd7fb7ca91f9ef7ff3ff5f58d9eedf7fefff8fd364f3ffffe9fffff7ffffffbf7beefffb9ba8f8bfff8d71b8feff8f7ffdbdfffeffffffff6557fafffffadffffc0782faf33fdfdd1b88f83f586654e3c719aa41"
         }
       ]
@@ -76,7 +184,7 @@
   "schema_revision": 1,
   "sources": [
     {
-      "blake3": "642ecff67e1f4e83fc347150cee283381d1a32a1e00ecddcadcaef96cf50befa",
+      "blake3": "b3ff8893362773145e71e6daa4191ae3586fd25c4e6b60c25ddcdf906d4ec4ab",
       "path": "tools/structured/isingmark_structured/archive.py"
     },
     {
