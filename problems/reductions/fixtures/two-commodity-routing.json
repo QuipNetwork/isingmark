@@ -1,0 +1,87 @@
+{
+  "about": [
+    "Rows 0 and 1 of two-commodity-routing in new-pow/targets-pp-100.json, exported by tools/structured/isingmark_structured/archive.py.",
+    "The arrays stay in the archive. Digests follow docs/datasets.md. The witness is the postprocessed final state, packed, and checked against pp_best.",
+    "Conversion environment: Python 3.11.2, NumPy 2.4.6, export script blake3 5cb6f7045cae6aada72e6f5fbfe2f90d56d0ca337a05322b72e9a30f1f2c9bb3."
+  ],
+  "archived_instances": [
+    {
+      "archive_blake3": "b4ad3ec654457407ce53639bc6a15e68a4aa40b2701889f345d3b3ca57f6452c",
+      "archive_origin": "new-pow/qpu-recap/work/cells/two-commodity-routing/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+      "cell": "two-commodity-routing",
+      "descriptor_digest": null,
+      "family_id": null,
+      "model_digest": "b3d54fc7f88e923e6ab546dc4386b62d74464d5d68573d06510a1282e07c03d2",
+      "n_edges": 6348,
+      "n_nodes": 4575,
+      "name": "two-commodity-routing-row0",
+      "node_order": "physical",
+      "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+      "offset_milli": "0",
+      "params_hex": null,
+      "postprocess_policy": {
+        "budget_s": 0.05,
+        "family": "constraints",
+        "method": "gadget-repair"
+      },
+      "qubo_offset_milli": "446896",
+      "source_recipe": {
+        "name": "two-commodity-routing",
+        "source": "newpow-two-commodity-routing"
+      },
+      "topology_order_digest": "029aa7da6f688fecfc48a06536e4d40ca23d7cdd5177b3a86f5318ea23f4efb8",
+      "witnesses": [
+        {
+          "claimed_energy_milli": "-1253714",
+          "name": "pp-final",
+          "spins_packed": "3b8704a33ed454041cc11bfcffffffdffff7fffd7770c3fcf7f7fefbff68a2ce7fefefefefe7f6ffedbeff07a947c2e0fcdfe5ff33ebfffffeff9f63f75ff74bfdbfbfcb0dfb7aff7bdef57dffd7fffffffcfffdfedfff54a7008bba6bfaf9fddcdffff3dfffffbffeffffe1dbbdfffbffdf7bdfffff5f5ceaf5fffffcfffffdfffffcffff90bab6ffffbffef53f9b53b7fffbffffffd72cdcf1fffff9f71fefffbffdfffffcff7fe666dcffffdfd7ffffd77fdfacdc400d33f2fffffffffffdfdfff2cfff2f2ff8fcfff7ff6bffeeff7ffffee7fe7f7f8c4b890595ecfffffffff7fffffdfff7fffedffffeff7f7726fc6dff97d82ef5defff97fbffdfffffefffefdffff79055b38ababa3ffffffffefffe3d5a723acfc0b1b0723c159ae9c5eaf11c83ebaa1465f5656be6f3adfffbcf7fbbed188fafbffefffbf4f4e1bfcffffffffbdfff93ff513fafffff7fffff57fff698685bdffffffbfff663de1ffffffffffffffff77fffdfffbffb7f626fdfffedf2e897fffffffe79bffe71f6256f2ffffffff4f24e87ffeffeffffe66dffcffddfff3d6ffff3f312bf3fffff47ffffeffafffd4d5fff7dfdffffffeff6f93f5eafdff6dfff9ffffffff3de5ef7ffffeffef7fdf3bdbee88ffffff7effbf957c4fffffbf1f93f4fddff3ffffffffffdffffff7fffffd7f175f47dcff7f7bdf5b38b1ec7f3fefffdfaf9de27fffe7fffff3bff75dbe77fcffff3a1af5ffff7700ccfeff77ffffbfffffdfffffff154cf7fffffcc7fffc57cb34f53f01bae12ec4d0b943a76a78f12b3d"
+        }
+      ]
+    },
+    {
+      "archive_blake3": "275c6e8d2925176cb542955c371dc1acaeccd2e7722a6791af3dbfa08f0ff9e1",
+      "archive_origin": "new-pow/qpu-recap/work/cells/two-commodity-routing/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+      "cell": "two-commodity-routing",
+      "descriptor_digest": null,
+      "family_id": null,
+      "model_digest": "58fb8eee387264c84be6f0578967cd2d8408917d240395fe23aa3fadf825c92e",
+      "n_edges": 6348,
+      "n_nodes": 4575,
+      "name": "two-commodity-routing-row1",
+      "node_order": "physical",
+      "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+      "offset_milli": "0",
+      "params_hex": null,
+      "postprocess_policy": {
+        "budget_s": 0.05,
+        "family": "constraints",
+        "method": "gadget-repair"
+      },
+      "qubo_offset_milli": "445253",
+      "source_recipe": {
+        "name": "two-commodity-routing",
+        "source": "newpow-two-commodity-routing"
+      },
+      "topology_order_digest": "029aa7da6f688fecfc48a06536e4d40ca23d7cdd5177b3a86f5318ea23f4efb8",
+      "witnesses": [
+        {
+          "claimed_energy_milli": "-1251203",
+          "name": "pp-final",
+          "spins_packed": "5c859cb1da4041c9141b01f67ffff77ffffbfffdf5fa507ff7f7eefe3f0df3e6ffdfeffeffffe7fffefdfbd91465cee8fffff5ffd7fbffbbfcbfdffbefefa295ffff5f8ea9fd7bdfffdff7fffffffffffffffffffdfffff51c557c2ffdfbfff9ffcfedfbeffaffffbeff3f2dbfa8fffffdffffffefff1f53c1fefffffefffdfdfffffcffffdf0f05fffffffff7af857d8fffff3ffffecbaa60f6fffffbff1ffdfddffdfffffcff7fdc3f9dffffffffffffffff7f6421117466f2fffaeffffffbfffffecfef54cb7efefb7ffdffffeeff7fdefffdfeffff464edb026bdf7ffedbbff6ffffffffd7ffffff7ffe7f5fd0a6f3edff5f17adf6deeffc7ffffdff7f7effbfffffbe6e99b825bd2a3c7eefffffeffffb31ddc6496957043d8b4f47677bc917f21e631c037f4c87ddf6df39ffeffffffb7efa77c3f77fffe9aff7136c9cff7ffffef7efffff695af0fffff7ffff7ffffb954777fcfffffff7bddc5eddfffffffffd77ffff7ffffdfffbff5733f9f5ffff95588dfef7bfffef1f7feb3f6660f3ffffffffaff1f27fffff7f7fffeedffffffffffff7dfff84fc44fefffffefffffdffbfa746c9ffffcfffffdfffff6f56a77edff7f7fffff3dfbf9d278cff7fffedefffef5f7fd1eab3fbbf9fffff5fcde444fdffdf328ce7ffdff7ff7fffffffdffffeedfffffd7fb7ca91f9ef7ff3ff5f58d9eedf7fefff8fd364f3ffffe9fffff7ffffffbf7beefffb9ba8f8bfff8d71b8feff8f7ffdbdfffeffffffff6557fafffffadffffc0782faf33fdfdd1b88f83f586654e3c719aa41"
+        }
+      ]
+    }
+  ],
+  "provenance": "archived-research",
+  "schema_revision": 1,
+  "sources": [
+    {
+      "blake3": "5cb6f7045cae6aada72e6f5fbfe2f90d56d0ca337a05322b72e9a30f1f2c9bb3",
+      "path": "tools/structured/isingmark_structured/archive.py"
+    },
+    {
+      "blake3": "f6dd6762bdfeef8bf20ad48f0720d63bf72fd43ff131b108882785036a958cd3",
+      "path": "problems/reductions/sources/new-pow/families/two-commodity-routing/generate.py"
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "about": [
+    "Rows 0 and 1 of ice-twisted-w45-dimer1200 in new-pow/targets-pp-100.json, exported by tools/structured/isingmark_structured/archive.py.",
+    "The arrays stay in the archive. Digests follow docs/datasets.md. The witness is the postprocessed final state, packed, and checked against pp_best.",
+    "Conversion environment: Python 3.11.2, NumPy 2.4.6, export script blake3 5cb6f7045cae6aada72e6f5fbfe2f90d56d0ca337a05322b72e9a30f1f2c9bb3."
+  ],
+  "archived_instances": [
+    {
+      "archive_blake3": "a08345f2a5770a5a4678d39f955aaf01fa474ed0e09731001841fb6591bd2e9e",
+      "archive_origin": "qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+      "cell": "ice-twisted-w45-dimer1200",
+      "descriptor_digest": null,
+      "family_id": null,
+      "model_digest": "f0f812e5c6366e3e74772294239439895f0e2fa3e47935630a37a760b1ed777a",
+      "n_edges": 41474,
+      "n_nodes": 4575,
+      "name": "ice-twisted-w45-dimer1200-row0",
+      "node_order": "physical",
+      "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+      "offset_milli": "0",
+      "params_hex": null,
+      "postprocess_policy": {
+        "budget_s": 0.76,
+        "family": "ice-pairs",
+        "method": "pw"
+      },
+      "qubo_offset_milli": null,
+      "source_recipe": {
+        "name": "ice-twisted-w45-dimer1200",
+        "source": "f17-wave-run"
+      },
+      "topology_order_digest": "e12cffc9392cc502c5d065d6e1a3e2eabcc08247ffd55d2fe1b41988d2bc37e3",
+      "witnesses": [
+        {
+          "claimed_energy_milli": "-4953460",
+          "name": "pp-final",
+          "spins_packed": "053d947e9835e7414583e37964f26005eef67c058d6b00f21aa6b8c3884b785442e96c0cb0554ed180e42043fd67d5f22902264a628105c0f5c52a843a4e76e0d746ea00b73af06991bb5dbff8e5c882eb92643952a90e8df9871434c490295aa97e752cc33f0ecc8fa1510770ebfa3d2d81b388ea283aa18535d2fe39b3d2393de39fe631fa2ebb29023e72c2dc5e169ba218a743b3c70cd8dbb3a8e4244318729823cedc247b946fbb2b4412eb94030afdd310a247089aecfa1a02d38ec5e22ff240e774ff5c4ac471c600066eaffff1222726c57321bfd81dabedf1230f7ec14230d8116298ca38d4cae10d1f5768aff8a25140d0af3e296eaaff76002751537549e66bf9591fa0f8581ef8610ee9f3514a6a13eae362eac54d46839190c416b1adc42b3a08a0f6a4c55c7a740c1464a1d762a2ec93590c3542753e3f41e4574d5b163897cf0e19981f9d10b6901a94b9c0f71239d764934013123e293e463506a3c6c474b4ad00a993b77fa6210e5a80ab74ea86f6a94a261b1c118ea608abf142a9a0420534e7079041ad1ecea0bce90ddab6d5d2bfd315558de6b560caa404d99049a13568b93e87ec22adbf888a892d219efdcd90f1e2a42b8c60508b52578a80796ff1b59a6ab0c60db3427ef56d1331e7e43ba4192f9ce2a9c10ac85bb3f282fb628f28e7849c70ae0c816adda9b7666720f2b3f9fc0b38480d253abab1f8c6916bcb453023f0bb6b9845e50efcfe8a81659c7e378ba42d59292be4ee168330c0593bdac8aa3c51d5c51e541f4906092264fbbd8f215111"
+        }
+      ]
+    },
+    {
+      "archive_blake3": "d552d81a52be3e95432660cd2c83b91f2b936f6ce90099335d48c7a6e2e613ff",
+      "archive_origin": "qpu-f17/work/cells/ice-twisted-w45-dimer1200/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+      "cell": "ice-twisted-w45-dimer1200",
+      "descriptor_digest": null,
+      "family_id": null,
+      "model_digest": "93da76c285513fd8a389fc48912bac60e257d3998f6ae98a114b629f31b954fd",
+      "n_edges": 41474,
+      "n_nodes": 4575,
+      "name": "ice-twisted-w45-dimer1200-row1",
+      "node_order": "physical",
+      "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+      "offset_milli": "0",
+      "params_hex": null,
+      "postprocess_policy": {
+        "budget_s": 0.76,
+        "family": "ice-pairs",
+        "method": "pw"
+      },
+      "qubo_offset_milli": null,
+      "source_recipe": {
+        "name": "ice-twisted-w45-dimer1200",
+        "source": "f17-wave-run"
+      },
+      "topology_order_digest": "e12cffc9392cc502c5d065d6e1a3e2eabcc08247ffd55d2fe1b41988d2bc37e3",
+      "witnesses": [
+        {
+          "claimed_energy_milli": "-4961510",
+          "name": "pp-final",
+          "spins_packed": "10239c7b490a2832fedf7acb450ed87fd582ecbaf1129e18334c859eab26b12d188f277bd8531f85641648e2e7a6f19abead8d81b21cd68d57b7742fdb114d93f8a435887a38c680e97c46ddb93a266025f1a54d0f3322ca9fd85a58da985138747e92c4c7ba4d3a6cb3b791534c4b8c767ccc7fbcedbab0d2bb4bf100381ef988202919bdfacc22c6e733a190548df57bd03f71818fd6337b733a3a88197d5db461dd8706c82cabc349bc8bd5152e82df2527c8c304e5970db3ba4128095fa396e00bde6328fbf8c36cda8d28f586ca5024f3256419dc4e3cf18986ca4f98a19108b5ddf3a2ba75365f86f7a94bf20be4e5a072d9b864de8b502832b61b5b9eaf7e03e8e79b1fb758607e01118b507962388cf858af2e3ba6cd9818bb4bc8ed272b4ff0d1741a177b708924f3380a08716063faa7dac093d7acccbe3e3e63b9afe595849c39c433611312ff519cbb2d8a5689b50c838480350e15c1f90782b95545bdf7e3bb4a62c2522f2096d892a3925115f4c8a36e043bb9cabe845f3e10aadad8afde718c0ecc0347e3d4dca01e912103d2b183a560bc6666f38be83d82d91b1275a0bc34ce2c3a88cbfce0ced66a6caed1e6f3c463ea80bd346f3835430a1e6688e52bd824272496704322f774d0a3062de06524ee5faaa05f8f84ab4e99a38b2f0e3c587521c39c4df94e55b00e5e24fdde95d28242c19a6375888726981d529c2500639a9509c12814992e6f2e5de4ad7b81de890757fecbad3c86d4e99553df71833eb69d7cf418cddacd835eadc8627ce370013b7e6637"
+        }
+      ]
+    }
+  ],
+  "provenance": "archived-research",
+  "schema_revision": 1,
+  "sources": [
+    {
+      "blake3": "5cb6f7045cae6aada72e6f5fbfe2f90d56d0ca337a05322b72e9a30f1f2c9bb3",
+      "path": "tools/structured/isingmark_structured/archive.py"
+    },
+    {
+      "blake3": "be5bba2357ee87a7fabc5999c96f857e2144f5600865c7eb4bbb9a06a208f35a",
+      "path": "problems/twisted-ice/sources/qpu-f17/wave_run.py"
+    }
+  ]
+}

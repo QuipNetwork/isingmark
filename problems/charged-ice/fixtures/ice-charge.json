@@ -1,0 +1,87 @@
+{
+  "about": [
+    "Rows 0 and 1 of ice-charge in new-pow/targets-pp-100.json, exported by tools/structured/isingmark_structured/archive.py.",
+    "The arrays stay in the archive. Digests follow docs/datasets.md. The witness is the postprocessed final state, packed, and checked against pp_best.",
+    "Conversion environment: Python 3.11.2, NumPy 2.4.6, export script blake3 5cb6f7045cae6aada72e6f5fbfe2f90d56d0ca337a05322b72e9a30f1f2c9bb3."
+  ],
+  "archived_instances": [
+    {
+      "archive_blake3": "d67ea97d4173775da3813d98bf2d40f170aa1fbbaad64718c6f4c079541e8a73",
+      "archive_origin": "qpu-f17/work/cells/ice-charge/models/06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0.npz",
+      "cell": "ice-charge",
+      "descriptor_digest": null,
+      "family_id": null,
+      "model_digest": "81e5101a884a9ad11443f5477d320013ee22f5002b7dcee7205caf8cc6bad411",
+      "n_edges": 41474,
+      "n_nodes": 4575,
+      "name": "ice-charge-row0",
+      "node_order": "physical",
+      "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+      "offset_milli": "0",
+      "params_hex": null,
+      "postprocess_policy": {
+        "budget_s": 0.25,
+        "family": "ice-tiles",
+        "method": "anneal:sa=1,b0=2,len=64,fe=16,nat48=1"
+      },
+      "qubo_offset_milli": null,
+      "source_recipe": {
+        "name": "ice-charge",
+        "source": "f17-generate3"
+      },
+      "topology_order_digest": "e12cffc9392cc502c5d065d6e1a3e2eabcc08247ffd55d2fe1b41988d2bc37e3",
+      "witnesses": [
+        {
+          "claimed_energy_milli": "-1522684",
+          "name": "pp-final",
+          "spins_packed": "bedd5e4fab86cff3b79952c3aebdce20bb5a815121a2e6f93343a3a128e00fd09c10b2fa53ef8b42bbe0d34c03c7d97b0dd876c60e3427a9f544873a4e134f1beb406b6606146ad727da59c7afb6b5c8cf040a623d35a1182e956fa264a67fc932b554a8aa382cc86e96a645d710474535a9d4cb9e4ba5d3499a7905c71b72b8e8552871007a35ea13e553a587793c9ef1743980b36e93aaf99a8f384402be089af021d0400c9a36f53e68af2014c3482ebcf4fa12c0017eb997e71515e9f0d3700c0d265b8d18f379f1fea38b63d26594c4f1978db41841fcc7436f0d5bea071e31e676b30520c35a8f2d8c8d72ace04ce2938f0dddf7ed1cc98e48871e2af9c94722e22ee3fc08ca96c601beb9ac1c0acff7d21b6768ab4c2bb8b52c5e5208b84946af5bbfa40fe7d6a52bad97c3d5f2263ab9c08e74afaefa7686fa601791bda35b232a059e434d92197aa61dec0176c67af46e79b087e756aa2597cc6ce3de336585a89fc3cd0adeccdbdcb6f5d94929b46a84bc6d7dc379f2ac9cbfc8d47657e5a8dab61bdcf37c60e601345e676f3345abb4e7827fa8dc175a5e792c28f334481ad4c0eb7fae9f252c1d5269b2f8bcef9eb0962fe8ea67b4175ad892651bef26a9959c64b2fa13a44221291fd3293d4dc62521ac2b1eaafc0579c6dffee4f99811338850e02e9815ed02bb68d5fad620dc528a302f0da2c9dd730d13d3aead2089bfd22a2efc85c6c84c13f417fd19126a4c9499941a74b13b4fa578062cc946e65d9d447f24756fde5c8ab74cbb1c0d80aec69111ad3b8f7e"
+        }
+      ]
+    },
+    {
+      "archive_blake3": "389e2ff113044dc98794299955efb086f7896e3404b2533c811e97985bdc6c32",
+      "archive_origin": "qpu-f17/work/cells/ice-charge/models/3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df.npz",
+      "cell": "ice-charge",
+      "descriptor_digest": null,
+      "family_id": null,
+      "model_digest": "5705785f32a4592a4a67c486165a046307eecafc1139d0f250684d718eccc4a1",
+      "n_edges": 41474,
+      "n_nodes": 4575,
+      "name": "ice-charge-row1",
+      "node_order": "physical",
+      "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+      "offset_milli": "0",
+      "params_hex": null,
+      "postprocess_policy": {
+        "budget_s": 0.25,
+        "family": "ice-tiles",
+        "method": "anneal:sa=1,b0=2,len=64,fe=16,nat48=1"
+      },
+      "qubo_offset_milli": null,
+      "source_recipe": {
+        "name": "ice-charge",
+        "source": "f17-generate3"
+      },
+      "topology_order_digest": "e12cffc9392cc502c5d065d6e1a3e2eabcc08247ffd55d2fe1b41988d2bc37e3",
+      "witnesses": [
+        {
+          "claimed_energy_milli": "-1538768",
+          "name": "pp-final",
+          "spins_packed": "7842adea2b8e69700e276dcbf3990ce0a1c0851b83f9fbba5b875b7acbaedac970a48e79d00cc24cbb121aef63020aa6e106c3fc8575b2beac79a9a71123545599410dc2cb6b3a5f917cdda5126f62b68f03391de82a7da2efb80b008b32a17951b211c6a5bde51a58b044e27594a46b374cd82910bfdb8a7ed7879013c65dca969c603ef11d49ba8a97fea6b387aef7b24c8a958eef732c9d212e38c7c54a6408e61df5ac846060b1fee7c4c434f4d1b8ea0a548b825f191f726086b92a6765302e0837d6f7e42e57235202dc8adfb25c719e0d42257b35babbeb81387af81b040f20bc0026a9cc407c387b06d95393bda478ee9f7ad0dbf16b0935e89e06c35b40b1340c79257ae22c5a04a69decc88e23df7fb8557714dc66353d879c76b8730a75812bd8c94d9a6646a158328e4201d426903a127a204823758035a6c3bfb53b131c29b465cdf563458ed8c6ee80de69e9e0ab9dd2e520129c20a2e107561976b7fd135b5822643117c7ec918095923c1229448c2219d9915f10b9fdf0cd2cd3faf01d292bd57555e6b1971a47033fa677ecd003b61430202234f629c94b0ebcd4b64597c6d9766b230869a1a3f3ad93789d84e99208940720aeef1d648e260468a4bdce5929241e141a1341b6b29e94b24c7e9f8949aae9f7c367503fd51704a4ebc5421026a08609f9c01355b7fac29edfd30abdc59d780b7187dba02ba8ed4d7cd0e4f5d81123625919628e3d07945f490231cae2ac8e760de15da72438d90dbe93fe4076a0bd8c1b1155c539367b0bf4a864def3fc7f2920"
+        }
+      ]
+    }
+  ],
+  "provenance": "archived-research",
+  "schema_revision": 1,
+  "sources": [
+    {
+      "blake3": "5cb6f7045cae6aada72e6f5fbfe2f90d56d0ca337a05322b72e9a30f1f2c9bb3",
+      "path": "tools/structured/isingmark_structured/archive.py"
+    },
+    {
+      "blake3": "0d0b45a545ba2031a1d03d4c6e8f61b9edf8c6a5fec3eb4ab6ab15a7846098e3",
+      "path": "problems/charged-ice/sources/qpu-f17/generate3.py"
+    }
+  ]
+}
