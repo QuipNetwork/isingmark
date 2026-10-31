@@ -1160,6 +1160,45 @@
         "redistribution": "unrecorded"
       },
       "notes": "Zephyr topology spec: 4575 nodes, 41474 edges. Loaded by every generator. Hash matches source_sha256 in the ice-twisted cell manifest."
+    },
+    {
+      "id": "newpow-two-commodity-routing",
+      "origin": "new-pow/families/two-commodity-routing/generate.py",
+      "path": "problems/reductions/sources/new-pow/families/two-commodity-routing/generate.py",
+      "kind": "generator",
+      "bytes": 11998,
+      "blake3": "f6dd6762bdfeef8bf20ad48f0720d63bf72fd43ff131b108882785036a958cd3",
+      "functions": [
+        {
+          "name": "build",
+          "ticket": "SC-12"
+        },
+        {
+          "name": "defects",
+          "ticket": "SC-12"
+        },
+        {
+          "name": "template",
+          "ticket": "SC-12"
+        },
+        {
+          "name": "layout",
+          "ticket": "SC-12"
+        },
+        {
+          "name": "main",
+          "ticket": "SC-12"
+        }
+      ],
+      "provenance": {
+        "rng": "famlib Drawer keyed by nonce, tag, and row id; seed: new-pow/families/two-commodity-routing/generate.py:158 (F.Drawer(nonce, TAG/attempt, ROW_ID), famlib is outside this file)",
+        "matching_library": "none",
+        "topology": "topology-live-2026-09-21.spec.json",
+        "postprocess": null,
+        "license": "none found (no SPDX, copyright, or license text in the file or its directory)",
+        "redistribution": "unrecorded"
+      },
+      "notes": "Two-commodity unit routing on a Manhattan-street template of Zephyr cells. build (line 156) draws terminals and arc costs per nonce and holds the chain strength and capacity coupler. template (line 98) and layout (line 56) do not depend on the nonce. It imports famlib from the exact-cover-mixed family, which is not copied."
     }
   ],
   "duplicates": [
