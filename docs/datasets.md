@@ -141,6 +141,12 @@ witnesses that the research kept. One JSON file holds one cell, at
 hex is lowercase without `0x`, every 64-bit value is a decimal string, and
 small counts are JSON integers.
 
+A fixture holds no coefficient arrays. The arrays stay in the research
+archive, in the model file that `archive_origin` names. The fixture records the
+nonce, the generator recipe, the BLAKE3 hash of the archived file, two digests
+of the model, and the packed witness spins. A later port of a family can
+rebuild the model from the nonce and compare it with these digests.
+
 ```json
 {
   "schema_revision": 1,
@@ -156,11 +162,10 @@ small counts are JSON integers.
       "archive_blake3": "<64 hex>",
       "source_recipe": { "source": "<generator id in problems/sources.json>", "name": "<recipe>" },
       "node_order": "physical",
-      "node_ids": [907, 41, 12],
-      "edges": [[0, 1], [0, 2]],
-      "h": [0, -500, 31],
-      "j": [-1000, 62],
-      "scale": 1000,
+      "n_nodes": 4575,
+      "n_edges": 41474,
+      "topology_order_digest": "<64 hex>",
+      "model_digest": "<64 hex>",
       "offset_milli": "0",
       "qubo_offset_milli": null,
       "family_id": null,
@@ -168,7 +173,7 @@ small counts are JSON integers.
       "params_hex": null,
       "postprocess_policy": { "family": "ice-tiles", "method": "anneal:b0=2", "budget_s": 0.25 },
       "witnesses": [
-        { "name": "qpu-best", "spins": [1, -1, 1], "claimed_energy_milli": "1593" },
+        { "name": "pp-final", "spins_packed": "<hex>", "claimed_energy_milli": "-1523188" },
         { "name": "pp-state", "missing": "state not stored in the archive" }
       ]
     }
@@ -176,11 +181,41 @@ small counts are JSON integers.
 }
 ```
 
+### Digests
+
+Both digests use BLAKE3 in key-derivation mode. They read the model in the
+canonical instance layout of quip-solver-core (FAM-30). That layout is a
+97-byte head followed by a body. The body holds `u32` little-endian node count,
+the node ids, the `u32` edge count, the edges as dense positions, the `h` values
+as `i32`, the `j` values as `i32`, `offset_milli` as `i64`, and the metadata
+region. These fixtures use the empty metadata region, the two bytes `00 00`.
+
+- `topology_order_digest` is the upstream topology order digest (FAM-19). Its
+  context is `quip family topology order v1`. It covers the node count, the
+  node ids, the edge count, and each edge as two native node ids, in instance
+  order.
+- `model_digest` is an IsingMark rule, not an upstream digest. Its context is
+  `isingmark archived model v1`. It covers the FAM-30 body only, including the
+  metadata region. The research cells have no family descriptor yet, so the
+  upstream instance digest (FAM-18) does not apply to them.
+
+`spins_packed` uses the wire packing of the protocol. Spin `i` is bit `i % 8`
+of byte `i / 8`, low bit first. Bit 1 means `+1` and bit 0 means
+`-1`. The field has exactly `ceil(n_nodes / 8)` bytes, and the padding bits are 0.
+
+The pinning tests keep the two encoders honest. They build one small
+instance, with 3 nodes, in Rust through `ising-generators` and in Python
+through `archive.py`. Both must give the same pinned hex constants. A change to
+either encoder fails a test.
+
+### Validation rules
+
 The validator reports every violation it finds in a file, and each message
 names the file and the instance. Two kinds of fault differ. A parse failure
 (an unknown key, a missing field, or a wrong type) stops the check, so the
 validator reports it alone for that file. A fault in the file header or in
-`sources` names the file only. The rules are:
+`sources` names the file only. The validator does not check the digests against
+the archive, because the archive is not in the repository. The rules are:
 
 - `schema_revision` is `1`, `provenance` is `archived-research`, and `about`
   is not empty. The validator rejects unknown keys at every level.
@@ -190,18 +225,13 @@ validator reports it alone for that file. A fault in the file header or in
 - Instance names are unique within the file.
 - `nonce` and `archive_blake3` are 64 lowercase hex characters.
   `archive_origin` is a safe relative path. The validator does not check that
-  it exists, because the research archive is not in the repository. It checks
-  the form of `archive_blake3` only.
+  it exists. It checks the form of `archive_blake3` only.
 - `source_recipe.source` names a source of kind `generator` in
   `problems/sources.json`, and `source_recipe.name` is not empty. `cell` is
   not empty.
-- `node_ids` has no duplicates. With `node_order` `ascending`, the ids increase
-  at every step. No other `node_order` value is valid.
-- Each edge `[a, b]` has `a < b < len(node_ids)`, so no edge is a self-loop.
-  The edge list increases in lexicographic order, so it has no unsorted
-  or duplicate edges.
-- `h` has one entry per node, `j` has one entry per edge, and `scale` is
-  `1000`.
+- `node_order` is `physical` or `ascending`.
+- `n_nodes` and `n_edges` are positive integers.
+- `topology_order_digest` and `model_digest` are 64 lowercase hex characters.
 - `offset_milli`, `qubo_offset_milli` when it is not null, and
   `claimed_energy_milli` are decimal strings that parse as 64-bit integers. A
   JSON number in any of these fields fails validation.
@@ -210,19 +240,18 @@ validator reports it alone for that file. A fault in the file header or in
   hex.
 - `postprocess_policy` has a non-empty `family` and `method`, and `budget_s`
   is zero or more.
-- A witness has either `spins` with `claimed_energy_milli`, or a `missing`
-  reason that is not empty. It never has both and never has neither. Witness names are unique
-  within the instance.
-- Every spin is `1` or `-1`, and `spins` has one entry per node. The energy
-  `offset_milli + sum(h[i] * s[i]) + sum(j[e] * s[a] * s[b])`, computed in
-  128-bit integers, equals `claimed_energy_milli`. `qubo_offset_milli` is
-  metadata and does not enter the energy.
+- A witness has either `spins_packed` with `claimed_energy_milli`, or a
+  `missing` reason that is not empty. It never has both and never has neither.
+  Witness names are unique within the instance.
+- `spins_packed` is lowercase hex of exactly `ceil(n_nodes / 8)` bytes, and its
+  padding bits are 0.
 
 The export command writes the fixtures of seven cells from the research
-archive. It copies each model without change and rejects a model that does not
-fit the format. It records the final postprocessed state as the witness
-`pp-final` when the archive stores it, and requires the energy of that state to
-equal `pp_best`.
+archive. It reads the first two rows of each cell and rejects a model that does
+not fit the format. It records the two digests. It packs the final
+postprocessed state as the witness `pp-final` when the archive stores it. It
+requires the energy of that state, computed from the archived model with no
+offset, to equal `pp_best`.
 
 ```bash
 python -m isingmark_structured.archive --research-root <path>
