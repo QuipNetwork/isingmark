@@ -171,15 +171,56 @@ rebuild the model from the nonce and compare it with these digests.
       "family_id": null,
       "descriptor_digest": null,
       "params_hex": null,
-      "postprocess_policy": { "family": "ice-tiles", "method": "anneal:b0=2", "budget_s": 0.25 },
+      "postprocess_policy": {
+        "family": "ice-tiles",
+        "method": "anneal:b0=2",
+        "budget_s": 0.25,
+        "sources": [{ "path": "<research-root-relative file>", "blake3": "<64 hex>" }]
+      },
       "witnesses": [
-        { "name": "pp-final", "spins_packed": "<hex>", "claimed_energy_milli": "-1523188" },
-        { "name": "pp-state", "missing": "state not stored in the archive" }
+        {
+          "name": "qpu-best",
+          "spins_packed": "<hex>",
+          "claimed_energy_milli": "-1520448",
+          "origin": { "path": "<research-root-relative file>", "blake3": "<64 hex>", "array": "spins", "index": 0 }
+        },
+        { "name": "greedy", "missing": "states not stored; searched <path>" }
       ]
     }
   ]
 }
 ```
+
+### Witnesses
+
+Each instance lists up to three witnesses in this order. Each one is an
+archived observation that the research showed before, so the fixture does not
+label any witness as a new result.
+
+- `qpu-best` is the raw QPU read with the lowest energy, from the `spins` array
+  of the QPU file. Its energy equals `qpu80_best`.
+- `greedy` is the state that `qpu80_greedy` came from. Every cell stores the
+  `gnat_c` reads, and the witness takes the lowest one. Ice cells also store
+  `loop_strict` reads. The witness takes the `loop_strict` state of the read with
+  the lowest raw energy when that state is at least as low as the best `gnat_c`
+  state. Its energy equals `qpu80_greedy`.
+- `pp-final` is the final postprocessed state. Its energy equals `pp_best`.
+
+The exporter recomputes every energy from the archived model arrays and stops on
+any difference. A witness whose state file is not in the archive has a
+`missing` reason that names the paths searched. The fixture holds no timing
+fields.
+
+`origin` ties a spins witness to the archive file it came from, in the same way
+that `archive_origin` ties the model. `path` is relative to the research root.
+`blake3` is the hash of that file. `array` is the key inside an NPZ file, or
+null for a single `.npy` state. `index` is the read in that array, or null for a
+single state.
+
+`postprocess_policy.sources` lists the `*.py` files that sit directly in the
+optimizer directory of the policy `family`, sorted by path. Each entry has a
+path relative to the research root and the hash of the file. The repository does
+not hold copies of these files.
 
 ### Digests
 
@@ -238,19 +279,25 @@ the archive, because the archive is not in the repository. The rules are:
   a non-empty string, 64 lowercase hex characters, and even-length lowercase
   hex.
 - `postprocess_policy` has a non-empty `family` and `method`, and `budget_s`
-  is zero or more.
+  is zero or more. `sources` is not empty. Each entry has a safe relative `path`
+  and a `blake3` of 64 lowercase hex characters. The entries are sorted by path,
+  and no path repeats.
 - A witness has either `spins_packed` with `claimed_energy_milli`, or a
   `missing` reason that is not empty. It never has both and never has neither.
   Witness names are unique within the instance.
+- A witness with `spins_packed` has an `origin`, and a `missing` witness has
+  none. In `origin`, `path` is a safe relative path, `blake3` is 64 lowercase
+  hex characters, `array` is null or a non-empty string, and `index` is null or
+  a non-negative integer. Both `array` and `index` must be present.
 - `spins_packed` is lowercase hex of exactly `ceil(n_nodes / 8)` bytes, and its
   padding bits are 0.
 
 The export command writes the fixtures of seven cells from the research
 archive. It reads the first two rows of each cell and rejects a model that does
-not fit the format. It records the two digests. It packs the final
-postprocessed state as the witness `pp-final` when the archive stores it. It
-requires the energy of that state, computed from the archived model with no
-offset, to equal `pp_best`.
+not fit the format. It records the two digests and the policy sources. It packs
+the three witnesses when the archive stores their states. It requires the
+energy of each state, computed from the archived model with no offset, to equal
+the recorded value: `qpu80_best`, `qpu80_greedy`, or `pp_best`.
 
 ```bash
 python -m isingmark_structured.archive --research-root <path>
