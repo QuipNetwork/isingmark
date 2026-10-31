@@ -301,14 +301,67 @@ def test_mock_reads_are_rejected(tmp_path: Path) -> None:
 def test_missing_archive_files_are_recorded_with_the_searched_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, _, nonce = _research(tmp_path, qpu=False, pp_state=None)
+    root, _, nonce = _research(tmp_path, qpu=False, pp_state=None, loop=None)
     qpu, greedy, pp = _build(root, tmp_path, monkeypatch)["archived_instances"][0]["witnesses"]
     for base in archive.QPU_ROOTS:
         assert f"{base}/toy/qpu-80/{nonce}.npz" in qpu["missing"]
     assert set(qpu) == {"name", "missing"}
-    # The loop state needs the raw best read, so the greedy witness is missing too.
-    assert "raw reads not stored" in greedy["missing"]
-    assert f"states/{nonce}.npy" in pp["missing"]
+    assert "origin" in greedy
+    assert (
+        pp["missing"]
+        == f"state not stored, searched {archive.MEASUREMENTS}/ice-tiles/toy/states/{nonce}.npy"
+    )
+    assert ";" not in qpu["missing"] + pp["missing"]
+
+
+def test_loop_states_without_qpu_reads_stop_the_export(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, _, _ = _research(tmp_path, qpu=False)
+    with pytest.raises(ArchiveError, match="greedy rule cannot be applied"):
+        _build(root, tmp_path, monkeypatch)
+
+
+def test_absent_greedy_file_is_recorded_without_an_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, _, nonce = _research(tmp_path)
+    (root / archive.GREEDY / "toy" / f"{nonce}.states.npz").unlink()
+    greedy = _build(root, tmp_path, monkeypatch)["archived_instances"][0]["witnesses"][1]
+    assert greedy == {
+        "name": "greedy",
+        "missing": f"states not stored, searched {archive.GREEDY}/toy/{nonce}.states.npz",
+    }
+
+
+@pytest.mark.parametrize("key", ["gnat_c", "loop_strict"])
+def test_one_dimensional_greedy_states_are_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    root, _, nonce = _research(tmp_path)
+    path = root / archive.GREEDY / "toy" / f"{nonce}.states.npz"
+    arrays = {"gnat_c": _states("low", "mid", "high"), "loop_strict": _states("low", "mid", "high")}
+    arrays[key] = _states("low")[0]
+    np.savez(path, **arrays)
+    with pytest.raises(ArchiveError, match="2 dimensions"):
+        _build(root, tmp_path, monkeypatch)
+
+
+def test_one_dimensional_qpu_spins_are_rejected(tmp_path: Path) -> None:
+    root, _, nonce = _research(tmp_path)
+    path = root / archive.QPU_ROOTS[1] / "toy" / "qpu-80" / f"{nonce}.npz"
+    np.savez(path, spins=_states("low")[0], energies=np.zeros(1), mock=np.array(False))
+    with pytest.raises(ArchiveError, match="2 dimensions"):
+        archive.qpu_read(root, "toy", nonce, 4)
+
+
+def test_qpu_ties_take_the_first_read(tmp_path: Path) -> None:
+    root, _, nonce = _research(tmp_path)
+    path = root / archive.QPU_ROOTS[1] / "toy" / "qpu-80" / f"{nonce}.npz"
+    reads = _states("high", "mid", "mid")
+    energies = archive.energies_milli(FIELDS, reads)
+    np.savez(path, spins=reads, energies=energies, mock=np.array(False))
+    assert archive.qpu_read(root, "toy", nonce, 4)[2] == 1
 
 
 def test_first_qpu_root_with_the_file_wins(tmp_path: Path) -> None:

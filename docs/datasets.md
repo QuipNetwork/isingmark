@@ -184,7 +184,7 @@ rebuild the model from the nonce and compare it with these digests.
           "claimed_energy_milli": "-1520448",
           "origin": { "path": "<research-root-relative file>", "blake3": "<64 hex>", "array": "spins", "index": 0 }
         },
-        { "name": "greedy", "missing": "states not stored; searched <path>" }
+        { "name": "greedy", "missing": "states not stored, searched <research-root-relative path>" }
       ]
     }
   ]

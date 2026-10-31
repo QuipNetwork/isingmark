@@ -2,7 +2,7 @@
   "about": [
     "Rows 0 and 1 of ice-fields-h1000 in new-pow/targets-pp-100.json, exported by tools/structured/isingmark_structured/archive.py.",
     "The arrays stay in the archive. Digests follow docs/datasets.md. Every witness is an archived observation that was shown before: the best raw QPU read, the greedy state, and the postprocessed final state. Each energy was recomputed from the model and equals the recorded value.",
-    "Conversion environment: Python 3.11.2, NumPy 2.4.6, export script blake3 cb1c513b3a31897b43cd11be8025b8cdb3e770eee9a7c3ab2dbe3e533ce63286."
+    "Conversion environment: Python 3.11.2, NumPy 2.4.6, export script blake3 b3ff8893362773145e71e6daa4191ae3586fd25c4e6b60c25ddcdf906d4ec4ab."
   ],
   "archived_instances": [
     {
@@ -200,7 +200,7 @@
   "schema_revision": 1,
   "sources": [
     {
-      "blake3": "cb1c513b3a31897b43cd11be8025b8cdb3e770eee9a7c3ab2dbe3e533ce63286",
+      "blake3": "b3ff8893362773145e71e6daa4191ae3586fd25c4e6b60c25ddcdf906d4ec4ab",
       "path": "tools/structured/isingmark_structured/archive.py"
     },
     {

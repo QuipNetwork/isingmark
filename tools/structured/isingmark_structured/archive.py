@@ -6,8 +6,14 @@ For each selected cell the export takes the first two rows of the cell in ``targ
 reads the model ``.npz`` as the research stored it, and records digests of it: the topology order
 digest (FAM-19) and the model digest over the FAM-30 instance body. The arrays stay in the
 archive. Edges, h, and j are hashed as stored, never sorted or repaired. A model that does not fit
-the format is rejected with an error. The witness of each instance is the postprocessed final
-state when the research stored it, and its energy must equal the recorded ``pp_best``.
+the format is rejected with an error.
+
+Each instance has up to three witnesses: ``qpu-best`` (the lowest raw QPU read), ``greedy`` (the
+state that ``qpu80_greedy`` came from), and ``pp-final`` (the postprocessed final state). Each
+spins witness has an ``origin`` with the archive file path, its BLAKE3, the array key (or null),
+and the read index (or null). The energy of each state is recomputed from the model and must
+equal the recorded ``qpu80_best``, ``qpu80_greedy``, or ``pp_best``. The export stops on any
+difference.
 
 Format and rules: ``docs/datasets.md``, section "Archived research fixtures".
 """
@@ -197,11 +203,12 @@ def pp_best(results: Path, nonce: str) -> int:
     raise ArchiveError(f"{results}: no row for nonce {nonce}")
 
 
-def check_states(states: np.ndarray, nodes: int, label: str) -> np.ndarray:
-    """``states`` as a 2-D int8 array of +1 and -1 with ``nodes`` columns."""
-    if states.dtype != np.int8 or states.ndim not in (1, 2) or states.shape[-1] != nodes:
+def check_states(states: np.ndarray, nodes: int, label: str, ndim: int = 2) -> np.ndarray:
+    """``states`` as an int8 array of +1 and -1 with ``ndim`` dimensions and ``nodes`` columns."""
+    if states.dtype != np.int8 or states.ndim != ndim or states.shape[-1] != nodes:
         raise ArchiveError(
-            f"{label}: states are {states.dtype} {states.shape}, not int8 (.., {nodes})"
+            f"{label}: states are {states.dtype} {states.shape}, not int8 with {ndim} "
+            f"dimensions ending in {nodes}"
         )
     if not np.all(np.abs(states) == 1):
         raise ArchiveError(f"{label}: a spin is not 1 or -1")
@@ -273,7 +280,7 @@ def qpu_read(
         raise ArchiveError(f"{path}: the reads are mock data")
     states = check_states(load_array(path, "spins"), nodes, str(path))
     energies = load_array(path, "energies")
-    if states.ndim != 2 or energies.shape != (states.shape[0],):
+    if energies.shape != (states.shape[0],):
         raise ArchiveError(f"{path}: energies {energies.shape} do not match spins {states.shape}")
     return path, states, int(np.argmin(energies))
 
@@ -282,9 +289,8 @@ def qpu_witness(
     root: Path, cell: str, row: dict[str, Any], fields: dict[str, Any], read: Any
 ) -> dict[str, Any]:
     if isinstance(read, list):
-        return missing_witness(
-            QPU_WITNESS, "reads not stored; searched " + ", ".join(map(str, read))
-        )
+        searched = ", ".join(p.relative_to(root).as_posix() for p in read)
+        return missing_witness(QPU_WITNESS, f"reads not stored, searched {searched}")
     path, states, best = read
     source = origin(root, path, "spins", best)
     return spins_witness(QPU_WITNESS, fields, states[best], int(row["qpu80_best"]), source)
@@ -302,7 +308,9 @@ def greedy_witness(
     nonce, nodes = row["nonce"], len(fields["node_ids"])
     path = root / GREEDY / cell / f"{nonce}.states.npz"
     if not path.is_file():
-        return missing_witness(GREEDY_WITNESS, f"states not stored; searched {path}")
+        return missing_witness(
+            GREEDY_WITNESS, f"states not stored, searched {path.relative_to(root).as_posix()}"
+        )
     gnat = check_states(load_array(path, "gnat_c"), nodes, f"{path}: gnat_c")
     with np.load(path, allow_pickle=False) as stored:
         has_loop = "loop_strict" in stored.files
@@ -313,10 +321,9 @@ def greedy_witness(
     chosen, array, index = gnat[gnat_best], "gnat_c", gnat_best
     if loop.shape[0] > 0:
         if isinstance(read, list):
-            return missing_witness(
-                GREEDY_WITNESS,
-                "raw reads not stored, so the loop state is unknown; searched "
-                + ", ".join(map(str, read)),
+            raise ArchiveError(
+                f"{path}: loop_strict has rows but the raw QPU reads are not stored, so the "
+                "greedy rule cannot be applied"
             )
         raw_best = read[2]
         if raw_best >= loop.shape[0]:
@@ -336,10 +343,11 @@ def pp_witness(
     cell_dir = root / MEASUREMENTS / family / cell
     state_path = cell_dir / "states" / f"{nonce}.npy"
     if not state_path.is_file():
-        return missing_witness(PP_WITNESS, f"state not stored; searched {state_path}")
-    state = check_states(load_array(state_path, None), len(fields["node_ids"]), str(state_path))
-    if state.ndim != 1:
-        raise ArchiveError(f"{state_path}: expected one state, got shape {state.shape}")
+        return missing_witness(
+            PP_WITNESS, f"state not stored, searched {state_path.relative_to(root).as_posix()}"
+        )
+    nodes = len(fields["node_ids"])
+    state = check_states(load_array(state_path, None), nodes, str(state_path), ndim=1)
     recorded = pp_best(cell_dir / "results.jsonl", nonce)
     return spins_witness(PP_WITNESS, fields, state, recorded, origin(root, state_path, None, None))
 
