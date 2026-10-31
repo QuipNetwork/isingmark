@@ -55,11 +55,10 @@ mod fixtures {
         archive_blake3: String,
         source_recipe: Recipe,
         node_order: String,
-        node_ids: Vec<i64>,
-        edges: Vec<[i64; 2]>,
-        h: Vec<i64>,
-        j: Vec<i64>,
-        scale: i64,
+        n_nodes: i64,
+        n_edges: i64,
+        topology_order_digest: String,
+        model_digest: String,
         offset_milli: String,
         qubo_offset_milli: Option<String>,
         family_id: Option<String>,
@@ -88,7 +87,7 @@ mod fixtures {
     #[serde(deny_unknown_fields)]
     struct Witness {
         name: String,
-        spins: Option<Vec<i64>>,
+        spins_packed: Option<String>,
         claimed_energy_milli: Option<String>,
         missing: Option<String>,
     }
@@ -164,50 +163,23 @@ mod fixtures {
         }
     }
 
-    fn check_graph(at: &str, inst: &Instance, errors: &mut Vec<String>) {
-        let nodes = inst.node_ids.len();
-        let unique: BTreeSet<_> = inst.node_ids.iter().collect();
-        if unique.len() != nodes {
-            errors.push(format!("{at}: node_ids has a duplicate"));
+    fn check_shape(at: &str, inst: &Instance, errors: &mut Vec<String>) {
+        if !matches!(inst.node_order.as_str(), "physical" | "ascending") {
+            errors.push(format!("{at}: unknown node_order {:?}", inst.node_order));
         }
-        match inst.node_order.as_str() {
-            "physical" => {}
-            "ascending" => {
-                if !inst.node_ids.windows(2).all(|w| w[0] < w[1]) {
-                    errors.push(format!(
-                        "{at}: node_order is ascending but node_ids is not strictly increasing"
-                    ));
-                }
+        if inst.n_nodes <= 0 {
+            errors.push(format!("{at}: n_nodes {} is not positive", inst.n_nodes));
+        }
+        if inst.n_edges <= 0 {
+            errors.push(format!("{at}: n_edges {} is not positive", inst.n_edges));
+        }
+        for (field, value) in [
+            ("topology_order_digest", &inst.topology_order_digest),
+            ("model_digest", &inst.model_digest),
+        ] {
+            if !is_digest(value) {
+                errors.push(format!("{at}: {field} is not 64 lowercase hex characters"));
             }
-            other => errors.push(format!("{at}: unknown node_order {other:?}")),
-        }
-        for &[a, b] in &inst.edges {
-            if !(0 <= a && a < b && usize::try_from(b).is_ok_and(|b| b < nodes)) {
-                errors.push(format!(
-                    "{at}: edge [{a}, {b}] is out of range or not ordered a < b"
-                ));
-            }
-        }
-        if !inst.edges.windows(2).all(|w| w[0] < w[1]) {
-            errors.push(format!(
-                "{at}: edges are not strictly increasing (unsorted or duplicate)"
-            ));
-        }
-        if inst.h.len() != nodes {
-            errors.push(format!(
-                "{at}: h has {} entries for {nodes} nodes",
-                inst.h.len()
-            ));
-        }
-        if inst.j.len() != inst.edges.len() {
-            errors.push(format!(
-                "{at}: j has {} entries for {} edges",
-                inst.j.len(),
-                inst.edges.len()
-            ));
-        }
-        if inst.scale != 1000 {
-            errors.push(format!("{at}: scale is {}, expected 1000", inst.scale));
         }
     }
 
@@ -250,22 +222,31 @@ mod fixtures {
         parsed
     }
 
-    fn energy(inst: &Instance, offset: i64, spins: &[i64]) -> i128 {
-        let mut total = i128::from(offset);
-        for (h, s) in inst.h.iter().zip(spins) {
-            total += i128::from(*h) * i128::from(*s);
+    /// Checks the packed spin hex: exactly `ceil(n_nodes / 8)` bytes with zero padding bits.
+    fn check_packed(at: &str, packed: &str, n_nodes: i64, errors: &mut Vec<String>) {
+        let Ok(nodes) = usize::try_from(n_nodes) else {
+            return;
+        };
+        let bytes = nodes.div_ceil(8);
+        if !is_lower_hex(packed) || packed.len() != bytes * 2 {
+            errors.push(format!(
+                "{at}: spins_packed is not lowercase hex of {bytes} bytes for {nodes} nodes"
+            ));
+            return;
         }
-        for (j, [a, b]) in inst.j.iter().zip(&inst.edges) {
-            let spin = |i: i64| usize::try_from(i).ok().and_then(|i| spins.get(i));
-            if let (Some(sa), Some(sb)) = (spin(*a), spin(*b)) {
-                total += i128::from(*j) * i128::from(*sa) * i128::from(*sb);
+        let tail = nodes % 8;
+        if tail != 0 {
+            let last = packed
+                .get(packed.len() - 2..)
+                .and_then(|h| u8::from_str_radix(h, 16).ok());
+            if last.is_some_and(|b| b >> tail != 0) {
+                errors.push(format!("{at}: spins_packed has a padding bit set"));
             }
         }
-        total
     }
 
     fn check_witnesses(at: &str, inst: &Instance, errors: &mut Vec<String>) {
-        let offset = parse_i64(at, "offset_milli", &inst.offset_milli, errors);
+        parse_i64(at, "offset_milli", &inst.offset_milli, errors);
         if let Some(text) = &inst.qubo_offset_milli {
             parse_i64(at, "qubo_offset_milli", text, errors);
         }
@@ -276,28 +257,13 @@ mod fixtures {
                 errors.push(format!("{at}: duplicate witness name"));
             }
             match (
-                &witness.spins,
+                &witness.spins_packed,
                 &witness.claimed_energy_milli,
                 &witness.missing,
             ) {
-                (Some(spins), Some(claimed), None) => {
-                    let claimed = parse_i64(&at, "claimed_energy_milli", claimed, errors);
-                    if spins.len() != inst.node_ids.len() {
-                        errors.push(format!(
-                            "{at}: spins has {} entries for {} nodes",
-                            spins.len(),
-                            inst.node_ids.len()
-                        ));
-                    } else if spins.iter().any(|s| *s != 1 && *s != -1) {
-                        errors.push(format!("{at}: a spin is not 1 or -1"));
-                    } else if let (Some(offset), Some(claimed)) = (offset, claimed) {
-                        let actual = energy(inst, offset, spins);
-                        if actual != i128::from(claimed) {
-                            errors.push(format!(
-                                "{at}: claimed energy {claimed} but the energy is {actual}"
-                            ));
-                        }
-                    }
+                (Some(packed), Some(claimed), None) => {
+                    parse_i64(&at, "claimed_energy_milli", claimed, errors);
+                    check_packed(&at, packed, inst.n_nodes, errors);
                 }
                 (None, None, Some(reason)) => {
                     if reason.is_empty() {
@@ -305,7 +271,7 @@ mod fixtures {
                     }
                 }
                 _ => errors.push(format!(
-                    "{at}: needs either spins with claimed_energy_milli, or missing"
+                    "{at}: needs either spins_packed with claimed_energy_milli, or missing"
                 )),
             }
         }
@@ -349,7 +315,7 @@ mod fixtures {
         if inst.source_recipe.name.is_empty() {
             errors.push(format!("{at}: source_recipe name is empty"));
         }
-        check_graph(&at, inst, errors);
+        check_shape(&at, inst, errors);
         check_optional(&at, inst, errors);
         check_witnesses(&at, inst, errors);
     }
@@ -436,11 +402,10 @@ fn baseline() -> Value {
             "archive_blake3": hex('b'),
             "source_recipe": { "source": "gen-src", "name": "demo" },
             "node_order": "physical",
-            "node_ids": [907, 41, 12],
-            "edges": [[0, 1], [0, 2]],
-            "h": [0, -500, 31],
-            "j": [-1000, 62],
-            "scale": 1000,
+            "n_nodes": 12,
+            "n_edges": 2,
+            "topology_order_digest": hex('d'),
+            "model_digest": hex('e'),
             "offset_milli": "0",
             "qubo_offset_milli": null,
             "family_id": null,
@@ -448,7 +413,7 @@ fn baseline() -> Value {
             "params_hex": null,
             "postprocess_policy": { "family": "ice-tiles", "method": "anneal:b0=2", "budget_s": 0.25 },
             "witnesses": [
-                { "name": "qpu-best", "spins": [1, -1, 1], "claimed_energy_milli": "1593" },
+                { "name": "qpu-best", "spins_packed": "0f05", "claimed_energy_milli": "1593" },
                 { "name": "pp-state", "missing": "state not stored in the archive" }
             ]
         }]
@@ -601,64 +566,6 @@ fn unknown_source_recipe_fails() -> TestResult {
 }
 
 #[test]
-fn node_order_mismatch_fails() -> TestResult {
-    expect_error(
-        |f| inst(f)["node_order"] = json!("ascending"),
-        "not strictly increasing",
-    )?;
-    expect_error(
-        |f| inst(f)["node_order"] = json!("sideways"),
-        "unknown node_order",
-    )
-}
-
-#[test]
-fn duplicate_node_id_fails() -> TestResult {
-    expect_error(
-        |f| inst(f)["node_ids"] = json!([907, 41, 41]),
-        "node_ids has a duplicate",
-    )
-}
-
-#[test]
-fn unsorted_edge_fails() -> TestResult {
-    expect_error(
-        |f| inst(f)["edges"] = json!([[0, 2], [0, 1]]),
-        "not strictly increasing",
-    )
-}
-
-#[test]
-fn duplicate_edge_fails() -> TestResult {
-    expect_error(
-        |f| inst(f)["edges"] = json!([[0, 1], [0, 1]]),
-        "not strictly increasing",
-    )
-}
-
-#[test]
-fn self_loop_fails() -> TestResult {
-    expect_error(
-        |f| inst(f)["edges"] = json!([[1, 1], [1, 2]]),
-        "edge [1, 1]",
-    )
-}
-
-#[test]
-fn edge_out_of_range_fails() -> TestResult {
-    expect_error(
-        |f| inst(f)["edges"] = json!([[0, 1], [0, 3]]),
-        "edge [0, 3]",
-    )
-}
-
-#[test]
-fn length_mismatch_fails() -> TestResult {
-    expect_error(|f| inst(f)["h"] = json!([0, -500]), "h has 2 entries")?;
-    expect_error(|f| inst(f)["j"] = json!([-1000]), "j has 1 entries")
-}
-
-#[test]
 fn i64_as_number_fails() -> TestResult {
     expect_error(
         |f| inst(f)["offset_milli"] = json!(0),
@@ -730,44 +637,15 @@ fn witness_shape_fails() -> TestResult {
 }
 
 #[test]
-fn bad_spin_fails() -> TestResult {
-    expect_error(
-        |f| inst(f)["witnesses"][0]["spins"] = json!([1, 0, 1]),
-        "not 1 or -1",
-    )?;
-    expect_error(
-        |f| inst(f)["witnesses"][0]["spins"] = json!([1, -1]),
-        "spins has 2 entries",
-    )
-}
-
-#[test]
-fn witness_energy_mismatch_fails() -> TestResult {
-    expect_error(
-        |f| inst(f)["witnesses"][0]["claimed_energy_milli"] = json!("1592"),
-        "claimed energy 1592 but the energy is 1593",
-    )
-}
-
-#[test]
-fn offset_enters_energy() -> TestResult {
-    expect_ok(|f| {
-        inst(f)["offset_milli"] = json!("-5");
-        inst(f)["witnesses"][0]["claimed_energy_milli"] = json!("1588");
-    })?;
-    expect_ok(|f| inst(f)["qubo_offset_milli"] = json!("-5"))
-}
-
-#[test]
 fn reports_every_violation() -> TestResult {
     let errors = match mutated(|f| {
-        inst(f)["scale"] = json!(1);
+        inst(f)["n_nodes"] = json!(0);
         inst(f)["nonce"] = json!("xyz");
     })? {
         Ok(()) => return Err("expected errors".into()),
         Err(errors) => errors,
     };
-    for needle in ["scale is 1", "nonce is not"] {
+    for needle in ["n_nodes 0", "nonce is not"] {
         if !errors.iter().any(|e| e.contains(needle)) {
             return Err(format!("missing {needle:?} in {errors:#?}").into());
         }
@@ -801,5 +679,198 @@ fn recorded_fixtures_are_valid() -> TestResult {
         Ok(())
     } else {
         Err(format!("{failures:#?}").into())
+    }
+}
+
+#[test]
+fn bad_node_order_fails() -> TestResult {
+    expect_error(
+        |f| inst(f)["node_order"] = json!("sideways"),
+        "unknown node_order",
+    )?;
+    expect_ok(|f| inst(f)["node_order"] = json!("ascending"))
+}
+
+#[test]
+fn bad_counts_fail() -> TestResult {
+    expect_error(
+        |f| inst(f)["n_nodes"] = json!(0),
+        "n_nodes 0 is not positive",
+    )?;
+    expect_error(
+        |f| inst(f)["n_edges"] = json!(-3),
+        "n_edges -3 is not positive",
+    )?;
+    expect_error(|f| inst(f)["n_nodes"] = json!("12"), "cannot parse")
+}
+
+#[test]
+fn bad_digests_fail() -> TestResult {
+    for field in ["topology_order_digest", "model_digest"] {
+        expect_error(
+            |f| inst(f)[field] = json!("A".repeat(64)),
+            &format!("{field} is not 64 lowercase hex"),
+        )?;
+        expect_error(
+            |f| inst(f)[field] = json!("a".repeat(63)),
+            &format!("{field} is not 64 lowercase hex"),
+        )?;
+        expect_error(
+            |f| {
+                if let Some(map) = inst(f).as_object_mut() {
+                    map.remove(field);
+                }
+            },
+            field,
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn bad_packed_spins_fail() -> TestResult {
+    for packed in ["0f", "0f0500", "0F05", "0f0g", "0f15"] {
+        expect_error(
+            |f| inst(f)["witnesses"][0]["spins_packed"] = json!(packed),
+            "spins_packed",
+        )?;
+    }
+    expect_error(
+        |f| inst(f)["witnesses"][0]["spins_packed"] = json!("0f15"),
+        "padding bit",
+    )?;
+    expect_ok(|f| inst(f)["witnesses"][0]["spins_packed"] = json!("ff0f"))
+}
+
+#[test]
+fn removed_array_fields_fail() -> TestResult {
+    expect_error(
+        |f| inst(f)["node_ids"] = json!([1]),
+        "unknown field `node_ids`",
+    )?;
+    expect_error(
+        |f| inst(f)["witnesses"][0]["spins"] = json!([1]),
+        "unknown field `spins`",
+    )
+}
+
+#[test]
+fn offsets_are_decimal_strings() -> TestResult {
+    expect_ok(|f| {
+        inst(f)["offset_milli"] = json!("-5");
+        inst(f)["qubo_offset_milli"] = json!("-5");
+    })?;
+    expect_error(
+        |f| inst(f)["offset_milli"] = json!("5.0"),
+        "offset_milli \"5.0\" is not a decimal i64",
+    )
+}
+
+mod pinning {
+    use ising_generators::descriptor::topology_order_digest;
+    use ising_generators::instance::{Instance, InstanceLimits, InstanceParts};
+
+    use super::TestResult;
+
+    const TOPOLOGY_ORDER_DIGEST: &str =
+        "c30b0cb2b13ee310c3b6c896c68fd62641ae0221f70353af055b38a0f2e13a78";
+    const MODEL_DIGEST: &str = "c421554f0a6d5d9e1df450809473ab23542b9c3b0ca1188803f05d641e9c720f";
+    const INSTANCE_DIGEST: &str =
+        "f20d5158084abd1651b738cfc304e4be7c54239553d178964feac0b6874956c5";
+    /// Format byte, descriptor digest, topology order digest, and nonce.
+    const HEAD_LEN: usize = 97;
+
+    fn parts() -> InstanceParts {
+        InstanceParts {
+            descriptor_digest: [0x22; 32],
+            topology_order_digest: [0; 32],
+            nonce: Some([0x11; 32]),
+            node_ids: vec![907, 41, 12],
+            edges: vec![(0, 1), (0, 2)],
+            h: vec![0, -500, 31],
+            j: vec![-1000, 62],
+            offset_milli: -5,
+            metadata: vec![0, 0],
+        }
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        const DIGITS: &[u8; 16] = b"0123456789abcdef";
+        let mut out = String::with_capacity(bytes.len() * 2);
+        for b in bytes {
+            out.push(char::from(DIGITS[usize::from(b >> 4)]));
+            out.push(char::from(DIGITS[usize::from(b & 15)]));
+        }
+        out
+    }
+
+    fn same(label: &str, got: &str, want: &str) -> TestResult {
+        if got == want {
+            Ok(())
+        } else {
+            Err(format!("{label}: got {got}, want {want}").into())
+        }
+    }
+
+    fn derive(context: &str, body: &[u8]) -> String {
+        let mut hasher = blake3::Hasher::new_derive_key(context);
+        hasher.update(body);
+        hasher.finalize().to_hex().to_string()
+    }
+
+    /// The expected body: counts, ids, edges, h, j, offset, then the empty metadata region.
+    fn expected_body() -> Vec<u8> {
+        let mut body = Vec::new();
+        body.extend(3u32.to_le_bytes());
+        for id in [907u32, 41, 12] {
+            body.extend(id.to_le_bytes());
+        }
+        body.extend(2u32.to_le_bytes());
+        for (a, b) in [(0u32, 1u32), (0, 2)] {
+            body.extend(a.to_le_bytes());
+            body.extend(b.to_le_bytes());
+        }
+        for h in [0i32, -500, 31] {
+            body.extend(h.to_le_bytes());
+        }
+        for j in [-1000i32, 62] {
+            body.extend(j.to_le_bytes());
+        }
+        body.extend((-5i64).to_le_bytes());
+        body.extend([0u8, 0]);
+        body
+    }
+
+    #[test]
+    fn digests_match_the_pinned_values() -> TestResult {
+        let mut parts = parts();
+        // FAM-19 hashes native node ids, so map the dense edge positions through the ids.
+        let native: Vec<(u32, u32)> = parts
+            .edges
+            .iter()
+            .map(|&(a, b)| (parts.node_ids[a as usize], parts.node_ids[b as usize]))
+            .collect();
+        let topology = topology_order_digest(&parts.node_ids, &native)
+            .ok_or("topology order digest overflow")?;
+        parts.topology_order_digest = topology;
+        let instance = Instance::new(parts, &InstanceLimits::FAM_37, &[], None)
+            .map_err(|code| format!("instance rejected: {code:?}"))?;
+        let bytes = instance.canonical_bytes()?;
+        let body = bytes
+            .get(HEAD_LEN..)
+            .ok_or("canonical bytes shorter than the head")?;
+        same("body", &hex(body), &hex(&expected_body()))?;
+        same(
+            "topology_order_digest",
+            &hex(&topology),
+            TOPOLOGY_ORDER_DIGEST,
+        )?;
+        same(
+            "model_digest",
+            &derive("isingmark archived model v1", body),
+            MODEL_DIGEST,
+        )?;
+        same("instance digest", &hex(&instance.digest()), INSTANCE_DIGEST)?;
+        Ok(())
     }
 }
