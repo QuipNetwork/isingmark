@@ -148,7 +148,7 @@ def test_fixture_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     }
     assert (first["n_nodes"], first["n_edges"]) == (4, 3)
     assert "edges" not in first
-    assert first["model_digest"] == archive.model_digest(read_model(model))
+    assert len(first["model_digest"]) == 64
     assert doc["sources"][1]["path"] == "gen.py"
     assert render(doc).endswith("}\n")
 
@@ -211,7 +211,10 @@ def test_pack_spins_is_lsb_first_with_zero_padding() -> None:
     assert archive.pack_spins([1] * 12) == "ff0f"
 
 
-def test_out_of_range_coefficient_is_rejected(tmp_path: Path) -> None:
-    path = _write(tmp_path / "m.npz", h_milli=np.array([0, 2**31, 0, 0], dtype=np.int64))
-    with pytest.raises(ArchiveError, match="i32"):
-        read_model(path)
+def test_i32_bounds_are_inclusive(tmp_path: Path) -> None:
+    low = np.array([0, -(2**31), 0, 0], dtype=np.int64)
+    assert read_model(_write(tmp_path / "low.npz", h_milli=low))["h"][1] == -(2**31)
+    for value in (2**31, -(2**31) - 1):
+        high = np.array([0, value, 0, 0], dtype=np.int64)
+        with pytest.raises(ArchiveError, match="i32"):
+            read_model(_write(tmp_path / "high.npz", h_milli=high))

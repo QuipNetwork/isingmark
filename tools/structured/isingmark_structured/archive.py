@@ -50,6 +50,7 @@ MODEL_CONTEXT = "isingmark archived model v1"
 # FAM-30 metadata region of an instance with no sections.
 EMPTY_METADATA = b"\x00\x00"
 U32_MAX = 2**32 - 1
+I32_MIN = -(2**31)
 I32_MAX = 2**31 - 1
 
 
@@ -143,7 +144,7 @@ def read_model(path: Path) -> dict[str, Any]:
         if nodes.size and (nodes.min() < 0 or nodes.max() > U32_MAX):
             raise ArchiveError("physical_nodes: an id does not fit u32")
         for key, values in (("h_milli", h), ("j_milli", j)):
-            if values.size and np.abs(values).max() > I32_MAX:
+            if values.size and (values.min() < I32_MIN or values.max() > I32_MAX):
                 raise ArchiveError(f"{key}: a value does not fit i32")
         if len(set(nodes.tolist())) != nodes.size:
             raise ArchiveError("physical_nodes: duplicate node id")

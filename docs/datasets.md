@@ -183,19 +183,18 @@ rebuild the model from the nonce and compare it with these digests.
 
 ### Digests
 
-Both digests use BLAKE3 in key-derivation mode. They read the model in the
-canonical instance layout of quip-solver-core (FAM-30). That layout is a
-97-byte head followed by a body. The body holds `u32` little-endian node count,
-the node ids, the `u32` edge count, the edges as dense positions, the `h` values
-as `i32`, the `j` values as `i32`, `offset_milli` as `i64`, and the metadata
-region. These fixtures use the empty metadata region, the two bytes `00 00`.
+Both digests use BLAKE3 in key-derivation mode. The canonical instance layout
+of quip-solver-core (FAM-30) is a 97-byte head followed by a body. The body holds
+the `u32` little-endian node count, the node ids, the `u32` edge count, the
+edges as dense positions, the `h` values as `i32`, the `j` values as `i32`,
+`offset_milli` as `i64`, and the metadata region. These fixtures use the empty metadata region, the two bytes `00 00`.
 
-- `topology_order_digest` is the upstream topology order digest (FAM-19). Its
-  context is `quip family topology order v1`. It covers the node count, the
-  node ids, the edge count, and each edge as two native node ids, in instance
-  order.
+- `topology_order_digest` is the upstream topology order digest (FAM-19). It
+  does not read the whole layout. Its context is
+  `quip family topology order v1`. It covers the node count, the node ids, the
+  edge count, and each edge as two native node ids, in instance order.
 - `model_digest` is an IsingMark rule, not an upstream digest. Its context is
-  `isingmark archived model v1`. It covers the FAM-30 body only, including the
+  `isingmark archived model v1`. It reads the FAM-30 body only, including the
   metadata region. The research cells have no family descriptor yet, so the
   upstream instance digest (FAM-18) does not apply to them.
 

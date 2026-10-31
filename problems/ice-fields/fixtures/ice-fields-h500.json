@@ -2,7 +2,7 @@
   "about": [
     "Rows 0 and 1 of ice-fields-h500 in new-pow/targets-pp-100.json, exported by tools/structured/isingmark_structured/archive.py.",
     "The arrays stay in the archive. Digests follow docs/datasets.md. The witness is the postprocessed final state, packed, and checked against pp_best.",
-    "Conversion environment: Python 3.11.2, NumPy 2.4.6, export script blake3 5cb6f7045cae6aada72e6f5fbfe2f90d56d0ca337a05322b72e9a30f1f2c9bb3."
+    "Conversion environment: Python 3.11.2, NumPy 2.4.6, export script blake3 642ecff67e1f4e83fc347150cee283381d1a32a1e00ecddcadcaef96cf50befa."
   ],
   "archived_instances": [
     {
@@ -76,7 +76,7 @@
   "schema_revision": 1,
   "sources": [
     {
-      "blake3": "5cb6f7045cae6aada72e6f5fbfe2f90d56d0ca337a05322b72e9a30f1f2c9bb3",
+      "blake3": "642ecff67e1f4e83fc347150cee283381d1a32a1e00ecddcadcaef96cf50befa",
       "path": "tools/structured/isingmark_structured/archive.py"
     },
     {
