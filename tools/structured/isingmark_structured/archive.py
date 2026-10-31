@@ -29,9 +29,16 @@ REPO = Path(__file__).resolve().parents[3]
 DEFAULT_RESEARCH_ROOT = Path("/home/carback1/quip-data/regimes")
 TARGETS = "new-pow/targets-pp-100.json"
 MEASUREMENTS = "new-pow/postprocess/measurements/optimizers-100"
+GREEDY = "new-pow/postprocess/measurements/greedy-100"
+OPTIMIZERS = "new-pow/postprocess/optimizers"
+# Raw QPU reads live at <root>/<cell>/qpu-80/<nonce>.npz, first root that has the file
+# (the order of ARCHIVE_ROOTS in new-pow/postprocess/descent.py).
+QPU_ROOTS = ("new-pow/qpu-recap/qpu", "qpu-f17/qpu", "qpu-suite/qpu")
 SCRIPT = Path(__file__).resolve()
 ROWS_PER_CELL = 2
-WITNESS_NAME = "pp-final"
+PP_WITNESS = "pp-final"
+QPU_WITNESS = "qpu-best"
+GREEDY_WITNESS = "greedy"
 
 # cell -> (problems/ family directory, generator id in problems/sources.json)
 CELLS: dict[str, tuple[str, str]] = {
@@ -182,15 +189,6 @@ def energy_milli(fields: dict[str, Any], spins: list[int]) -> int:
     return total
 
 
-def read_state(path: Path, nodes: int) -> list[int]:
-    state = np.load(path, allow_pickle=False)
-    if state.dtype != np.int8 or state.shape != (nodes,):
-        raise ArchiveError(f"{path}: state is {state.dtype} {state.shape}, not int8 ({nodes},)")
-    if not np.all(np.abs(state) == 1):
-        raise ArchiveError(f"{path}: a spin is not 1 or -1")
-    return state.tolist()
-
-
 def pp_best(results: Path, nonce: str) -> int:
     for line in results.read_text(encoding="utf-8").splitlines():
         row = json.loads(line)
@@ -199,24 +197,174 @@ def pp_best(results: Path, nonce: str) -> int:
     raise ArchiveError(f"{results}: no row for nonce {nonce}")
 
 
-def witness(root: Path, family: str, cell: str, nonce: str, fields: dict[str, Any]) -> dict:
+def check_states(states: np.ndarray, nodes: int, label: str) -> np.ndarray:
+    """``states`` as a 2-D int8 array of +1 and -1 with ``nodes`` columns."""
+    if states.dtype != np.int8 or states.ndim not in (1, 2) or states.shape[-1] != nodes:
+        raise ArchiveError(
+            f"{label}: states are {states.dtype} {states.shape}, not int8 (.., {nodes})"
+        )
+    if not np.all(np.abs(states) == 1):
+        raise ArchiveError(f"{label}: a spin is not 1 or -1")
+    return states
+
+
+def energies_milli(fields: dict[str, Any], states: np.ndarray) -> np.ndarray:
+    """Rescore energies of every row of ``states`` (shape ``(reads, nodes)``), no offset."""
+    spins = states.astype(np.int64)
+    edges = np.asarray(fields["edges"], dtype=np.int64).reshape(-1, 2)
+    h = np.asarray(fields["h"], dtype=np.int64)
+    j = np.asarray(fields["j"], dtype=np.int64)
+    pair = spins[:, edges[:, 0]] * spins[:, edges[:, 1]]
+    return spins @ h + pair @ j
+
+
+def load_array(path: Path, array: str | None) -> np.ndarray:
+    """An array of an NPZ, or the whole ``.npy`` when ``array`` is None. No pickles."""
+    try:
+        loaded = np.load(path, allow_pickle=False)
+        if array is None:
+            return loaded
+        with loaded:
+            return loaded[array]
+    except (ValueError, KeyError, OSError) as error:
+        raise ArchiveError(f"{path}: {array}: {error}") from error
+
+
+def origin(root: Path, path: Path, array: str | None, index: int | None) -> dict[str, Any]:
+    return {
+        "path": path.relative_to(root).as_posix(),
+        "blake3": blake3_hex(path.read_bytes()),
+        "array": array,
+        "index": index,
+    }
+
+
+def spins_witness(
+    name: str, fields: dict[str, Any], state: np.ndarray, expected: int, source: dict[str, Any]
+) -> dict[str, Any]:
+    """A witness whose energy, recomputed from the model, must equal ``expected``."""
+    computed = int(energies_milli(fields, state[None, :])[0])
+    if computed != expected:
+        raise ArchiveError(f"{name}: state energy {computed} differs from the recorded {expected}")
+    return {
+        "name": name,
+        "spins_packed": pack_spins(state.tolist()),
+        "claimed_energy_milli": str(expected),
+        "origin": source,
+    }
+
+
+def missing_witness(name: str, reason: str) -> dict[str, str]:
+    return {"name": name, "missing": reason}
+
+
+def qpu_read(
+    root: Path, cell: str, nonce: str, nodes: int
+) -> tuple[Path, np.ndarray, int] | list[Path]:
+    """The raw QPU file, its states, and the index of the lowest energy read.
+
+    Returns the list of searched paths when no root has the file.
+    """
+    searched = [root / base / cell / "qpu-80" / f"{nonce}.npz" for base in QPU_ROOTS]
+    path = next((p for p in searched if p.is_file()), None)
+    if path is None:
+        return searched
+    if bool(np.any(load_array(path, "mock"))):
+        raise ArchiveError(f"{path}: the reads are mock data")
+    states = check_states(load_array(path, "spins"), nodes, str(path))
+    energies = load_array(path, "energies")
+    if states.ndim != 2 or energies.shape != (states.shape[0],):
+        raise ArchiveError(f"{path}: energies {energies.shape} do not match spins {states.shape}")
+    return path, states, int(np.argmin(energies))
+
+
+def qpu_witness(
+    root: Path, cell: str, row: dict[str, Any], fields: dict[str, Any], read: Any
+) -> dict[str, Any]:
+    if isinstance(read, list):
+        return missing_witness(
+            QPU_WITNESS, "reads not stored; searched " + ", ".join(map(str, read))
+        )
+    path, states, best = read
+    source = origin(root, path, "spins", best)
+    return spins_witness(QPU_WITNESS, fields, states[best], int(row["qpu80_best"]), source)
+
+
+def greedy_witness(
+    root: Path, cell: str, row: dict[str, Any], fields: dict[str, Any], read: Any
+) -> dict[str, Any]:
+    """The greedy state that the recorded ``qpu80_greedy`` came from.
+
+    Every cell has ``gnat_c`` and takes its lowest energy read. Ice cells also store
+    ``loop_strict``, and take its state for the read with the lowest raw energy when that state is
+    at least as low as the best ``gnat_c`` state.
+    """
+    nonce, nodes = row["nonce"], len(fields["node_ids"])
+    path = root / GREEDY / cell / f"{nonce}.states.npz"
+    if not path.is_file():
+        return missing_witness(GREEDY_WITNESS, f"states not stored; searched {path}")
+    gnat = check_states(load_array(path, "gnat_c"), nodes, f"{path}: gnat_c")
+    with np.load(path, allow_pickle=False) as stored:
+        has_loop = "loop_strict" in stored.files
+    loop = np.zeros((0, nodes), dtype=np.int8)
+    if has_loop:
+        loop = check_states(load_array(path, "loop_strict"), nodes, f"{path}: loop_strict")
+    gnat_best = int(np.argmin(energies_milli(fields, gnat)))
+    chosen, array, index = gnat[gnat_best], "gnat_c", gnat_best
+    if loop.shape[0] > 0:
+        if isinstance(read, list):
+            return missing_witness(
+                GREEDY_WITNESS,
+                "raw reads not stored, so the loop state is unknown; searched "
+                + ", ".join(map(str, read)),
+            )
+        raw_best = read[2]
+        if raw_best >= loop.shape[0]:
+            raise ArchiveError(f"{path}: loop_strict has no row {raw_best}")
+        loop_energy = int(energies_milli(fields, loop[raw_best : raw_best + 1])[0])
+        gnat_energy = int(energies_milli(fields, gnat[gnat_best : gnat_best + 1])[0])
+        if loop_energy <= gnat_energy:
+            chosen, array, index = loop[raw_best], "loop_strict", raw_best
+    source = origin(root, path, array, index)
+    return spins_witness(GREEDY_WITNESS, fields, chosen, int(row["qpu80_greedy"]), source)
+
+
+def pp_witness(
+    root: Path, family: str, cell: str, nonce: str, fields: dict[str, Any]
+) -> dict[str, Any]:
     """The ``pp-final`` witness, or a ``missing`` witness that names the path searched."""
     cell_dir = root / MEASUREMENTS / family / cell
     state_path = cell_dir / "states" / f"{nonce}.npy"
     if not state_path.is_file():
-        return {"name": WITNESS_NAME, "missing": f"state not stored; searched {state_path}"}
-    spins = read_state(state_path, len(fields["node_ids"]))
+        return missing_witness(PP_WITNESS, f"state not stored; searched {state_path}")
+    state = check_states(load_array(state_path, None), len(fields["node_ids"]), str(state_path))
+    if state.ndim != 1:
+        raise ArchiveError(f"{state_path}: expected one state, got shape {state.shape}")
     recorded = pp_best(cell_dir / "results.jsonl", nonce)
-    computed = energy_milli(fields, spins)
-    if computed != recorded:
-        raise ArchiveError(
-            f"{cell} {nonce}: state energy {computed} differs from pp_best {recorded}"
-        )
-    return {
-        "name": WITNESS_NAME,
-        "spins_packed": pack_spins(spins),
-        "claimed_energy_milli": str(recorded),
-    }
+    return spins_witness(PP_WITNESS, fields, state, recorded, origin(root, state_path, None, None))
+
+
+def witnesses(
+    root: Path, target: dict[str, Any], cell: str, row: dict[str, Any], fields: dict[str, Any]
+) -> list[dict[str, Any]]:
+    read = qpu_read(root, cell, row["nonce"], len(fields["node_ids"]))
+    return [
+        qpu_witness(root, cell, row, fields, read),
+        greedy_witness(root, cell, row, fields, read),
+        pp_witness(root, target["family"], cell, row["nonce"], fields),
+    ]
+
+
+def policy_sources(root: Path, family: str) -> list[dict[str, str]]:
+    """Every ``*.py`` file directly in the optimizer directory of ``family``, sorted by path."""
+    directory = root / OPTIMIZERS / family
+    files = sorted(p for p in directory.glob("*.py") if p.is_file())
+    if not files:
+        raise ArchiveError(f"{directory}: no optimizer sources")
+    return [
+        {"path": p.relative_to(root).as_posix(), "blake3": blake3_hex(p.read_bytes())}
+        for p in files
+    ]
 
 
 def source_entry(repo: Path, source_id: str, sources: dict[str, dict]) -> dict[str, str]:
@@ -230,6 +378,7 @@ def build_fixture(root: Path, repo: Path, cell: str) -> dict[str, Any]:
     sources = {entry["id"]: entry for entry in manifest["sources"]}
     target = json.loads((root / TARGETS).read_text(encoding="utf-8"))[cell]
     script_hash = blake3_hex(SCRIPT.read_bytes())
+    sources_py = policy_sources(root, target["family"])
     instances = []
     for index, row in enumerate(target["rows"][:ROWS_PER_CELL]):
         model_path = Path(row["model"])
@@ -256,8 +405,9 @@ def build_fixture(root: Path, repo: Path, cell: str) -> dict[str, Any]:
                     "family": target["family"],
                     "method": target["method"],
                     "budget_s": target["budget_s"],
+                    "sources": sources_py,
                 },
-                "witnesses": [witness(root, target["family"], cell, row["nonce"], fields)],
+                "witnesses": witnesses(root, target, cell, row, fields),
             }
         )
     return {
@@ -266,8 +416,10 @@ def build_fixture(root: Path, repo: Path, cell: str) -> dict[str, Any]:
         "about": [
             f"Rows 0 and {ROWS_PER_CELL - 1} of {cell} in {TARGETS}, exported by "
             "tools/structured/isingmark_structured/archive.py.",
-            "The arrays stay in the archive. Digests follow docs/datasets.md. The witness is the "
-            "postprocessed final state, packed, and checked against pp_best.",
+            "The arrays stay in the archive. Digests follow docs/datasets.md. Every witness is an "
+            "archived observation that was shown before: the best raw QPU read, the greedy "
+            "state, and the postprocessed final state. Each energy was recomputed from the "
+            "model and equals the recorded value.",
             f"Conversion environment: Python {platform.python_version()}, NumPy {np.__version__}, "
             f"export script blake3 {script_hash}.",
         ],
