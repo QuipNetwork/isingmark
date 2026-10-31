@@ -45,4 +45,5 @@ plotters = { version = "0.3", optional = true }
 plot = ["dep:plotters"]
 
 [dev-dependencies]
+ising-generators = "0.0.4"
 tempfile = "3"

@@ -1,0 +1,87 @@
+{
+  "about": [
+    "Rows 0 and 1 of ice-fields-h500 in new-pow/targets-pp-100.json, exported by tools/structured/isingmark_structured/archive.py.",
+    "The arrays stay in the archive. Digests follow docs/datasets.md. The witness is the postprocessed final state, packed, and checked against pp_best.",
+    "Conversion environment: Python 3.11.2, NumPy 2.4.6, export script blake3 642ecff67e1f4e83fc347150cee283381d1a32a1e00ecddcadcaef96cf50befa."
+  ],
+  "archived_instances": [
+    {
+      "archive_blake3": "ae3ee1060953334557a3e85590048f2e93f810edf59b760d3477e02aeabe7805",
+      "archive_origin": "qpu-suite/work/cells/ice-fields-h500/models/e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f.npz",
+      "cell": "ice-fields-h500",
+      "descriptor_digest": null,
+      "family_id": null,
+      "model_digest": "3a98a146fc3680e805e0ba131ae2dcc24aef2b81f80eb3c45f079b7a5f5a36d9",
+      "n_edges": 41474,
+      "n_nodes": 4575,
+      "name": "ice-fields-h500-row0",
+      "node_order": "physical",
+      "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+      "offset_milli": "0",
+      "params_hex": null,
+      "postprocess_policy": {
+        "budget_s": 0.25,
+        "family": "ice-tiles",
+        "method": "anneal:b0=2,nat48=1"
+      },
+      "qubo_offset_milli": null,
+      "source_recipe": {
+        "name": "ice-fields-h500",
+        "source": "suite-ice-fields"
+      },
+      "topology_order_digest": "e12cffc9392cc502c5d065d6e1a3e2eabcc08247ffd55d2fe1b41988d2bc37e3",
+      "witnesses": [
+        {
+          "claimed_energy_milli": "-4664250",
+          "name": "pp-final",
+          "spins_packed": "7c7373eaafb81b6d23350bcfbec73ccc468e902a46975a4c3af0329726f243857c8e96cafd344e6ab5f37c6496f4d27bfd8563ca1658ea64a0079ff5337fa9a39fdd932dd118f2d734ed6cbcd834d58e5391ca384e654a6aa7d6ad1686d6e4ca79a5ab0ca4738b031b14c4775e1cc88c398d0048a7c7af8670df2bb9181106e3ad321c258575359f410a6b19d466ad63283670d7449b688e8a028aeedda449bccdf04d3f9e32cff1de2a36986d5c03962513e2979eff368c0eb771a1053d5d1f21e7ce129881c02868d634e624c36eb3c2b739ba3557de6c78d89bce03b6f25f6d5b5a8edf41e0fbd82a9481cdd379c75407ab49fd5e9232e46709d1ae0b6d47182e6c600d3b6f636416b8d62c139d54d914adfada067830e42c4bd99fe0b06c78a1a828e6f875968b1d53061eff7234ceec08d3499a0bc2180c0bf90d9e497082f1759572820985348c103d26a75ad854c435afe0deb8156a8c6b98fe35d3132f7a2eac254f0c665d0f0c1d565435c1781fc16e45459b1bf5ad9a086cd8b71b9218a76c370cf21917b4ba926a7cc66131ef8e126bde9efce49c03f306522562b40fc21f966ad661c6ea8a4c63ff8d880f9aba28586f0e11ae22e3cb8cd3da023b598f7a65a1ef491514fc253a7e39b1c0d023684b55b6225d3a160e5be592c6e80cc9394109a4f4cd91affb5b90da478a1a13bb54d31597fc6e8d28940c8b6dadde5b333e8332d7a0b78daa5b10f69a79addabf813fcce628e2ce0dbbc1f040119b7a7a925948af0bf13e7958888de2261e3a8b1ce052c2f2091e0a"
+        }
+      ]
+    },
+    {
+      "archive_blake3": "61321bf8c4a3dcace0ce98503d785414c642c859e757ad619e5a775af4ed3907",
+      "archive_origin": "qpu-suite/work/cells/ice-fields-h500/models/f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f.npz",
+      "cell": "ice-fields-h500",
+      "descriptor_digest": null,
+      "family_id": null,
+      "model_digest": "be0f77614f2d562fa1d8b30c0dcfeb9da67dc296c468ac455128ce7bf9726e05",
+      "n_edges": 41474,
+      "n_nodes": 4575,
+      "name": "ice-fields-h500-row1",
+      "node_order": "physical",
+      "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+      "offset_milli": "0",
+      "params_hex": null,
+      "postprocess_policy": {
+        "budget_s": 0.25,
+        "family": "ice-tiles",
+        "method": "anneal:b0=2,nat48=1"
+      },
+      "qubo_offset_milli": null,
+      "source_recipe": {
+        "name": "ice-fields-h500",
+        "source": "suite-ice-fields"
+      },
+      "topology_order_digest": "e12cffc9392cc502c5d065d6e1a3e2eabcc08247ffd55d2fe1b41988d2bc37e3",
+      "witnesses": [
+        {
+          "claimed_energy_milli": "-4663250",
+          "name": "pp-final",
+          "spins_packed": "4adce792c0c280005b423fa25ae0ee50a3a9db2491da0e9b06d0b18c16c9f73f2ebac549403afd27e44ae6604beb12bc5d6520c734100d3ef963af7d6e3c438338f930d7b67111498bf1ddf3e67c2e7f417dc12d82cbc8b6f68736f42f76f11340d339473deaf8195a78f74a0d551a8e91bd4a9f65cdc32e890578a02cb19b1c97eb16e8047f93b093a15abe33ca882bf7bca7360f6655d8e9a089cd24e92e2e54d595274fa105ab55867f60e355dd852921a7acdf2200410fea3da64af4ab42b1b41de1631d178da857cd89724c0dcfed9dc18612e5548b7f8ee3efb2464f844c239cc9c99054978cfbdad7ea35184ab2165df6d4e2200ef8e91c81ca3b4655a9dad76c1fb6f3138b9c459e53670ddc3f44c928372885fe06f8b7b05fd5585b787dfd6aa9dc030947dfb6ecaacc00e5b833735bbd0a85325334811e70125f8a0101f192d1c0e615ae0f0251c9e1459b02dc43dc4cc72c114c4bce4628379a70177ec41d2cc5a98d8c13a6ace829cd88743b89022bb513df089be246a5932d2d79a16412f41275a5c51c0e9f5a92526728d1d90d73edca87d89e51f5382b637e4bb6b0ec8f8101441c566cd2c2e770cbc007d75b3012019f0adfc62eeb4964049887650ea3122a3d6752daef96268833a7f619a8b55dd9fd91ccaf1f1cc90d93f467d0c9af8515e83068903a7d587109f5748be0bf1caa4d653dcc06ca2ca4ac14658403a199927c67d8c4ced1dc811788d8b1cfa9a2b2b2fa6ddc97c635f200e4f3d78439f4d00edb5d38ae572d502dc356b3b5f927af3219fb9820"
+        }
+      ]
+    }
+  ],
+  "provenance": "archived-research",
+  "schema_revision": 1,
+  "sources": [
+    {
+      "blake3": "642ecff67e1f4e83fc347150cee283381d1a32a1e00ecddcadcaef96cf50befa",
+      "path": "tools/structured/isingmark_structured/archive.py"
+    },
+    {
+      "blake3": "29a0212c63b455d4b05538ce5bf41aa317a4780c92375f4279a3d13134fa23b6",
+      "path": "problems/ice-fields/sources/qpu-suite/work/ice_fields.py"
+    }
+  ]
+}
