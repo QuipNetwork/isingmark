@@ -104,7 +104,8 @@ Give another copy with `--suite-spec`. Each run writes `<out>/<cell>.jsonl` (def
 `out/structured/`). Git tracks `corpora/*.jsonl` and the parameter files at
 `problems/<family>/params/<cell>.json`. A full generator run writes under `out/structured/`,
 so it does not replace the tracked examples. The generator keeps an existing parameter file
-and reads its nonces. Pass `--update-params` to replace that file.
+and reads its nonces. Pass `--update-params` to replace that file. If `--count` differs from the
+number of nonces in the file, the generator ignores `--count` and prints a warning.
 
 The port is bit-exact with the suite generators. On 2026-10-15, the verify step matched 24 of
 24 models for every one of the 15 cells, and every shared extra array (tetrahedra, gauges,

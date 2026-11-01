@@ -132,6 +132,12 @@ def build(
     mapping = FixtureMap(suite, fixture)
     if params_path.exists() and not update_params:
         nonces = json.loads(params_path.read_text(encoding="utf-8"))["nonces"]
+        if count != len(nonces):
+            print(
+                f"warning: {cell}: --count {count} is ignored, {params_path} holds "
+                f"{len(nonces)} nonces. Pass --update-params to draw {count} new nonces.",
+                file=sys.stderr,
+            )
     else:
         nonces = protocol.make_nonces(count)
     port = package_sha256()
