@@ -15,7 +15,7 @@
 
 include:
   - project: quip.network/ci-templates
-    ref: v1.1.1
+    ref: v1.1.2
     file: templates/dependency-gate.yml
 
 variables:
