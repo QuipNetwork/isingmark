@@ -704,14 +704,28 @@ fn campaign_run_flags_conflict_with_serve() {
 
 #[tokio::test]
 async fn late_batch_after_cancellation_keeps_its_full_charge() {
-    let (_dir, trial) = run(
-        &instance(),
-        &["--result-delay-ms", "800", "--qpu-access-us", "1000000"],
-        Duration::from_millis(400),
-    )
-    .await;
+    // A warm session starts the wall clock after the miner is ready, so a slow miner
+    // start cannot use up the cap before the job is dispatched. The result arrives
+    // 500 ms after the cap, well inside the coordinator's 2 s shutdown grace.
+    let wall = Duration::from_secs(1);
+    let dir = tempfile::tempdir().expect("output directory");
+    let mut runner = TrialRunner::new(
+        fake_miner_backend(&["--result-delay-ms", "1500", "--qpu-access-us", "1000000"]),
+        dir.path().to_owned(),
+        rules(),
+    );
+    let warm = PolicyManifest {
+        preparation: Preparation::Warm,
+        ..policy()
+    };
+    let budget = TrialBudget::new(Some(wall), Some(30_000_000_000)).expect("trial budget");
+    let trial = runner
+        .run_trial(&instance(), &warm, &budget)
+        .await
+        .expect("trial");
+    runner.finish().await.expect("session shutdown");
     assert_eq!(trial.terminal, TerminalReason::WallTimeout);
-    assert!(trial.accepted_wall.expect("late proof") > Duration::from_millis(400));
+    assert!(trial.accepted_wall.expect("late proof") > wall);
     assert_eq!(trial.device_total.lower_ns, 1_000_000_000);
     assert_eq!(trial.device_total.status, TimingStatus::Complete);
     let trace = events(&trial);
