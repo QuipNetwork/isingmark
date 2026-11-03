@@ -174,6 +174,7 @@ pub async fn serve_campaign<R: BufRead + Send + 'static, W: Write>(
     mut reader: R,
     mut writer: W,
 ) -> Result<(), CampaignError> {
+    super::single_backend(config)?;
     let loaded = load_campaign(config)?;
     let rules = loaded.rules.clone();
     let backend = resolve_backend(&config.backend);

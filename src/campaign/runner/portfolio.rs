@@ -3,13 +3,22 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs::File,
-    path::Path,
+    fs::{self, File},
+    path::{Path, PathBuf},
+    time::{Instant, SystemTime},
 };
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use tokio::sync::oneshot;
 
-use super::{duration, invalid, CampaignError};
+use super::{
+    drive_trial, duration, encoding, invalid, nanos, new_id, resolve_backend, stop_session,
+    topology, writable_directory, BudgetOutcome, CampaignError, EventKind, FamilyRegistry,
+    Instance, InstanceIdentity, LiveSession, PolicyManifest, Preparation, RuleSet, TerminalReason,
+    TraceWriter, Trial, TrialBudget, TrialState,
+};
+use crate::{backend::BackendSpec, campaign::protocol::target_from_objective};
 
 /// The `--backend` value that selects a manifest's portfolio policies.
 pub const PORTFOLIO_BACKEND: &str = "portfolio";
@@ -270,6 +279,306 @@ fn check_schedule(
         }
     }
     Ok(())
+}
+
+/// Only the last stage takes the remainder. Earlier stages take positive finite seconds.
+fn check_allocations(context: &str, allocations: &[Allocation]) -> Result<(), CampaignError> {
+    let Some((last, earlier)) = allocations.split_last() else {
+        return Err(invalid(format!("{context}: no stages")));
+    };
+    if *last != Allocation::Remainder {
+        return Err(invalid(format!(
+            "{context}: the last stage takes the remainder"
+        )));
+    }
+    for allocation in earlier {
+        match *allocation {
+            Allocation::Seconds(seconds) if seconds > 0.0 => {
+                duration(seconds)?;
+            }
+            _ => {
+                return Err(invalid(format!(
+                    "{context}: earlier stages take positive seconds"
+                )))
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Check a resolved portfolio before any stage starts. Fixed allocations must
+/// leave time for the remainder stage inside `wall_limit`.
+///
+/// # Errors
+/// Returns `InvalidRun` for an empty or inconsistent portfolio.
+pub fn validate_portfolio(
+    portfolio: &PortfolioPolicy,
+    budget: &TrialBudget,
+) -> Result<(), CampaignError> {
+    let context = &portfolio.policy_id;
+    if context.is_empty() {
+        return Err(invalid("a portfolio needs a policy_id"));
+    }
+    duration(portfolio.host_compute_limit_s)?;
+    let allocations: Vec<_> = portfolio
+        .stages
+        .iter()
+        .map(|stage| stage.allocation)
+        .collect();
+    check_allocations(context, &allocations)?;
+    if portfolio
+        .stages
+        .iter()
+        .any(|stage| stage.stage_id.is_empty() || stage.backend.is_empty() || stage.num_reads == 0)
+    {
+        return Err(invalid(format!(
+            "{context}: every stage needs a stage_id, a backend, and a positive num_reads"
+        )));
+    }
+    let fixed = allocations
+        .iter()
+        .try_fold(
+            std::time::Duration::ZERO,
+            |total, allocation| match *allocation {
+                Allocation::Seconds(seconds) => Ok(total.saturating_add(duration(seconds)?)),
+                Allocation::Remainder => Ok::<_, CampaignError>(total),
+            },
+        )?;
+    if budget.wall_limit.is_some_and(|wall| fixed >= wall) {
+        return Err(invalid(format!(
+            "{context}: fixed allocations leave no time for the remainder stage"
+        )));
+    }
+    Ok(())
+}
+
+fn stage_policy(portfolio: &PortfolioPolicy, stage: &Stage) -> PolicyManifest {
+    // Stage limits are the parent's. The shared counters make them trial-wide.
+    PolicyManifest {
+        policy_id: portfolio.policy_id.clone(),
+        backend: stage.backend.clone(),
+        num_reads: stage.num_reads,
+        num_sweeps: stage.num_sweeps,
+        anneal_time_us: stage.anneal_time_us,
+        host_compute_limit_s: portfolio.host_compute_limit_s,
+        evaluation_limit: portfolio.evaluation_limit,
+        preparation: Preparation::Cold,
+    }
+}
+
+/// Run portfolio trials. Each stage starts a cold session on its own backend, and
+/// every stage shares the trial clock, the device ledger, and the host counters.
+pub struct PortfolioRunner {
+    output: PathBuf,
+    rules: RuleSet,
+    registry: FamilyRegistry,
+    run_id: String,
+    backends: BTreeMap<String, BackendSpec>,
+}
+
+impl PortfolioRunner {
+    #[must_use]
+    pub fn new(output: PathBuf, rules: RuleSet) -> Self {
+        Self {
+            output,
+            rules,
+            registry: FamilyRegistry::production(),
+            run_id: new_id("run"),
+            backends: BTreeMap::new(),
+        }
+    }
+
+    /// Resolve families through `registry` instead of the production registry.
+    #[must_use]
+    pub const fn with_registry(mut self, registry: FamilyRegistry) -> Self {
+        self.registry = registry;
+        self
+    }
+
+    /// Start `spec` for stages that name `spec.name`, instead of the registry entry.
+    #[must_use]
+    pub fn with_backend(mut self, spec: BackendSpec) -> Self {
+        self.backends.insert(spec.name.clone(), spec);
+        self
+    }
+
+    fn backend(&self, name: &str) -> BackendSpec {
+        self.backends
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| resolve_backend(name))
+    }
+
+    /// Run every stage of `portfolio` inside one trial and one budget.
+    ///
+    /// A stage that spends its allocation, crashes, or is rejected hands over to the
+    /// next stage. Acceptance and the trial-wide limits end the trial.
+    ///
+    /// # Errors
+    /// Returns invalid inputs, accounting failures, or event writer failures.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep release, the stage sequence, and termination in challenge-clock order."
+    )]
+    pub async fn run_trial(
+        &self,
+        instance: &Instance,
+        portfolio: &PortfolioPolicy,
+        budget: &TrialBudget,
+        mut cancellation: Option<oneshot::Receiver<()>>,
+    ) -> Result<Trial, CampaignError> {
+        validate_portfolio(portfolio, budget)?;
+        TrialBudget::new(budget.wall_limit, budget.device_budget_ns)?;
+        let release_wall = SystemTime::now();
+        let clock = Instant::now();
+        let encoding = encoding(&self.registry, instance)?;
+        let identity = InstanceIdentity::new(instance, &encoding)?;
+        let target = target_from_objective(instance)?;
+        let spec = topology(&encoding)?;
+        let encoding_ns = nanos(clock.elapsed())?;
+        writable_directory(&self.output)?;
+        let trial_id = new_id("trial");
+        let directory = self.output.join(&trial_id);
+        fs::create_dir(&directory).map_err(invalid)?;
+        let path = directory.join("events.jsonl");
+        let writer = TraceWriter::create(&path).map_err(invalid)?;
+        let policies: Vec<PolicyManifest> = portfolio
+            .stages
+            .iter()
+            .map(|stage| stage_policy(portfolio, stage))
+            .collect();
+        let first = policies.first().ok_or_else(|| invalid("no stages"))?;
+        let mut state = TrialState::new(
+            instance,
+            first,
+            budget,
+            trial_id,
+            path,
+            writer,
+            self.run_id.clone(),
+            identity,
+        );
+        state.registry = self.registry;
+        state.count("host_compute_ns", encoding_ns)?;
+        state.clock = clock;
+        state.trial.started = release_wall;
+        state.session_id = new_id("session");
+        state.release(instance, portfolio, budget)?;
+        let mut terminal = TerminalReason::InvalidRun;
+        for (index, (stage, policy)) in portfolio.stages.iter().zip(&policies).enumerate() {
+            if let Some(stop) = limit_reached(&state, policy, &mut cancellation)? {
+                terminal = stop;
+                break;
+            }
+            if index > 0 {
+                state.session_id = new_id("session");
+            }
+            state.session_outcome = None;
+            let allocation_end = match stage.allocation {
+                Allocation::Seconds(seconds) => {
+                    Some(state.clock.elapsed().saturating_add(duration(seconds)?))
+                }
+                Allocation::Remainder => None,
+            };
+            let deadline = match (allocation_end, state.trial.wall_limit) {
+                (Some(end), Some(wall)) => Some(end.min(wall)),
+                (end, wall) => end.or(wall),
+            };
+            state.emit(
+                EventKind::StageStart,
+                Instant::now(),
+                None,
+                json!({"index": index, "stage": stage,
+                    "deadline_ns": deadline.map(nanos).transpose()?}),
+                None,
+            )?;
+            // Session setup runs inside the stage allocation.
+            let mut session = LiveSession::start(
+                self.backend(&stage.backend),
+                spec.clone(),
+                state.session_id.clone(),
+            );
+            let outcome = drive_trial(
+                &mut session,
+                &mut state,
+                instance,
+                policy,
+                &self.rules,
+                &spec,
+                &encoding,
+                &target,
+                &mut cancellation,
+                deadline,
+            )
+            .await?;
+            let allocation_spent = outcome == TerminalReason::WallTimeout
+                && allocation_end
+                    .is_some_and(|end| state.trial.wall_limit.is_none_or(|wall| end < wall));
+            let last = index + 1 == portfolio.stages.len();
+            let hand_over = !last
+                && match outcome {
+                    TerminalReason::WallTimeout => allocation_spent,
+                    TerminalReason::MinerCrashed | TerminalReason::MinerRejected => true,
+                    _ => false,
+                };
+            if hand_over {
+                // The next stage starts now. In-flight jobs are cancelled, not awaited.
+                session.abandon();
+            }
+            stop_session(
+                session,
+                &mut state,
+                outcome,
+                instance,
+                policy,
+                &self.rules,
+                &target,
+            )
+            .await?;
+            state.emit(
+                EventKind::StageEnd,
+                Instant::now(),
+                None,
+                json!({"index": index, "stage_id": stage.stage_id,
+                    "outcome": if allocation_spent { json!("allocation_spent") } else { json!(outcome) },
+                    "session_outcome": state.session_outcome}),
+                None,
+            )?;
+            terminal = outcome;
+            if !hand_over {
+                break;
+            }
+        }
+        state.terminate(terminal)?;
+        Ok(state.trial)
+    }
+}
+
+/// A trial-wide limit or a cancellation that prevents the next stage from starting.
+fn limit_reached(
+    state: &TrialState,
+    policy: &PolicyManifest,
+    cancellation: &mut Option<oneshot::Receiver<()>>,
+) -> Result<Option<TerminalReason>, CampaignError> {
+    if cancellation.as_mut().is_some_and(|receiver| {
+        !matches!(
+            receiver.try_recv(),
+            Err(oneshot::error::TryRecvError::Empty)
+        )
+    }) {
+        return Ok(Some(TerminalReason::Cancelled));
+    }
+    if state.expired() {
+        return Ok(Some(TerminalReason::WallTimeout));
+    }
+    if state
+        .trial
+        .device_budget_ns
+        .is_some_and(|limit| state.ledger.outcome(limit) == BudgetOutcome::Exceeded)
+    {
+        return Ok(Some(TerminalReason::DeviceBudgetExhausted));
+    }
+    state.policy_terminal(policy)
 }
 
 /// Whether `backend`'s binary exists on this host. Checks files only and starts nothing.

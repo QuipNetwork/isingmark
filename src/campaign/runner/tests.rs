@@ -183,7 +183,16 @@ async fn drive_to_terminal(
     let spec = topology(&encoding).expect("topology");
     let target = target_from_objective(instance).expect("target");
     let terminal = drive_trial(
-        session, state, instance, policy, rules, &spec, &encoding, &target, &mut None,
+        session,
+        state,
+        instance,
+        policy,
+        rules,
+        &spec,
+        &encoding,
+        &target,
+        &mut None,
+        state.trial.wall_limit,
     )
     .await
     .expect("trial loop");
