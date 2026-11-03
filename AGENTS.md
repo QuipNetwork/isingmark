@@ -65,6 +65,8 @@ isingmark reproducibility --backend cpu-sa --topology-preset smoke --num-problem
 isingmark compare --file-a a.jsonl --file-b b.jsonl
 isingmark campaign family-check --family ising-fixed \
   --fixtures evaluation/qblock/fixtures/family-check/ising-fixed
+isingmark campaign portfolio-check --panel synthetic --family FAMILY \
+  --policies evaluation/qblock/configs/suite_fit/policies.json
 ```
 
 Optional PNG plots (requires `--features plot` at build time):

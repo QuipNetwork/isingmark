@@ -43,6 +43,7 @@ use super::{
     CampaignError,
 };
 
+pub mod portfolio;
 mod serve;
 pub use serve::serve_campaign;
 #[cfg(test)]

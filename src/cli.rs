@@ -89,6 +89,21 @@ pub enum CampaignCommand {
     Serve(CampaignServeArgs),
     /// Score oracle fixtures through the family registry without starting a solver.
     FamilyCheck(FamilyCheckArgs),
+    /// Resolve a policy panel for one family and report missing slots without starting a solver.
+    PortfolioCheck(PortfolioCheckArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct PortfolioCheckArgs {
+    /// Policy catalog, for example `evaluation/qblock/configs/suite_fit/policies.json`.
+    #[arg(long)]
+    pub policies: PathBuf,
+    /// Panel id in the catalog.
+    #[arg(long)]
+    pub panel: String,
+    /// Family id that solver applicability is checked against.
+    #[arg(long)]
+    pub family: String,
 }
 
 #[derive(Debug, Args)]
