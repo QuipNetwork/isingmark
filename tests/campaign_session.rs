@@ -14,6 +14,7 @@ use isingmark::{
     backend::BackendSpec,
     campaign::{
         contracts::TimingStatus,
+        families::FamilyRegistry,
         instance::{load_instance, Instance},
         protocol::{load_protocol_profile, RuleSet},
         runner::{
@@ -210,8 +211,8 @@ fn manifest(dir: &Path, preparation: Preparation) -> PathBuf {
     fs::write(
         &path,
         serde_json::to_vec(&json!({
-            "schema_version": 1,
-            "protocol_profile": fixture("configs/protocol.json"),
+            "schema_version": 2,
+            "acceptance": {"profile": "pinned_current", "protocol_profile": fixture("configs/protocol.json")},
             "instances": [fixture("fixtures/two_spin.instance.json")],
             "policies": [policy],
             "trials_per_pair": 2,
@@ -231,6 +232,7 @@ async fn warm_session_is_reused() {
         backend: "fake".into(),
         output: dir.path().join("out"),
         dry_run: false,
+        registry: FamilyRegistry::production(),
     };
     // Restarting the process per trial would make both trials succeed.
     let report = run_campaign_with_backend(&config, fake_miner_backend(&["--abort-after", "2"]))
@@ -283,6 +285,7 @@ async fn event_writer_failure_invalidates_run() {
         backend: "fake".into(),
         output: dir.path().join("read-only"),
         dry_run: false,
+        registry: FamilyRegistry::production(),
     };
     fs::create_dir(&config.output).expect("output directory");
     fs::set_permissions(&config.output, fs::Permissions::from_mode(0o500)).expect("read only");
@@ -300,6 +303,7 @@ async fn wall_only_campaign_writes_null_device_estimate() {
         backend: "fake".into(),
         output: dir.path().join("out"),
         dry_run: false,
+        registry: FamilyRegistry::production(),
     };
     let mut value: Value =
         serde_json::from_slice(&fs::read(&config.manifest).expect("manifest")).expect("JSON");
@@ -325,6 +329,7 @@ async fn shutdown_failure_preserves_terminated_campaign_trials() {
             backend: "fake".into(),
             output: dir.path().join("out"),
             dry_run: false,
+            registry: FamilyRegistry::production(),
         };
         if multiple_policies {
             let mut value: Value =
@@ -394,6 +399,7 @@ async fn serve_serializes_submits_and_reuses_prepared_sessions() {
             backend: env!("CARGO_BIN_EXE_isingmark-fake-miner").into(),
             output: dir.path().join("out"),
             dry_run: false,
+            registry: FamilyRegistry::production(),
         };
         let mut value: Value =
             serde_json::from_slice(&fs::read(&config.manifest).expect("manifest")).expect("JSON");
@@ -474,6 +480,7 @@ async fn serve_skips_queued_trial(eof: bool) {
         backend: backend.display().to_string(),
         output: dir.path().join("out"),
         dry_run: false,
+        registry: FamilyRegistry::production(),
     };
     let mut value: Value = serde_json::from_slice(&fs::read(&config.manifest).expect("manifest"))
         .expect("manifest JSON");
@@ -649,6 +656,7 @@ async fn serve_verify_set_uses_pinned_rules_without_starting_a_miner() {
         backend: "fake".into(),
         output: dir.path().join("out"),
         dry_run: false,
+        registry: FamilyRegistry::production(),
     };
     let commands = [
         json!({"cmd": "verify_set", "instance_id": "two-spin", "witnesses": [{

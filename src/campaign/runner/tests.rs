@@ -12,13 +12,14 @@ fn inputs() -> (Instance, PolicyManifest, TrialBudget, RuleSet) {
         backend: "fake".into(),
         output: PathBuf::new(),
         dry_run: true,
+        registry: FamilyRegistry::production(),
     };
     let loaded = load_campaign(&config).expect("fixture campaign");
     (
         loaded.instances[0].clone(),
         loaded.policies[0].clone(),
         loaded.budget,
-        RuleSet::Current(loaded.profile),
+        loaded.rules,
     )
 }
 
@@ -29,8 +30,8 @@ fn manifest_config(dir: &Path) -> CampaignConfig {
     fs::write(
         &manifest,
         serde_json::to_vec(&json!({
-            "schema_version": 1,
-            "protocol_profile": root.join("configs/protocol.json"),
+            "schema_version": 2,
+            "acceptance": {"profile": "pinned_current", "protocol_profile": root.join("configs/protocol.json")},
             "instances": [root.join("fixtures/two_spin.instance.json")],
             "policies": [policy],
             "trials_per_pair": 2,
@@ -44,6 +45,7 @@ fn manifest_config(dir: &Path) -> CampaignConfig {
         backend: "fake".into(),
         output: dir.join("out"),
         dry_run: true,
+        registry: FamilyRegistry::production(),
     }
 }
 
@@ -72,6 +74,11 @@ async fn absent_resource_limits_round_trip_as_null() {
     }
 }
 
+fn identity(instance: &Instance) -> InstanceIdentity {
+    let encoding = encoding(&FamilyRegistry::production(), instance).expect("fixed encoding");
+    InstanceIdentity::new(instance, &encoding).expect("identity")
+}
+
 fn state(
     dir: &Path,
     instance: &Instance,
@@ -88,6 +95,7 @@ fn state(
         path,
         writer,
         "run".into(),
+        identity(instance),
     );
     state.session_id = "session".into();
     state
@@ -171,7 +179,7 @@ async fn drive_to_terminal(
     policy: &PolicyManifest,
     rules: &RuleSet,
 ) {
-    let encoding = encoding(instance).expect("encoding");
+    let encoding = encoding(&FamilyRegistry::production(), instance).expect("encoding");
     let spec = topology(&encoding).expect("topology");
     let target = target_from_objective(instance).expect("target");
     let terminal = drive_trial(

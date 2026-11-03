@@ -32,12 +32,13 @@ use crate::{
 };
 
 use super::{
-    contracts::{EncodingOutcome, FamilyEvaluator, IsingEncoding, Witness},
-    families::fixed::FixedIsing,
+    contracts::{EncodingOutcome, EvaluationContext, IsingEncoding, Witness},
+    families::{
+        canonical::pinned_digests, numeric::to_wire_encoding, FamilyRegistry, FIXED_FAMILY,
+    },
     instance::{load_instance, Instance},
     protocol::{
-        load_protocol_profile, select_proof, target_from_objective, ProofDecision, ProtocolProfile,
-        RuleSet,
+        load_protocol_profile, select_proof, target_from_objective, ProofDecision, RuleSet,
     },
     timing::{BudgetOutcome, DeviceLedger, TrialBudget},
     trace::{DeviceTime, EventKind, TraceEvent, TraceWriter, TRACE_VERSION},
@@ -58,6 +59,8 @@ pub struct CampaignConfig {
     pub backend: String,
     pub output: PathBuf,
     pub dry_run: bool,
+    /// Resolves every instance's family before any miner starts.
+    pub registry: FamilyRegistry,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -111,6 +114,46 @@ pub struct Trial {
     pub device_total: DeviceTime,
     pub terminal: TerminalReason,
     pub preparation: Preparation,
+    pub identity: InstanceIdentity,
+}
+
+/// The complete identity of the instance a trial ran, kept apart from any solver seed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstanceIdentity {
+    pub family: String,
+    pub revision: String,
+    /// The full 32-byte nonce as 64 lowercase hex characters.
+    pub nonce: String,
+    /// Lowercase hex digests of canonical families. The instance digest binds the
+    /// coefficients and the metadata region. Both are `None` for ising-fixed.
+    pub descriptor_digest: Option<String>,
+    pub instance_digest: Option<String>,
+    pub offset_milli: i64,
+    pub source_hashes: BTreeMap<String, String>,
+}
+
+impl InstanceIdentity {
+    /// The identity of `instance`, whose exact encoding is `encoding`.
+    ///
+    /// # Errors
+    /// Returns a parse error for a canonical instance without its descriptor or pin.
+    pub fn new(instance: &Instance, encoding: &IsingEncoding) -> Result<Self, CampaignError> {
+        let (descriptor_digest, instance_digest) = if instance.family == FIXED_FAMILY {
+            (None, None)
+        } else {
+            let (descriptor, pinned) = pinned_digests(instance)?;
+            (Some(descriptor), Some(pinned))
+        };
+        Ok(Self {
+            family: instance.family.clone(),
+            revision: instance.model_version.clone(),
+            nonce: instance.nonce.clone(),
+            descriptor_digest,
+            instance_digest,
+            offset_milli: encoding.offset,
+            source_hashes: instance.source_hashes.clone(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,12 +174,24 @@ pub struct CampaignReport {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Manifest {
-    schema_version: u32,
-    protocol_profile: PathBuf,
+    // Checked before this strict parse; kept so deny_unknown_fields accepts it.
+    #[serde(rename = "schema_version")]
+    _schema_version: u32,
+    acceptance: Acceptance,
     instances: Vec<PathBuf>,
     policies: Vec<PolicyManifest>,
     trials_per_pair: u32,
     budget: ManifestBudget,
+}
+
+/// How a campaign accepts a proof.
+#[derive(Deserialize)]
+#[serde(tag = "profile", rename_all = "snake_case", deny_unknown_fields)]
+enum Acceptance {
+    /// Replay through the pinned chain verifier named by `protocol_profile`.
+    PinnedCurrent { protocol_profile: PathBuf },
+    /// Accept one witness the family evaluator marks valid.
+    FamilySingle,
 }
 
 #[derive(Deserialize)]
@@ -151,7 +206,8 @@ struct LoadedCampaign {
     policies: Vec<PolicyManifest>,
     trials_per_pair: u32,
     budget: TrialBudget,
-    profile: ProtocolProfile,
+    rules: RuleSet,
+    registry: FamilyRegistry,
     estimate: ResourceEstimate,
 }
 
@@ -192,11 +248,14 @@ fn validate_policy(policy: &PolicyManifest) -> Result<(), CampaignError> {
     Ok(())
 }
 
-fn encoding(instance: &Instance) -> Result<IsingEncoding, CampaignError> {
-    match FixedIsing.encode(instance)? {
+fn encoding(
+    registry: &FamilyRegistry,
+    instance: &Instance,
+) -> Result<IsingEncoding, CampaignError> {
+    match registry.for_instance(instance)?.encode(instance)? {
         EncodingOutcome::Exact(encoding) => Ok(encoding),
         EncodingOutcome::Surrogate(_) | EncodingOutcome::Unsupported { .. } => Err(invalid(
-            "this runner requires the exact ising-fixed control",
+            format!("{} has no exact encoding", instance.family),
         )),
     }
 }
@@ -206,12 +265,23 @@ fn encoding(instance: &Instance) -> Result<IsingEncoding, CampaignError> {
     reason = "Resource estimates are floating-point totals; counts remain exact u64 values."
 )]
 fn load_campaign(config: &CampaignConfig) -> Result<LoadedCampaign, CampaignError> {
-    let manifest: Manifest = serde_json::from_reader(File::open(&config.manifest)?)?;
-    if manifest.schema_version != 1 {
-        return Err(CampaignError::UnsupportedVersion(manifest.schema_version));
+    let value: Value = serde_json::from_reader(File::open(&config.manifest)?)?;
+    // The version decides the schema, so check it before the strict parse.
+    let version = value
+        .get("schema_version")
+        .ok_or(CampaignError::MissingField("schema_version"))?;
+    let version: u32 = serde_json::from_value(version.clone())?;
+    if version != 2 {
+        return Err(CampaignError::UnsupportedVersion(version));
     }
+    let manifest: Manifest = serde_json::from_value(value)?;
     let base = config.manifest.parent().unwrap_or_else(|| Path::new("."));
-    let profile = load_protocol_profile(&base.join(manifest.protocol_profile))?;
+    let rules = match manifest.acceptance {
+        Acceptance::PinnedCurrent { protocol_profile } => {
+            RuleSet::Current(load_protocol_profile(&base.join(protocol_profile))?)
+        }
+        Acceptance::FamilySingle => RuleSet::FamilySingle,
+    };
     let budget = TrialBudget::new(
         manifest.budget.wall_limit_s.map(duration).transpose()?,
         manifest
@@ -224,7 +294,7 @@ fn load_campaign(config: &CampaignConfig) -> Result<LoadedCampaign, CampaignErro
     let mut instances = Vec::new();
     for path in manifest.instances {
         let instance = load_instance(&base.join(path))?;
-        encoding(&instance)?;
+        encoding(&config.registry, &instance)?;
         target_from_objective(&instance)?;
         if !instance_ids.insert(instance.instance_id.clone()) {
             return Err(invalid("duplicate instance_id"));
@@ -269,7 +339,8 @@ fn load_campaign(config: &CampaignConfig) -> Result<LoadedCampaign, CampaignErro
         policies,
         trials_per_pair: manifest.trials_per_pair,
         budget,
-        profile,
+        rules,
+        registry: config.registry,
         estimate,
     })
 }
@@ -330,11 +401,8 @@ pub async fn run_campaign_with_backend(
         return Err(invalid("backend override name does not match the campaign"));
     }
     writable_directory(&config.output)?;
-    let mut runner = TrialRunner::new(
-        backend,
-        config.output.clone(),
-        RuleSet::Current(loaded.profile),
-    );
+    let mut runner = TrialRunner::new(backend, config.output.clone(), loaded.rules)
+        .with_registry(loaded.registry);
     let result = async {
         for policy in &loaded.policies {
             // Preparation is shared within a policy, never across policy choices.
@@ -449,6 +517,7 @@ pub struct TrialRunner {
     backend: BackendSpec,
     output: PathBuf,
     rules: RuleSet,
+    registry: FamilyRegistry,
     run_id: String,
     session: Option<LiveSession>,
 }
@@ -460,9 +529,17 @@ impl TrialRunner {
             backend,
             output,
             rules,
+            registry: FamilyRegistry::production(),
             run_id: new_id("run"),
             session: None,
         }
+    }
+
+    /// Resolve families through `registry` instead of the production registry.
+    #[must_use]
+    pub const fn with_registry(mut self, registry: FamilyRegistry) -> Self {
+        self.registry = registry;
+        self
     }
 
     /// End the prepared session and check for lost transport observations.
@@ -533,7 +610,10 @@ impl TrialRunner {
         }
         let release_wall = SystemTime::now();
         let preparation_started = Instant::now();
-        let encoding = encoding(instance)?;
+        let encoding = encoding(&self.registry, instance)?;
+        let identity = InstanceIdentity::new(instance, &encoding)?;
+        // The miner sees milli units. Identity keeps the family's own offset.
+        let encoding = to_wire_encoding(&encoding, self.registry.for_instance(instance)?.scale())?;
         let target = target_from_objective(instance)?;
         let spec = topology(&encoding)?;
         let encoding_ns = nanos(preparation_started.elapsed())?;
@@ -551,7 +631,9 @@ impl TrialRunner {
             path,
             writer,
             self.run_id.clone(),
+            identity,
         );
+        state.registry = self.registry;
         // The first prepared session starts outside challenge time. Its measured
         // preparation cost remains explicit, including amortization's horizon.
         state.count("host_compute_ns", encoding_ns)?;
@@ -733,9 +815,14 @@ struct TrialState {
     session_outcome: Option<Value>,
     witnesses: Vec<Witness>,
     energies: Vec<i64>,
+    registry: FamilyRegistry,
 }
 
 impl TrialState {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "A trial starts from its instance, policy, budget, identity, and trace sinks."
+    )]
     fn new(
         instance: &Instance,
         policy: &PolicyManifest,
@@ -744,6 +831,7 @@ impl TrialState {
         events: PathBuf,
         writer: TraceWriter,
         run_id: String,
+        identity: InstanceIdentity,
     ) -> Self {
         Self {
             trial: Trial {
@@ -759,6 +847,7 @@ impl TrialState {
                 device_total: DeviceTime::from_exact_ns(0),
                 terminal: TerminalReason::InvalidRun,
                 preparation: policy.preparation,
+                identity,
             },
             clock: Instant::now(),
             writer,
@@ -771,6 +860,7 @@ impl TrialState {
             session_outcome: None,
             witnesses: Vec::new(),
             energies: Vec::new(),
+            registry: FamilyRegistry::production(),
         }
     }
 
@@ -911,12 +1001,18 @@ impl TrialState {
                 controls: None,
             };
             let started = Instant::now();
-            let result = FixedIsing::evaluate_with_energy(instance, &witness);
+            let context = EvaluationContext {
+                tolerances: Value::Null,
+            };
+            let result = self
+                .registry
+                .for_instance(instance)
+                .and_then(|evaluator| evaluator.evaluate(instance, &witness, &context));
             self.count("host_compute_ns", nanos(started.elapsed())?)?;
             self.count("evaluations", 1)?;
             let payload = match result {
-                Ok((evaluation, energy)) => {
-                    if evaluation.valid && evaluation.score.is_some() {
+                Ok(evaluation) => {
+                    if let (true, Some(energy)) = (evaluation.valid, evaluation.energy_milli) {
                         self.witnesses.push(witness.clone());
                         self.energies.push(energy);
                     }
@@ -952,16 +1048,16 @@ impl TrialState {
                             .into_iter()
                             .map(|index| self.witnesses[index].clone())
                             .collect();
-                        super::protocol::validate_set(instance, &proof, profile)?
+                        super::protocol::validate_set(&self.registry, instance, &proof, profile)?
                     }
                     Err(error) => ProofDecision::Rejected {
                         reason: error.to_string(),
                     },
                 }
             }
-            RuleSet::ProposedUnique { .. } => {
+            RuleSet::ProposedUnique { .. } | RuleSet::FamilySingle => {
                 selected_indices = (0..self.witnesses.len()).collect();
-                rules.validate_set(instance, &self.witnesses)?
+                rules.validate_set(&self.registry, instance, &self.witnesses)?
             }
         };
         self.count("host_compute_ns", nanos(started.elapsed())?)?;
