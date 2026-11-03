@@ -139,7 +139,7 @@ async fn accepted_trial_without_qpu_timing_has_unresolved_device_outcome() {
 #[tokio::test]
 async fn no_valid_witness_ends_as_timeout() {
     let mut input = instance();
-    input.objective["max_energy_milli"] = json!(-1001);
+    input.objective["max_energy"] = json!(-1.001);
     let (_dir, trial) = run(
         &input,
         &["--result-delay-ms", "100"],

@@ -8,12 +8,15 @@ use serde_json::Value;
 
 use super::{
     contracts::{IsingEncoding, Witness},
+    families::numeric::natural_to_milli,
     CampaignError,
 };
 
 pub const MAX_INSTANCE_BYTES: u64 = 16 * 1024 * 1024;
 pub const MAX_SPINS: u64 = 65_536;
 pub const MAX_WITNESS_BYTES: u64 = 1024 * 1024;
+/// Version 2 writes energies and coefficients in natural units.
+pub const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -70,7 +73,7 @@ pub(crate) fn instance_from_value(value: Value) -> Result<Instance, CampaignErro
         .get("schema_version")
         .ok_or(CampaignError::MissingField("schema_version"))?;
     let version = serde_json::from_value(version.clone())?;
-    if version != 1 {
+    if version != SCHEMA_VERSION {
         return Err(CampaignError::UnsupportedVersion(version));
     }
     for field in [
@@ -205,22 +208,29 @@ impl Witness {
     }
 }
 
-// Coefficients must reach validation as i64, before narrowing to the wire type.
+// Natural-unit numbers, converted to exact milli before validation.
 #[derive(Deserialize)]
-struct IntegerEncoding {
+#[serde(deny_unknown_fields)]
+struct NaturalEncoding {
     variables: Vec<String>,
-    h: Vec<i64>,
-    j: Vec<i64>,
+    h: Vec<Value>,
+    j: Vec<Value>,
     edges: Vec<(u32, u32)>,
-    units: String,
-    offset: i64,
+    offset: Value,
     auxiliaries: Vec<u32>,
     precision_bound: f64,
     exact: bool,
 }
 
+fn wire_coefficients(values: &[Value]) -> Result<Vec<i32>, CampaignError> {
+    values
+        .iter()
+        .map(|value| i32::try_from(natural_to_milli(value)?).map_err(|_| CampaignError::Overflow))
+        .collect()
+}
+
 pub(crate) fn fixed_encoding(instance: &Instance) -> Result<IsingEncoding, CampaignError> {
-    if instance.schema_version != 1 {
+    if instance.schema_version != SCHEMA_VERSION {
         return Err(CampaignError::UnsupportedVersion(instance.schema_version));
     }
     if instance.family != "ising-fixed" {
@@ -229,7 +239,7 @@ pub(crate) fn fixed_encoding(instance: &Instance) -> Result<IsingEncoding, Campa
             instance.family
         )));
     }
-    let encoding: IntegerEncoding = serde_json::from_value(instance.physical.clone())?;
+    let encoding: NaturalEncoding = serde_json::from_value(instance.physical.clone())?;
     let spins = u64::try_from(encoding.variables.len()).map_err(|_| CampaignError::Overflow)?;
     if spins > MAX_SPINS {
         return Err(CampaignError::TooLarge {
@@ -250,18 +260,9 @@ pub(crate) fn fixed_encoding(instance: &Instance) -> Result<IsingEncoding, Campa
     {
         return Err(CampaignError::LengthMismatch);
     }
-    let h = encoding
-        .h
-        .into_iter()
-        .map(i32::try_from)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| CampaignError::Overflow)?;
-    let j = encoding
-        .j
-        .into_iter()
-        .map(i32::try_from)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| CampaignError::Overflow)?;
+    let h = wire_coefficients(&encoding.h)?;
+    let j = wire_coefficients(&encoding.j)?;
+    let offset = natural_to_milli(&encoding.offset)?;
     let mut bound = 0_i64;
     for &coefficient in h.iter().chain(&j) {
         bound = bound
@@ -269,17 +270,11 @@ pub(crate) fn fixed_encoding(instance: &Instance) -> Result<IsingEncoding, Campa
             .ok_or(CampaignError::Overflow)?;
     }
     // Include the offset when bounding every possible signed coefficient sum.
-    encoding
-        .offset
-        .checked_add(bound)
-        .ok_or(CampaignError::Overflow)?;
-    encoding
-        .offset
-        .checked_sub(bound)
-        .ok_or(CampaignError::Overflow)?;
-    if encoding.units != "milli" || !encoding.exact {
+    offset.checked_add(bound).ok_or(CampaignError::Overflow)?;
+    offset.checked_sub(bound).ok_or(CampaignError::Overflow)?;
+    if !encoding.exact {
         return Err(CampaignError::InvalidRun(
-            "ising-fixed requires an exact milli encoding".to_owned(),
+            "ising-fixed requires an exact encoding".to_owned(),
         ));
     }
     Ok(IsingEncoding {
@@ -287,8 +282,8 @@ pub(crate) fn fixed_encoding(instance: &Instance) -> Result<IsingEncoding, Campa
         h,
         j,
         edges: encoding.edges,
-        units: encoding.units,
-        offset: encoding.offset,
+        units: "milli".to_owned(),
+        offset,
         auxiliaries: encoding.auxiliaries,
         precision_bound: encoding.precision_bound,
         exact: encoding.exact,

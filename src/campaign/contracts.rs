@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, error::Error, fmt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{families::numeric::IntegerScale, instance::Instance};
+use super::instance::Instance;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FamilyConfig {
@@ -77,6 +77,9 @@ pub trait FamilyEvaluator: Sync {
 
     /// Map the instance to an exact encoding, surrogate, or unsupported outcome.
     ///
+    /// Coefficients and offset are integer milli. A family whose problem space uses
+    /// another scale converts here, so scoring and the wire share one encoding.
+    ///
     /// # Errors
     /// Returns a stable family error for malformed instance data.
     fn encode(&self, instance: &Instance) -> Result<EncodingOutcome, EvalError>;
@@ -97,11 +100,6 @@ pub trait FamilyEvaluator: Sync {
     /// # Errors
     /// Returns a stable family error for malformed instances or witnesses.
     fn canonicalize(&self, instance: &Instance, witness: &Witness) -> Result<Vec<u8>, EvalError>;
-
-    /// The coefficient scale of this family's encodings.
-    fn scale(&self) -> IntegerScale {
-        IntegerScale::MILLI
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

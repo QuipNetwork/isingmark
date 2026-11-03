@@ -55,10 +55,14 @@ fn two_spin_instance_loads() {
     let instance = two_spin();
     assert_eq!(instance.family, "ising-fixed");
     assert_eq!(instance.split, Split::Training);
-    let encoding: IsingEncoding =
-        serde_json::from_value(instance.physical).expect("decode physical encoding");
+    let encoding = match FixedIsing.encode(&instance).expect("encoding") {
+        EncodingOutcome::Exact(encoding) => Some(encoding),
+        EncodingOutcome::Surrogate(_) | EncodingOutcome::Unsupported { .. } => None,
+    }
+    .expect("exact encoding");
     assert_eq!(encoding.variables, ["s0", "s1"]);
     assert_eq!(encoding.h, [0, 0]);
+    // The file says -1 in natural units. The encoding is wire milli.
     assert_eq!(encoding.j, [-1000]);
     assert_eq!(encoding.edges, [(0, 1)]);
 }
@@ -95,7 +99,7 @@ fn overflow_risk_instance_is_rejected() {
 fn unsupported_version_is_rejected() {
     assert!(matches!(
         load_instance(&fixture("bad_version.instance.json")),
-        Err(CampaignError::UnsupportedVersion(2))
+        Err(CampaignError::UnsupportedVersion(3))
     ));
 }
 
@@ -194,11 +198,11 @@ fn every_instance_field_is_required_and_version_precedes_content_checks() {
         let error = load_value(&missing).expect_err("reject each absent field");
         assert!(matches!(error, CampaignError::MissingField(name) if name == field));
     }
-    let mut unsupported = json!({"schema_version": 2});
+    let mut unsupported = json!({"schema_version": 1});
     unsupported["physical"] = json!({"h": [3_000_000_000_i64]});
     assert!(matches!(
         load_value(&unsupported),
-        Err(CampaignError::UnsupportedVersion(2))
+        Err(CampaignError::UnsupportedVersion(1))
     ));
 }
 
@@ -257,12 +261,13 @@ fn auxiliary_indices_must_name_an_existing_spin() {
 
 #[test]
 fn offset_beyond_float_precision_round_trips_exactly() {
-    const OFFSET: i64 = 9_007_199_254_740_993;
+    // Natural units; the milli offset is past 2^53, where floats skip odd integers.
+    const OFFSET: i64 = 9_007_199_254_741;
     let mut value = serde_json::to_value(two_spin()).expect("instance");
-    value["physical"]["h"] = json!([0, 0]);
+    value["physical"]["h"] = json!([-0.001, 0]);
     value["physical"]["j"] = json!([0]);
     value["physical"]["offset"] = json!(OFFSET);
-    value["objective"]["max_energy_milli"] = json!(OFFSET);
+    value["objective"]["max_energy"] = json!(OFFSET - 1);
     let instance = load_value(&value).expect("large offset");
     let encoded = match FixedIsing.encode(&instance).expect("encoding") {
         EncodingOutcome::Exact(encoded) => Some(encoded),
@@ -271,27 +276,26 @@ fn offset_beyond_float_precision_round_trips_exactly() {
     .expect("exact encoding");
     let bytes = serde_json::to_vec(&encoded).expect("encoding JSON");
     let decoded: IsingEncoding = serde_json::from_slice(&bytes).expect("round trip");
-    assert_eq!(decoded.offset, OFFSET);
+    assert_eq!(decoded.offset, OFFSET * 1000);
     assert!(
         !FixedIsing
             .evaluate(&instance, &witness(vec![1, 1]), &context())
-            .expect("strict equality")
+            .expect("strict inequality fails")
             .valid
     );
-    value["objective"]["max_energy_milli"] = json!(OFFSET + 1);
-    let instance = load_value(&value).expect("next integer threshold");
-    assert!(
-        FixedIsing
-            .evaluate(&instance, &witness(vec![1, 1]), &context())
-            .expect("strict inequality")
-            .valid
-    );
+    value["objective"]["max_energy"] = json!(OFFSET);
+    let instance = load_value(&value).expect("threshold one milli above");
+    let evaluation = FixedIsing
+        .evaluate(&instance, &witness(vec![1, 1]), &context())
+        .expect("strict inequality holds");
+    assert_eq!(evaluation.energy_milli, Some(OFFSET * 1000 - 1));
+    assert!(evaluation.valid);
 }
 
 #[test]
 fn wire_boundaries_offset_and_integer_threshold_are_preserved() {
     let mut instance = serde_json::to_value(two_spin()).expect("serialize instance");
-    instance["physical"]["h"] = json!([i32::MIN, i32::MAX]);
+    instance["physical"]["h"] = json!([-2_147_483.648, 2_147_483.647]);
     instance["physical"]["j"] = json!([0]);
     let instance = load_value(&instance).expect("accept signed wire endpoints");
     let result = FixedIsing
@@ -300,10 +304,10 @@ fn wire_boundaries_offset_and_integer_threshold_are_preserved() {
     assert_eq!(result.score, Some(-1.0));
 
     let mut instance = serde_json::to_value(two_spin()).expect("serialize instance");
-    instance["physical"]["h"] = json!([0, 0]);
+    instance["physical"]["h"] = json!([-0.001, 0]);
     instance["physical"]["j"] = json!([0]);
-    instance["physical"]["offset"] = json!(9_007_199_254_740_992_i64);
-    instance["objective"]["max_energy_milli"] = json!(9_007_199_254_740_993_i64);
+    instance["physical"]["offset"] = json!(9_007_199_254_741_i64);
+    instance["objective"]["max_energy"] = json!(9_007_199_254_741_i64);
     let instance = load_value(&instance).expect("load large integer objective");
     assert!(
         FixedIsing
