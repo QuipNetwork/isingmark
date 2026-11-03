@@ -59,7 +59,24 @@ async fn main() -> ExitCode {
 }
 
 async fn run_campaign_command(args: CampaignArgs) -> ExitCode {
-    use isingmark::campaign::runner::{run_campaign, serve_campaign};
+    use isingmark::campaign::{
+        families::{check::family_check, FamilyRegistry},
+        runner::{run_campaign, serve_campaign},
+    };
+    if let Some(CampaignCommand::FamilyCheck(inputs)) = args.command {
+        return match family_check(
+            &FamilyRegistry::production(),
+            &inputs.family,
+            &inputs.fixtures,
+        ) {
+            Ok(report) => match write_campaign_json(&report) {
+                Ok(()) if report.failures.is_empty() => ExitCode::SUCCESS,
+                Ok(()) => ExitCode::FAILURE,
+                Err(error) => campaign_failure(&error),
+            },
+            Err(error) => campaign_failure(&error),
+        };
+    }
     if let Some(CampaignCommand::Serve(inputs)) = args.command {
         return match serve_campaign(
             &inputs.into_config(false),
@@ -83,6 +100,7 @@ async fn run_campaign_command(args: CampaignArgs) -> ExitCode {
         backend,
         output,
         dry_run: args.dry_run,
+        registry: FamilyRegistry::production(),
     };
     match run_campaign(&config).await {
         Ok(report) => {

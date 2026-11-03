@@ -10,9 +10,11 @@ use quip_protocol::{
 use serde::{Deserialize, Serialize};
 
 use super::{
-    contracts::{EvalError, Witness},
-    families::fixed::FixedIsing,
-    instance::{fixed_encoding, Instance},
+    contracts::{
+        EncodingOutcome, EvalError, Evaluation, EvaluationContext, FamilyEvaluator, Witness,
+    },
+    families::FamilyRegistry,
+    instance::Instance,
     CampaignError,
 };
 
@@ -71,7 +73,8 @@ pub enum ProofDecision {
     },
 }
 
-/// The current chain rule or an independent count of valid canonical witnesses.
+/// The current chain rule, an independent count of valid canonical witnesses, or one
+/// valid witness under the family's own constraints.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[expect(
     clippy::large_enum_variant,
@@ -79,7 +82,11 @@ pub enum ProofDecision {
 )]
 pub enum RuleSet {
     Current(ProtocolProfile),
-    ProposedUnique { min_distinct: u32 },
+    ProposedUnique {
+        min_distinct: u32,
+    },
+    /// Accept one witness the family evaluator marks valid. No chain verifier runs.
+    FamilySingle,
 }
 
 impl RuleSet {
@@ -89,14 +96,16 @@ impl RuleSet {
     /// Returns an error for unsupported families, invalid instances, or profiles.
     pub fn validate_set(
         &self,
+        registry: &FamilyRegistry,
         instance: &Instance,
         witnesses: &[Witness],
     ) -> Result<ProofDecision, CampaignError> {
         match self {
-            Self::Current(profile) => validate_set(instance, witnesses, profile),
+            Self::Current(profile) => validate_set(registry, instance, witnesses, profile),
             Self::ProposedUnique { min_distinct } => {
-                validate_unique(instance, witnesses, (*min_distinct).max(1))
+                validate_unique(registry, instance, witnesses, (*min_distinct).max(1))
             }
+            Self::FamilySingle => validate_single(registry, instance, witnesses),
         }
     }
 }
@@ -106,13 +115,12 @@ impl RuleSet {
 /// # Errors
 /// Returns an error for unsupported families, invalid instance data, or profiles.
 pub fn validate_set(
+    registry: &FamilyRegistry,
     instance: &Instance,
     witnesses: &[Witness],
     profile: &ProtocolProfile,
 ) -> Result<ProofDecision, CampaignError> {
-    if instance.family != "ising-fixed" {
-        return Err(unsupported_family(instance));
-    }
+    let evaluator = exact_evaluator(registry, instance)?;
     if witnesses
         .iter()
         .any(|witness| witness.instance_id != instance.instance_id)
@@ -132,10 +140,13 @@ pub fn validate_set(
     {
         return Ok(rejected(&format!("{miss:?}")));
     }
-    fixed_encoding(instance)?;
     for ((_, energy), witness) in set.iter_mut().zip(witnesses) {
-        match FixedIsing::evaluate_with_energy(instance, witness) {
-            Ok((_, exact_energy)) => *energy = exact_energy,
+        match evaluate(evaluator, instance, witness) {
+            // The chain rule scores energy only, so a constraint failure rejects the set.
+            Ok(evaluation) if violates_constraints(&evaluation) => {
+                return Ok(rejected("ConstraintViolated"));
+            }
+            Ok(evaluation) => *energy = exact(&evaluation)?,
             Err(error) => return evaluation_failure(error),
         }
     }
@@ -178,31 +189,30 @@ pub(crate) fn target_from_objective(instance: &Instance) -> Result<Target, Campa
 }
 
 fn validate_unique(
+    registry: &FamilyRegistry,
     instance: &Instance,
     witnesses: &[Witness],
     min_distinct: u32,
 ) -> Result<ProofDecision, CampaignError> {
-    if instance.family != "ising-fixed" {
-        return Err(unsupported_family(instance));
-    }
+    let evaluator = exact_evaluator(registry, instance)?;
     if witnesses
         .iter()
         .any(|witness| witness.instance_id != instance.instance_id)
     {
         return Ok(rejected("CrossInstanceWitness"));
     }
-    fixed_encoding(instance)?;
     let mut canonical_ids = BTreeSet::new();
     let mut distinct_spins = Vec::new();
     let mut best_energy: Option<i64> = None;
     for witness in witnesses {
-        let (evaluation, energy) = match FixedIsing::evaluate_with_energy(instance, witness) {
+        let evaluation = match evaluate(evaluator, instance, witness) {
             Ok(result) => result,
             Err(error) => return evaluation_failure(error),
         };
         if !evaluation.valid {
             continue;
         }
+        let energy = exact(&evaluation)?;
         let canonical_id = evaluation
             .canonical_id
             .ok_or(CampaignError::MissingField("canonical_id"))?;
@@ -222,11 +232,70 @@ fn validate_unique(
     })
 }
 
-fn unsupported_family(instance: &Instance) -> CampaignError {
-    CampaignError::InvalidRun(format!(
-        "unsupported family for current-rule replay: {}",
-        instance.family
-    ))
+fn validate_single(
+    registry: &FamilyRegistry,
+    instance: &Instance,
+    witnesses: &[Witness],
+) -> Result<ProofDecision, CampaignError> {
+    let evaluator = exact_evaluator(registry, instance)?;
+    if witnesses
+        .iter()
+        .any(|witness| witness.instance_id != instance.instance_id)
+    {
+        return Ok(rejected("CrossInstanceWitness"));
+    }
+    for witness in witnesses {
+        match evaluate(evaluator, instance, witness) {
+            Ok(evaluation) if evaluation.valid => {
+                return Ok(ProofDecision::Accepted {
+                    best_energy_milli: exact(&evaluation)?,
+                    diversity_milli: 0,
+                    valid_solution_count: 1,
+                });
+            }
+            Ok(_) => {}
+            Err(error) => return evaluation_failure(error),
+        }
+    }
+    Ok(rejected("NoValidWitness"))
+}
+
+/// Resolve the family and require an exact encoding before any witness is scored.
+fn exact_evaluator(
+    registry: &FamilyRegistry,
+    instance: &Instance,
+) -> Result<&'static dyn FamilyEvaluator, CampaignError> {
+    let evaluator = registry.for_instance(instance)?;
+    match evaluator.encode(instance)? {
+        EncodingOutcome::Exact(_) => Ok(evaluator),
+        EncodingOutcome::Surrogate(_) | EncodingOutcome::Unsupported { .. } => Err(
+            CampaignError::InvalidRun(format!("{} has no exact encoding", instance.family)),
+        ),
+    }
+}
+
+fn evaluate(
+    evaluator: &dyn FamilyEvaluator,
+    instance: &Instance,
+    witness: &Witness,
+) -> Result<Evaluation, EvalError> {
+    let context = EvaluationContext {
+        tolerances: serde_json::Value::Null,
+    };
+    evaluator.evaluate(instance, witness, &context)
+}
+
+fn exact(evaluation: &Evaluation) -> Result<i64, CampaignError> {
+    evaluation
+        .energy_milli
+        .ok_or(CampaignError::MissingField("energy_milli"))
+}
+
+pub(crate) fn violates_constraints(evaluation: &Evaluation) -> bool {
+    evaluation
+        .rejections
+        .iter()
+        .any(|reason| reason.starts_with("constraint_violated"))
 }
 
 fn evaluation_failure(error: EvalError) -> Result<ProofDecision, CampaignError> {

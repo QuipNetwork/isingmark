@@ -4,7 +4,7 @@
   "family": "ising-fixed",
   "model_version": "1",
   "challenge_id": "fixed-control",
-  "nonce": "0000000000000000",
+  "nonce": "0000000000000000000000000000000000000000000000000000000000000000",
   "split": "training",
   "physical": {
     "variables": ["s0", "s1"],

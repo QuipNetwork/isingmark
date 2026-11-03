@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "protocol_profile": "../../configs/protocol.json",
+  "schema_version": 2,
+  "acceptance": {"profile": "pinned_current", "protocol_profile": "../../configs/protocol.json"},
   "instances": ["../two_spin.instance.json"],
   "policies": [{
     "policy_id": "fixed-control",

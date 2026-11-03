@@ -63,6 +63,8 @@ isingmark comparative --backend cpu-sa --topology-preset smoke \
 isingmark scaling --backend cpu-sa --sizes 8,16 --num-jobs 5
 isingmark reproducibility --backend cpu-sa --topology-preset smoke --num-problems 10
 isingmark compare --file-a a.jsonl --file-b b.jsonl
+isingmark campaign family-check --family ising-fixed \
+  --fixtures evaluation/qblock/fixtures/family-check/ising-fixed
 ```
 
 Optional PNG plots (requires `--features plot` at build time):

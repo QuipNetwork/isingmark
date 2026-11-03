@@ -1010,9 +1010,9 @@ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
 name = "ising-generators"
-version = "0.0.4"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6104abcc71a5cecadffb61e81cd120ab0b5bd5024437df9495f395d78f22b455"
+checksum = "fcb6043563e84b577d7a7562a313f13075337d2419706a0ed380ae9b3b11fd05"
 dependencies = [
  "blake3",
 ]

@@ -87,6 +87,18 @@ pub struct CampaignArgs {
 pub enum CampaignCommand {
     /// Read bounded JSON-lines commands from stdin and write JSON event replies.
     Serve(CampaignServeArgs),
+    /// Score oracle fixtures through the family registry without starting a solver.
+    FamilyCheck(FamilyCheckArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct FamilyCheckArgs {
+    /// Family id. Every fixture must name it.
+    #[arg(long)]
+    pub family: String,
+    /// Directory of `<name>.instance.json` files, each with a `<name>.oracle.json`.
+    #[arg(long)]
+    pub fixtures: PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -110,6 +122,7 @@ impl CampaignServeArgs {
             backend: self.backend,
             output: self.output,
             dry_run,
+            registry: crate::campaign::families::FamilyRegistry::production(),
         }
     }
 }

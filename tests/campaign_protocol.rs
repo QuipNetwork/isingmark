@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use isingmark::campaign::{
     contracts::Witness,
+    families::FamilyRegistry,
     instance::Instance,
     protocol::{
         load_protocol_profile, select_proof, validate_set, ProofDecision, ProtocolProfile, RuleSet,
@@ -23,7 +24,7 @@ fn fixed_instance(width: usize) -> Instance {
         "family": "ising-fixed",
         "model_version": "1",
         "challenge_id": "proof-replay",
-        "nonce": "0000000000000000",
+        "nonce": "0000000000000000000000000000000000000000000000000000000000000000",
         "split": "training",
         "physical": {
             "variables": (0..width).map(|index| format!("s{index}")).collect::<Vec<_>>(),
@@ -73,8 +74,13 @@ fn rejected(reason: &str) -> ProofDecision {
 fn threshold_equality_fails() {
     let instance = fixed_instance(2);
     assert_eq!(
-        validate_set(&instance, &[witness(&instance, &[1, -1])], &profile())
-            .expect("replay equality"),
+        validate_set(
+            &FamilyRegistry::production(),
+            &instance,
+            &[witness(&instance, &[1, -1])],
+            &profile()
+        )
+        .expect("replay equality"),
         rejected("InsufficientEnergy")
     );
 }
@@ -87,7 +93,7 @@ fn duplicate_reads_count_under_current_rule() {
     let reads = vec![witness(&instance, &[1, 1]); 3];
     assert_eq!(
         RuleSet::Current(profile())
-            .validate_set(&instance, &reads)
+            .validate_set(&FamilyRegistry::production(), &instance, &reads)
             .expect("count identical valid reads"),
         ProofDecision::Accepted {
             best_energy_milli: -1000,
@@ -103,7 +109,8 @@ fn global_reversal_adds_no_diversity() {
     instance.objective["min_solutions"] = json!(2);
     let reads = [witness(&instance, &[1, 1]), witness(&instance, &[-1, -1])];
     assert_eq!(
-        validate_set(&instance, &reads, &profile()).expect("score a reversal pair"),
+        validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
+            .expect("score a reversal pair"),
         ProofDecision::Accepted {
             best_energy_milli: -1000,
             diversity_milli: 0,
@@ -118,7 +125,8 @@ fn proof_cap_rejects_extra() {
     instance.objective["max_proof_solutions"] = json!(2);
     let reads = vec![witness(&instance, &[1, 1]); 3];
     assert_eq!(
-        validate_set(&instance, &reads, &profile()).expect("check proof cap"),
+        validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
+            .expect("check proof cap"),
         rejected("TooManySolutions")
     );
 }
@@ -170,7 +178,8 @@ fn milli_rounding_matches_pinned() {
         .collect();
     assert_eq!(diversity_milli(&spins), 167);
     assert_eq!(
-        validate_set(&instance, &reads, &profile()).expect("use integer milli rounding"),
+        validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
+            .expect("use integer milli rounding"),
         ProofDecision::Accepted {
             best_energy_milli: -1000,
             diversity_milli: diversity_milli(&spins),
@@ -187,12 +196,13 @@ fn cross_instance_witnesses_cannot_combine() {
     // A local malformed read must not hide a foreign witness later in the set.
     let reads = [witness(&instance, &[0]), foreign];
     assert_eq!(
-        validate_set(&instance, &reads, &profile()).expect("check all identities before scoring"),
+        validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
+            .expect("check all identities before scoring"),
         rejected("CrossInstanceWitness")
     );
     assert_eq!(
         RuleSet::ProposedUnique { min_distinct: 1 }
-            .validate_set(&instance, &reads)
+            .validate_set(&FamilyRegistry::production(), &instance, &reads)
             .expect("check proposed-rule identities"),
         rejected("CrossInstanceWitness")
     );
@@ -205,7 +215,7 @@ fn proposed_unique_rule_rejects_duplicates() {
     let reads = vec![witness(&instance, &[1, 1]); 3];
     assert_eq!(
         RuleSet::ProposedUnique { min_distinct: 2 }
-            .validate_set(&instance, &reads)
+            .validate_set(&FamilyRegistry::production(), &instance, &reads)
             .expect("count canonical IDs independently"),
         rejected("InsufficientDistinct")
     );
@@ -216,17 +226,26 @@ fn proposed_unique_zero_minimum_still_requires_one_distinct_witness() {
     let instance = fixed_instance(2);
     let rule = RuleSet::ProposedUnique { min_distinct: 0 };
     assert_eq!(
-        rule.validate_set(&instance, &[]).expect("empty proof"),
+        rule.validate_set(&FamilyRegistry::production(), &instance, &[])
+            .expect("empty proof"),
         rejected("InsufficientDistinct")
     );
     assert_eq!(
-        rule.validate_set(&instance, &[witness(&instance, &[1, -1])])
-            .expect("invalid proof"),
+        rule.validate_set(
+            &FamilyRegistry::production(),
+            &instance,
+            &[witness(&instance, &[1, -1])]
+        )
+        .expect("invalid proof"),
         rejected("InsufficientDistinct")
     );
     assert!(matches!(
-        rule.validate_set(&instance, &[witness(&instance, &[1, 1])])
-            .expect("valid proof"),
+        rule.validate_set(
+            &FamilyRegistry::production(),
+            &instance,
+            &[witness(&instance, &[1, 1])]
+        )
+        .expect("valid proof"),
         ProofDecision::Accepted {
             valid_solution_count: 1,
             ..
@@ -254,7 +273,8 @@ fn malformed_witnesses_reject_with_the_verifier_reason() {
     for spins in [&[][..], &[1][..], &[1, 0][..], &[1, 2][..]] {
         let reads = [witness(&instance, spins)];
         assert_eq!(
-            validate_set(&instance, &reads, &profile()).expect("reject malformed fixed witness"),
+            validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
+                .expect("reject malformed fixed witness"),
             rejected("MalformedSolutions")
         );
     }
@@ -264,7 +284,8 @@ fn malformed_witnesses_reject_with_the_verifier_reason() {
 fn missing_energy_threshold_is_an_input_error() {
     let mut instance = fixed_instance(2);
     instance.objective = json!({});
-    let error = validate_set(&instance, &[], &profile()).expect_err("require an energy threshold");
+    let error = validate_set(&FamilyRegistry::production(), &instance, &[], &profile())
+        .expect_err("require an energy threshold");
     assert_eq!(error.to_string(), "missing required field max_energy_milli");
 }
 
@@ -272,10 +293,11 @@ fn missing_energy_threshold_is_an_input_error() {
 fn unsupported_family_is_an_input_error() {
     let mut instance = fixed_instance(2);
     instance.family = "other-family".to_owned();
-    let error = validate_set(&instance, &[], &profile()).expect_err("reject unsupported family");
+    let error = validate_set(&FamilyRegistry::production(), &instance, &[], &profile())
+        .expect_err("reject unsupported family");
     assert_eq!(
         error.to_string(),
-        "invalid run: unsupported family for current-rule replay: other-family"
+        "family_unsupported: other-family revision 1"
     );
 }
 
@@ -284,7 +306,8 @@ fn objective_defaults_have_no_proof_cap() {
     let instance = fixed_instance(2);
     let reads = vec![witness(&instance, &[1, 1]); 65];
     assert_eq!(
-        validate_set(&instance, &reads, &profile()).expect("use uncapped default target"),
+        validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
+            .expect("use uncapped default target"),
         ProofDecision::Accepted {
             best_energy_milli: -1000,
             diversity_milli: 0,
@@ -299,14 +322,15 @@ fn pinned_count_and_diversity_failures_keep_their_variant_names() {
     instance.objective["min_solutions"] = json!(2);
     let reads = [witness(&instance, &[1, 1]), witness(&instance, &[1, -1])];
     assert_eq!(
-        validate_set(&instance, &reads, &profile())
+        validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
             .expect("filter threshold equality before count"),
         rejected("InsufficientSolutions")
     );
     instance.objective["min_diversity_milli"] = json!(1);
     let reads = [witness(&instance, &[1, 1]), witness(&instance, &[-1, -1])];
     assert_eq!(
-        validate_set(&instance, &reads, &profile()).expect("check nonzero diversity gate"),
+        validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
+            .expect("check nonzero diversity gate"),
         rejected("InsufficientDiversity")
     );
 }
@@ -325,7 +349,7 @@ fn proposed_unique_ignores_current_counts_caps_and_diversity() {
     ];
     assert_eq!(
         RuleSet::ProposedUnique { min_distinct: 2 }
-            .validate_set(&instance, &reads)
+            .validate_set(&FamilyRegistry::production(), &instance, &reads)
             .expect("count valid canonical IDs without current target gates"),
         ProofDecision::Accepted {
             best_energy_milli: -1000,
@@ -344,12 +368,13 @@ fn replay_preserves_integer_energy_beyond_float_precision() {
         instance.objective["max_energy_milli"] = json!(energy);
         let reads = [witness(&instance, &[1, 1])];
         assert_eq!(
-            validate_set(&instance, &reads, &profile()).expect("preserve exact threshold equality"),
+            validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
+                .expect("preserve exact threshold equality"),
             rejected("InsufficientEnergy")
         );
         instance.objective["max_energy_milli"] = json!(energy + 1);
         assert_eq!(
-            validate_set(&instance, &reads, &profile())
+            validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
                 .expect("preserve exact energy below target"),
             ProofDecision::Accepted {
                 best_energy_milli: energy,
@@ -366,7 +391,8 @@ fn pinned_size_check_precedes_malformed_solutions() {
     instance.objective["max_proof_solutions"] = json!(1);
     let reads = [witness(&instance, &[1, 0]), witness(&instance, &[1, 1])];
     assert_eq!(
-        validate_set(&instance, &reads, &profile()).expect("preserve pinned gate order"),
+        validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
+            .expect("preserve pinned gate order"),
         rejected("TooManySolutions")
     );
 }

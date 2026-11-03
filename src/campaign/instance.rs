@@ -92,6 +92,7 @@ pub(crate) fn instance_from_value(value: Value) -> Result<Instance, CampaignErro
         }
     }
     let instance: Instance = serde_json::from_value(value)?;
+    instance.nonce_bytes()?;
     if instance.family == "ising-fixed" {
         fixed_encoding(&instance)?;
     }
@@ -121,7 +122,7 @@ pub fn validate_source_manifest(path: &Path) -> Result<SourceManifest, CampaignE
     Ok(manifest)
 }
 
-fn read_bounded(path: &Path, what: &'static str) -> Result<Vec<u8>, CampaignError> {
+pub(crate) fn read_bounded(path: &Path, what: &'static str) -> Result<Vec<u8>, CampaignError> {
     let file = File::open(path)?;
     if file.metadata()?.len() > MAX_INSTANCE_BYTES {
         return Err(CampaignError::TooLarge {
@@ -139,6 +140,38 @@ fn read_bounded(path: &Path, what: &'static str) -> Result<Vec<u8>, CampaignErro
         });
     }
     Ok(bytes)
+}
+
+/// Decode lowercase hex. Uppercase digits, odd lengths, and prefixes are rejected.
+pub(crate) fn decode_hex(text: &str) -> Result<Vec<u8>, CampaignError> {
+    let digit = |byte: u8| match byte {
+        b'0'..=b'9' => Ok(byte - b'0'),
+        b'a'..=b'f' => Ok(byte - b'a' + 10),
+        _ => Err(CampaignError::InvalidRun(format!(
+            "{text:?} is not lowercase hex"
+        ))),
+    };
+    if !text.len().is_multiple_of(2) {
+        return Err(CampaignError::InvalidRun(format!(
+            "{text:?} has an odd hex length"
+        )));
+    }
+    text.as_bytes()
+        .chunks(2)
+        .map(|pair| Ok(digit(pair[0])? << 4 | digit(pair[1])?))
+        .collect()
+}
+
+impl Instance {
+    /// The full 32-byte nonce, from exactly 64 lowercase hex characters.
+    ///
+    /// # Errors
+    /// Returns `InvalidRun` for any other nonce text.
+    pub fn nonce_bytes(&self) -> Result<[u8; 32], CampaignError> {
+        decode_hex(&self.nonce)?.try_into().map_err(|_| {
+            CampaignError::InvalidRun("nonce must be 64 lowercase hex characters".to_owned())
+        })
+    }
 }
 
 impl Witness {

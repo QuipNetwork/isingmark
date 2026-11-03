@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 
 use super::{
     invalid, json, load_campaign, mpsc, new_id, oneshot, resolve_backend, BTreeMap, CampaignConfig,
-    CampaignError, Deserialize, Instance, JoinHandle, PolicyManifest, RuleSet, Trial, TrialBudget,
+    CampaignError, Deserialize, Instance, JoinHandle, PolicyManifest, Trial, TrialBudget,
     TrialRunner, Value, Witness,
 };
 
@@ -175,14 +175,12 @@ pub async fn serve_campaign<R: BufRead + Send + 'static, W: Write>(
     mut writer: W,
 ) -> Result<(), CampaignError> {
     let loaded = load_campaign(config)?;
-    let rules = RuleSet::Current(loaded.profile);
+    let rules = loaded.rules.clone();
+    let backend = resolve_backend(&config.backend);
+    let trial_runner = TrialRunner::new(backend, config.output.clone(), rules.clone());
     let runner = Arc::new(Mutex::new((
         None::<String>,
-        TrialRunner::new(
-            resolve_backend(&config.backend),
-            config.output.clone(),
-            rules.clone(),
-        ),
+        trial_runner.with_registry(loaded.registry),
     )));
     let (sender, mut input) = mpsc::channel(1);
     // A dedicated stdin thread can end independently of the async runtime.
@@ -235,7 +233,7 @@ pub async fn serve_campaign<R: BufRead + Send + 'static, W: Write>(
                 Command::VerifySet { instance_id, witnesses } => (|| {
                     let instance = find_instance(&loaded.instances, &instance_id)?;
                     for witness in &witnesses { witness.validate()?; }
-                    let decision = rules.validate_set(instance, &witnesses)?;
+                    let decision = rules.validate_set(&loaded.registry, instance, &witnesses)?;
                     Ok(json!({"event": "verified", "instance_id": instance_id, "decision": decision}))
                 })(),
                 Command::CancelTrial { trial_id } => {
@@ -298,15 +296,13 @@ mod tests {
                 backend: "fake".into(),
                 output: dir.path().join("out"),
                 dry_run: false,
+                registry: super::super::FamilyRegistry::production(),
             };
             let loaded = load_campaign(&config).expect("campaign");
             let (commands, mut command_receiver) = mpsc::channel(1);
             let (_events, receiver) = mpsc::channel(1);
-            let mut runner = TrialRunner::new(
-                resolve_backend("fake"),
-                config.output.clone(),
-                RuleSet::Current(loaded.profile),
-            );
+            let mut runner =
+                TrialRunner::new(resolve_backend("fake"), config.output.clone(), loaded.rules);
             runner.session = Some(LiveSession {
                 id: "prepared".into(),
                 commands,

@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, error::Error, fmt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::instance::Instance;
+use super::{families::numeric::IntegerScale, instance::Instance};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FamilyConfig {
@@ -64,14 +64,16 @@ pub struct Evaluation {
     pub observables: BTreeMap<String, f64>,
     pub uncertainty: f64,
     pub rejections: Vec<String>,
+    /// The exact energy in milli. Acceptance compares this value, never `score`.
+    pub energy_milli: Option<i64>,
 }
 
-pub trait FamilyEvaluator {
-    /// Produce an explicit instance from the family's configuration.
+pub trait FamilyEvaluator: Sync {
+    /// Produce an explicit instance from the family's configuration and the full nonce.
     ///
     /// # Errors
     /// Returns a stable family error for invalid or unsupported configuration.
-    fn generate(&self, config: &FamilyConfig, seed: u64) -> Result<Instance, EvalError>;
+    fn generate(&self, config: &FamilyConfig, nonce: [u8; 32]) -> Result<Instance, EvalError>;
 
     /// Map the instance to an exact encoding, surrogate, or unsupported outcome.
     ///
@@ -95,6 +97,11 @@ pub trait FamilyEvaluator {
     /// # Errors
     /// Returns a stable family error for malformed instances or witnesses.
     fn canonicalize(&self, instance: &Instance, witness: &Witness) -> Result<Vec<u8>, EvalError>;
+
+    /// The coefficient scale of this family's encodings.
+    fn scale(&self) -> IntegerScale {
+        IntegerScale::MILLI
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -159,7 +159,9 @@ fn fixed_encoding_is_exact_and_generation_keeps_the_explicit_instance() {
         family: "ising-fixed".to_owned(),
         params: serde_json::to_value(&instance).expect("serialize fixed configuration"),
     };
-    let generated = FixedIsing.generate(&config, 42).expect("load fixed config");
+    let generated = FixedIsing
+        .generate(&config, [42; 32])
+        .expect("load fixed config");
     assert_eq!(
         serde_json::to_value(generated).expect("serialize generated instance"),
         serde_json::to_value(instance).expect("serialize original instance")

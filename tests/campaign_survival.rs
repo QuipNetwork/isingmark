@@ -16,7 +16,7 @@ use isingmark::campaign::{
         Curve, Quantile,
     },
     contracts::{TimeBasis, TimingStatus},
-    runner::{Preparation, TerminalReason, Trial},
+    runner::{InstanceIdentity, Preparation, TerminalReason, Trial},
     trace::{DeviceTime, EventKind, TraceEvent, TraceWriter, TRACE_VERSION},
 };
 
@@ -69,6 +69,15 @@ fn trial(dir: &Path, id: &str, instance: &str, accepted_s: Option<u64>) -> Trial
             TerminalReason::WallTimeout
         },
         preparation: Preparation::Cold,
+        identity: InstanceIdentity {
+            family: "ising-fixed".into(),
+            revision: "1".into(),
+            nonce: "00".repeat(32),
+            descriptor_digest: None,
+            instance_digest: None,
+            offset_milli: 0,
+            source_hashes: BTreeMap::new(),
+        },
     }
 }
 
