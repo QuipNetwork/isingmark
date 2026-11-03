@@ -735,6 +735,32 @@ fn family_check_reports_a_wrong_oracle() {
 }
 
 #[test]
+fn family_check_revision_comes_from_the_checked_family() {
+    let dir = tempfile::tempdir().expect("directory");
+    let source = oracle_dir();
+    for name in ["two_spin.instance.json", "two_spin.oracle.json"] {
+        fs::copy(source.join(name), dir.path().join(name)).expect("copy");
+    }
+    let mut foreign: serde_json::Value =
+        serde_json::from_slice(&fs::read(source.join("two_spin.instance.json")).expect("instance"))
+            .expect("json");
+    foreign["family"] = json!("other");
+    foreign["model_version"] = json!("9");
+    // Sorts before two_spin, so it is loaded first.
+    fs::write(
+        dir.path().join("a_other.instance.json"),
+        foreign.to_string(),
+    )
+    .expect("foreign");
+    let report =
+        family_check(&FamilyRegistry::production(), "ising-fixed", dir.path()).expect("report");
+    assert_eq!(report.revision, "1");
+    assert_eq!((report.fixtures, report.witnesses), (2, 2));
+    assert_eq!(report.failures.len(), 1, "{:?}", report.failures);
+    assert_eq!(report.failures[0].fixture, "a_other");
+}
+
+#[test]
 fn family_check_refuses_an_unknown_family() {
     let error = family_check(
         &FamilyRegistry::production(),

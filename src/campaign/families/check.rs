@@ -44,7 +44,7 @@ pub struct FamilyCheckFailure {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FamilyCheckReport {
     pub family: String,
-    /// The revision of the first fixture. Every fixture must name the same one.
+    /// The revision of the first fixture of `family`. Every fixture must name the same one.
     pub revision: String,
     pub fixtures: u64,
     pub witnesses: u64,
@@ -156,7 +156,7 @@ pub fn family_check(
             });
         };
         let instance = load_instance(&path)?;
-        if report.revision.is_empty() {
+        if instance.family == family && report.revision.is_empty() {
             report.revision.clone_from(&instance.model_version);
         }
         if instance.family != family || instance.model_version != report.revision {
