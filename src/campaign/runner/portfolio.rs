@@ -244,6 +244,9 @@ fn check_panel(panel: &Panel) -> Result<(), CampaignError> {
         .iter()
         .map(|slot| (slot.slot_id.as_str(), slot))
         .collect();
+    if slots.is_empty() {
+        return Err(invalid(format!("{} has no slots", panel.panel_id)));
+    }
     if slots.len() != panel.slots.len() {
         return Err(invalid(format!("{} repeats a slot id", panel.panel_id)));
     }
@@ -351,6 +354,27 @@ pub fn validate_portfolio(
     portfolio: &PortfolioPolicy,
     budget: &TrialBudget,
 ) -> Result<(), CampaignError> {
+    check_stages(portfolio)?;
+    let fixed = portfolio
+        .stages
+        .iter()
+        .try_fold(std::time::Duration::ZERO, |total, stage| {
+            match stage.allocation {
+                Allocation::Seconds(seconds) => Ok(total.saturating_add(duration(seconds)?)),
+                Allocation::Remainder => Ok::<_, CampaignError>(total),
+            }
+        })?;
+    if budget.wall_limit.is_some_and(|wall| fixed >= wall) {
+        return Err(invalid(format!(
+            "{}: fixed allocations leave no time for the remainder stage",
+            portfolio.policy_id
+        )));
+    }
+    Ok(())
+}
+
+/// The checks that hold for a portfolio whatever its trial budget.
+fn check_stages(portfolio: &PortfolioPolicy) -> Result<(), CampaignError> {
     let context = &portfolio.policy_id;
     if context.is_empty() {
         return Err(invalid("a portfolio needs a policy_id"));
@@ -385,20 +409,6 @@ pub fn validate_portfolio(
             }
             _ => {}
         }
-    }
-    let fixed = allocations
-        .iter()
-        .try_fold(
-            std::time::Duration::ZERO,
-            |total, allocation| match *allocation {
-                Allocation::Seconds(seconds) => Ok(total.saturating_add(duration(seconds)?)),
-                Allocation::Remainder => Ok::<_, CampaignError>(total),
-            },
-        )?;
-    if budget.wall_limit.is_some_and(|wall| fixed >= wall) {
-        return Err(invalid(format!(
-            "{context}: fixed allocations leave no time for the remainder stage"
-        )));
     }
     Ok(())
 }
@@ -518,6 +528,7 @@ impl PortfolioRunner {
         state.trial.started = release_wall;
         state.session_id = new_id("session");
         state.release(instance, portfolio, budget)?;
+        state.elite_nodes = spec.nodes.len();
         state.elite_capacity = portfolio
             .stages
             .iter()
@@ -544,17 +555,18 @@ impl PortfolioRunner {
                 &stage.stage_id,
                 repeat,
             );
-            let selection_started = Instant::now();
-            let (initial_spins, provenance) =
-                initial_states(&state, stage.initial_states, seed, spec.nodes.len());
-            state.initial_spins = initial_spins;
-            state.count("host_compute_ns", nanos(selection_started.elapsed())?)?;
+            // The allocation starts before state preparation, so preparation counts in it.
             let allocation_end = match stage.allocation {
                 Allocation::Seconds(seconds) => {
                     Some(state.clock.elapsed().saturating_add(duration(seconds)?))
                 }
                 Allocation::Remainder => None,
             };
+            let selection_started = Instant::now();
+            let (initial_spins, provenance) =
+                initial_states(&state, stage.initial_states, seed, spec.nodes.len());
+            state.initial_spins = initial_spins;
+            state.count("host_compute_ns", nanos(selection_started.elapsed())?)?;
             let deadline = match (allocation_end, state.trial.wall_limit) {
                 (Some(end), Some(wall)) => Some(end.min(wall)),
                 (end, wall) => end.or(wall),
@@ -638,8 +650,13 @@ impl PortfolioRunner {
                     "session_outcome": state.session_outcome}),
                 None,
             )?;
-            terminal = outcome;
-            if !hand_over {
+            // A proof scored while the stage drained still ends the trial.
+            terminal = if state.trial.accepted_wall.is_some() {
+                TerminalReason::Accepted
+            } else {
+                outcome
+            };
+            if !hand_over || terminal == TerminalReason::Accepted {
                 break;
             }
         }
@@ -787,12 +804,17 @@ fn limit_reached(
 /// Whether `backend`'s binary exists on this host. Checks files only and starts nothing.
 #[must_use]
 pub fn backend_available(backend: &str) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    let executable = |path: &Path| {
+        fs::metadata(path)
+            .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+    };
     let bin = super::resolve_backend(backend).bin;
     if bin.components().count() > 1 {
-        return bin.is_file();
+        return executable(&bin);
     }
     std::env::var_os("PATH").is_some_and(|paths| {
-        std::env::split_paths(&paths).any(|directory| directory.join(&bin).is_file())
+        std::env::split_paths(&paths).any(|directory| executable(&directory.join(&bin)))
     })
 }
 
@@ -857,12 +879,19 @@ pub fn resolve_panel(
                 });
             }
         }
-        let policy = missing.is_empty().then(|| PortfolioPolicy {
+        let policy = PortfolioPolicy {
             policy_id: format!("{panel_id}/{}", slot.slot_id),
             host_compute_limit_s: catalog.host_compute_limit_s,
             evaluation_limit: catalog.evaluation_limit,
             stages,
-        });
+        };
+        // A slot that execution would refuse is missing, never complete.
+        if missing.is_empty() {
+            if let Err(error) = check_stages(&policy) {
+                missing.push(error.to_string());
+            }
+        }
+        let policy = missing.is_empty().then_some(policy);
         slots.push(SlotResolution {
             slot_id: slot.slot_id.clone(),
             policy,

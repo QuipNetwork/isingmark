@@ -967,6 +967,8 @@ struct TrialState {
     /// The lowest-energy distinct states captured so far, at most `elite_capacity`.
     elite: Vec<EliteState>,
     elite_capacity: usize,
+    /// Spins in a well-formed state. Malformed reads stay in the trace only.
+    elite_nodes: usize,
     /// Packed start states sent with every job of the current stage.
     initial_spins: Vec<Vec<u8>>,
 }
@@ -1026,6 +1028,7 @@ impl TrialState {
             complete_capture: None,
             elite: Vec::new(),
             elite_capacity: 0,
+            elite_nodes: 0,
             initial_spins: Vec::new(),
         }
     }
@@ -1147,15 +1150,21 @@ impl TrialState {
             let reads = capture.meta.as_ref().map_or(requested, |meta| meta.reads);
             u32::try_from(capture.solutions.len()).is_ok_and(|states| states >= reads)
         });
-        if complete && self.elite_capacity > 0 {
+        if !complete {
+            self.count("incomplete_captures", 1)?;
+        } else if self.elite_capacity > 0 {
+            let started = Instant::now();
             self.keep_elite(&id, capture);
+            self.count("host_compute_ns", nanos(started.elapsed())?)?;
         }
         Ok(complete)
     }
 
     fn keep_elite(&mut self, job_id: &str, capture: &BatchCapture) {
         for (index, solution) in capture.solutions.iter().enumerate() {
-            if self.elite.iter().any(|kept| kept.spins == solution.spins) {
+            if solution.spins.len() != self.elite_nodes
+                || self.elite.iter().any(|kept| kept.spins == solution.spins)
+            {
                 continue;
             }
             let position = self

@@ -179,6 +179,52 @@ fn invalid_schedules_are_rejected() {
 }
 
 #[test]
+fn empty_panels_are_rejected() {
+    let dir = tempfile::tempdir().expect("directory");
+    let mut value = catalog_value(&full_solvers());
+    value["panels"][0]["slots"] = json!([]);
+    let path = dir.path().join("policies.json");
+    fs::write(&path, serde_json::to_vec(&value).expect("JSON")).expect("catalog");
+    assert!(load_catalog(&path).is_err());
+}
+
+#[test]
+fn slots_that_execution_would_refuse_resolve_as_missing() {
+    let dir = tempfile::tempdir().expect("directory");
+    let mut value = catalog_value(&full_solvers());
+    // Solvers in this catalog read four states, so 48 start states cannot fit.
+    value["panels"][0]["slots"][0]["initial_states"] = json!({"random": {"count": 48}});
+    // A standalone slot has no earlier stage to take states from.
+    value["panels"][0]["slots"][4]["initial_states"] = json!({"previous": {"count": 2}});
+    let catalog = write_catalog(dir.path(), &value);
+    let resolution = resolve_panel(&catalog, "toy", "any/family", &|_| true).expect("resolves");
+    assert_eq!(resolution.missing_slots, ["cpu-1", "cpu-4", "gpu-1"]);
+    assert!(
+        resolution.slots[0].missing[0].contains("num_reads"),
+        "{:?}",
+        resolution.slots[0]
+    );
+    assert!(!resolution.complete);
+}
+
+#[test]
+fn backend_without_execute_permission_is_unavailable() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().expect("directory");
+    let bin = dir.path().join("miner");
+    fs::write(&bin, b"#!/bin/sh\n").expect("file");
+    fs::set_permissions(&bin, fs::Permissions::from_mode(0o644)).expect("mode");
+    let name = bin.to_str().expect("UTF-8 path");
+    assert!(!isingmark::campaign::runner::portfolio::backend_available(
+        name
+    ));
+    fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).expect("mode");
+    assert!(isingmark::campaign::runner::portfolio::backend_available(
+        name
+    ));
+}
+
+#[test]
 fn committed_catalog_declares_four_cpu_and_two_gpu_slots_per_panel() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("evaluation/qblock/configs/suite_fit/policies.json");
@@ -830,5 +876,29 @@ mod execution {
             .block_on(run_portfolio_campaign(&config, Vec::new()))
             .expect_err("no earlier states");
         assert!(error.to_string().contains("earlier states"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn evaluation_limit_reached_in_one_stage_stops_the_next() {
+        // An unreachable target keeps the first stage scoring until the shared limit.
+        let mut input = instance();
+        input.objective["max_energy"] = json!(-5);
+        let mut policy = portfolio(vec![
+            stage("cpu-3", "good", Allocation::Seconds(5.0)),
+            stage("cpu-1", "good", Allocation::Remainder),
+        ]);
+        policy.evaluation_limit = 6;
+        let dir = tempfile::tempdir().expect("output directory");
+        let runner =
+            PortfolioRunner::new(dir.path().to_owned(), rules()).with_backend(fake("good", &[]));
+        let budget = TrialBudget::new(Some(Duration::from_secs(10)), None).expect("budget");
+        let trial = runner
+            .run_trial(&input, &policy, &budget, 0, None)
+            .await
+            .expect("trial");
+        assert_eq!(trial.terminal, TerminalReason::EvaluationLimit);
+        assert_eq!(trial.resources["evaluations"], 6);
+        let events = events(&trial);
+        assert_eq!(stage_starts(&events).len(), 1);
     }
 }
