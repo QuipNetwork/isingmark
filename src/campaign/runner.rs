@@ -94,6 +94,8 @@ pub enum TerminalReason {
     EvaluationLimit,
     MinerCrashed,
     MinerRejected,
+    /// A portfolio stage returned fewer states than it read, so it fails admission.
+    IncompleteCapture,
     Cancelled,
     InvalidRun,
 }
@@ -467,9 +469,9 @@ pub async fn run_portfolio_campaign(
     let mut result = Ok(());
     'trials: for portfolio in &loaded.portfolios {
         for instance in &loaded.instances {
-            for _ in 0..loaded.trials_per_pair {
+            for repeat in 0..loaded.trials_per_pair {
                 match runner
-                    .run_trial(instance, portfolio, &loaded.budget, None)
+                    .run_trial(instance, portfolio, &loaded.budget, repeat, None)
                     .await
                 {
                     Ok(trial) => report.trials.push(trial),
@@ -953,6 +955,8 @@ struct TrialState {
     witnesses: Vec<Witness>,
     energies: Vec<i64>,
     registry: FamilyRegistry,
+    /// Requested reads when every read's final state must arrive.
+    complete_capture: Option<u32>,
 }
 
 impl TrialState {
@@ -998,6 +1002,7 @@ impl TrialState {
             witnesses: Vec::new(),
             energies: Vec::new(),
             registry: FamilyRegistry::production(),
+            complete_capture: None,
         }
     }
 
@@ -1092,7 +1097,8 @@ impl TrialState {
         ) >= duration(policy.host_compute_limit_s)?)
     }
 
-    fn receive(&mut self, capture: &BatchCapture, at: Instant) -> Result<(), CampaignError> {
+    /// Record a batch. Returns false when complete capture is required and states are missing.
+    fn receive(&mut self, capture: &BatchCapture, at: Instant) -> Result<bool, CampaignError> {
         let id = String::from_utf8(capture.job_id.clone()).map_err(invalid)?;
         if !self.pending.remove(&id) {
             return Err(invalid("capture has no matching dispatch"));
@@ -1112,7 +1118,11 @@ impl TrialState {
                 "recomputed_energy_milli": solution.recomputed_energy_milli})).collect::<Vec<_>>(),
             "meta": capture.meta.as_ref().map(|meta| json!({"reads": meta.reads, "sweeps": meta.sweeps,
                 "device_access_time_us": meta.device_access_time_us, "qpu_access_us": meta.qpu_access_us, "extra": meta.extra}))
-        }), Some(cost))
+        }), Some(cost))?;
+        Ok(self.complete_capture.is_none_or(|requested| {
+            let reads = capture.meta.as_ref().map_or(requested, |meta| meta.reads);
+            u32::try_from(capture.solutions.len()).is_ok_and(|states| states >= reads)
+        }))
     }
 
     fn evaluate(
@@ -1251,8 +1261,10 @@ impl TrialState {
             SessionEvent::Ready => Ok(()),
             SessionEvent::Dispatched { job_id, at } => self.dispatch(job_id, at),
             SessionEvent::Batch { capture, at } => {
-                self.receive(&capture, at)?;
-                self.evaluate(instance, policy, rules, target, &capture)
+                if self.receive(&capture, at)? {
+                    self.evaluate(instance, policy, rules, target, &capture)?;
+                }
+                Ok(())
             }
             SessionEvent::Rejected { job_id, reason, at } => self.reject(job_id, &reason, at),
             SessionEvent::Failed { reason, at } => self.emit(
@@ -1377,7 +1389,9 @@ async fn drive_trial(
                     state.dispatch(job_id, at)?;
                 }
                 Some(SessionEvent::Batch { capture, at }) => {
-                    state.receive(&capture, at)?;
+                    if !state.receive(&capture, at)? {
+                        return Ok(TerminalReason::IncompleteCapture);
+                    }
                     state.evaluate(instance, policy, rules, target, &capture)?;
                     if state.trial.accepted_wall.is_some() {
                         return Ok(TerminalReason::Accepted);

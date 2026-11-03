@@ -227,8 +227,8 @@ mod execution {
             protocol::{load_protocol_profile, RuleSet},
             runner::{
                 portfolio::{
-                    Allocation, Applicability, PortfolioPolicy, PortfolioRunner, Stage,
-                    PORTFOLIO_BACKEND,
+                    solver_seed, Allocation, Applicability, PortfolioPolicy, PortfolioRunner,
+                    Stage, PORTFOLIO_BACKEND,
                 },
                 run_portfolio_campaign, CampaignConfig, TerminalReason, Trial,
             },
@@ -302,7 +302,7 @@ mod execution {
         );
         let budget = TrialBudget::new(Some(wall), Some(30_000_000_000)).expect("budget");
         let trial = runner
-            .run_trial(&instance(), portfolio, &budget, cancellation)
+            .run_trial(&instance(), portfolio, &budget, 0, cancellation)
             .await
             .expect("trial");
         (dir, trial)
@@ -568,5 +568,100 @@ mod execution {
             .block_on(run_portfolio_campaign(&config, Vec::new()))
             .expect_err("no remainder time");
         assert!(error.to_string().contains("remainder"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn best_only_executable_fails_admission_at_runtime() {
+        // Without --num-solutions the fake miner returns two states for four reads.
+        let mut best = stage("cpu-3", "best", Allocation::Seconds(5.0));
+        best.num_reads = 4;
+        let policy = portfolio(vec![best, stage("cpu-1", "good", Allocation::Remainder)]);
+        let (_dir, trial) = run(
+            &policy,
+            vec![fake("best", &[]), fake("good", &[])],
+            Duration::from_secs(10),
+            None,
+        )
+        .await;
+        assert_eq!(trial.terminal, TerminalReason::Accepted);
+        let events = events(&trial);
+        assert_eq!(
+            stage_ends(&events),
+            [
+                ("cpu-3".to_owned(), json!("incomplete_capture")),
+                ("cpu-1".to_owned(), json!("accepted"))
+            ]
+        );
+        let first = &events
+            .iter()
+            .find(|event| event.kind == EventKind::StageStart)
+            .expect("first stage")
+            .session_id;
+        // The partial batch stays in the trace, but none of its states is scored.
+        let receipt = events
+            .iter()
+            .find(|event| event.kind == EventKind::BatchReceipt && &event.session_id == first)
+            .expect("partial receipt");
+        assert_eq!(
+            receipt.payload["solutions"].as_array().map(Vec::len),
+            Some(2)
+        );
+        assert!(!events
+            .iter()
+            .any(|event| event.kind == EventKind::WitnessValidation && &event.session_id == first));
+
+        let mut only = stage("cpu-1", "best", Allocation::Remainder);
+        only.num_reads = 4;
+        let (_dir, trial) = run(
+            &portfolio(vec![only]),
+            vec![fake("best", &[])],
+            Duration::from_secs(10),
+            None,
+        )
+        .await;
+        assert_eq!(trial.terminal, TerminalReason::IncompleteCapture);
+    }
+
+    #[test]
+    fn seed_changes_without_changing_instance() {
+        let base = solver_seed("toy/cpu-4", "two-spin", "cpu-3", 0);
+        assert_eq!(base, solver_seed("toy/cpu-4", "two-spin", "cpu-3", 0));
+        assert_ne!(base, solver_seed("toy/cpu-4", "two-spin", "cpu-3", 1));
+        assert_ne!(base, solver_seed("toy/cpu-4", "two-spin", "cpu-2", 0));
+        assert_ne!(base, solver_seed("toy/cpu-1", "two-spin", "cpu-3", 0));
+        assert_ne!(base, solver_seed("toy/cpu-4", "other", "cpu-3", 0));
+        // Length prefixes keep field boundaries apart.
+        assert_ne!(
+            solver_seed("ab", "c", "d", 0),
+            solver_seed("a", "bc", "d", 0)
+        );
+    }
+
+    #[tokio::test]
+    async fn stage_start_records_seed_and_repeat() {
+        let policy = portfolio(vec![stage("cpu-1", "good", Allocation::Remainder)]);
+        let dir = tempfile::tempdir().expect("output directory");
+        let runner =
+            PortfolioRunner::new(dir.path().to_owned(), rules()).with_backend(fake("good", &[]));
+        let budget = TrialBudget::new(Some(Duration::from_secs(10)), None).expect("budget");
+        let trial = runner
+            .run_trial(&instance(), &policy, &budget, 3, None)
+            .await
+            .expect("trial");
+        let events = events(&trial);
+        let start = events
+            .iter()
+            .find(|event| event.kind == EventKind::StageStart)
+            .expect("stage start");
+        assert_eq!(start.payload["repeat"], 3);
+        assert_eq!(
+            start.payload["solver_seed"],
+            json!(format!(
+                "{:016x}",
+                solver_seed("toy/cpu-4", "two-spin", "cpu-1", 3)
+            ))
+        );
+        assert_eq!(start.payload["seed_delivery"], "unavailable");
+        assert_eq!(trial.identity.nonce, instance().nonce);
     }
 }

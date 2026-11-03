@@ -388,6 +388,7 @@ fn device_result(trial: &Trial, budget_ns: u64) -> DeviceResult {
         | TerminalReason::DeviceBudgetExhausted
         | TerminalReason::MinerCrashed
         | TerminalReason::MinerRejected
+        | TerminalReason::IncompleteCapture
         | TerminalReason::Cancelled
         | TerminalReason::InvalidRun => DeviceResult::Failure,
         TerminalReason::WallTimeout

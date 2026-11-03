@@ -409,10 +409,12 @@ impl PortfolioRunner {
             .unwrap_or_else(|| resolve_backend(name))
     }
 
-    /// Run every stage of `portfolio` inside one trial and one budget.
+    /// Run every stage of `portfolio` inside one trial and one budget. `repeat`
+    /// numbers the trials of one policy and instance, and feeds the solver seeds.
     ///
-    /// A stage that spends its allocation, crashes, or is rejected hands over to the
-    /// next stage. Acceptance and the trial-wide limits end the trial.
+    /// A stage that spends its allocation, crashes, is rejected, or returns fewer
+    /// states than it read hands over to the next stage. Acceptance and the
+    /// trial-wide limits end the trial.
     ///
     /// # Errors
     /// Returns invalid inputs, accounting failures, or event writer failures.
@@ -425,6 +427,7 @@ impl PortfolioRunner {
         instance: &Instance,
         portfolio: &PortfolioPolicy,
         budget: &TrialBudget,
+        repeat: u32,
         mut cancellation: Option<oneshot::Receiver<()>>,
     ) -> Result<Trial, CampaignError> {
         validate_portfolio(portfolio, budget)?;
@@ -474,6 +477,13 @@ impl PortfolioRunner {
                 state.session_id = new_id("session");
             }
             state.session_outcome = None;
+            state.complete_capture = Some(stage.num_reads);
+            let seed = solver_seed(
+                &portfolio.policy_id,
+                &instance.instance_id,
+                &stage.stage_id,
+                repeat,
+            );
             let allocation_end = match stage.allocation {
                 Allocation::Seconds(seconds) => {
                     Some(state.clock.elapsed().saturating_add(duration(seconds)?))
@@ -488,7 +498,9 @@ impl PortfolioRunner {
                 EventKind::StageStart,
                 Instant::now(),
                 None,
-                json!({"index": index, "stage": stage,
+                // The session protocol has no seed field, so the seed is recorded only.
+                json!({"index": index, "stage": stage, "repeat": repeat,
+                    "solver_seed": format!("{seed:016x}"), "seed_delivery": "unavailable",
                     "deadline_ns": deadline.map(nanos).transpose()?}),
                 None,
             )?;
@@ -518,7 +530,9 @@ impl PortfolioRunner {
             let hand_over = !last
                 && match outcome {
                     TerminalReason::WallTimeout => allocation_spent,
-                    TerminalReason::MinerCrashed | TerminalReason::MinerRejected => true,
+                    TerminalReason::MinerCrashed
+                    | TerminalReason::MinerRejected
+                    | TerminalReason::IncompleteCapture => true,
                     _ => false,
                 };
             if hand_over {
@@ -552,6 +566,21 @@ impl PortfolioRunner {
         state.terminate(terminal)?;
         Ok(state.trial)
     }
+}
+
+/// The solver seed for one stage session of one repeat. The instance nonce is
+/// not an input, so a seed change never changes the instance.
+#[must_use]
+pub fn solver_seed(policy_id: &str, instance_id: &str, stage_id: &str, repeat: u32) -> u64 {
+    let mut hasher = blake3::Hasher::new_derive_key("isingmark solver seed v1");
+    for field in [policy_id, instance_id, stage_id] {
+        hasher.update(&(field.len() as u64).to_le_bytes());
+        hasher.update(field.as_bytes());
+    }
+    hasher.update(&repeat.to_le_bytes());
+    let mut seed = [0; 8];
+    hasher.finalize_xof().fill(&mut seed);
+    u64::from_le_bytes(seed)
 }
 
 /// A trial-wide limit or a cancellation that prevents the next stage from starting.
