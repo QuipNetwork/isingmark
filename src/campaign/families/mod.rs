@@ -159,16 +159,16 @@ pub(crate) fn exact_energy(encoding: &IsingEncoding, spins: &[i8]) -> Result<i64
     Ok(energy)
 }
 
-/// The instance's strict energy threshold, `max_energy_milli`.
+/// The instance's strict energy threshold in milli, from the natural-unit `max_energy`.
 pub(crate) fn energy_threshold(instance: &Instance) -> Result<i64, EvalError> {
-    instance
+    let value = instance
         .objective
-        .get("max_energy_milli")
-        .and_then(serde_json::Value::as_i64)
+        .get("max_energy")
         .ok_or_else(|| EvalError {
             code: "invalid_objective",
-            reason: "max_energy_milli must be an i64 integer".to_owned(),
-        })
+            reason: "objective.max_energy is required".to_owned(),
+        })?;
+    numeric::natural_to_milli(value)
 }
 
 /// Orientation-preserving identity bytes: a nonzero field breaks global reversal symmetry.

@@ -19,7 +19,7 @@ use serde_json::json;
 
 fn fixed_instance(width: usize) -> Instance {
     serde_json::from_value(json!({
-        "schema_version": 1,
+        "schema_version": 2,
         "instance_id": format!("fixed-{width}"),
         "family": "ising-fixed",
         "model_version": "1",
@@ -29,16 +29,15 @@ fn fixed_instance(width: usize) -> Instance {
         "physical": {
             "variables": (0..width).map(|index| format!("s{index}")).collect::<Vec<_>>(),
             "h": vec![0; width],
-            "j": [-1000],
+            "j": [-1],
             "edges": [[0, 1]],
-            "units": "milli",
             "offset": 0,
             "auxiliaries": [],
             "precision_bound": 0.0,
             "exact": true
         },
         "search_space": {},
-        "objective": {"max_energy_milli": 1000},
+        "objective": {"max_energy": 1},
         "constraints": {},
         "hardness": {},
         "source_hashes": {}
@@ -89,7 +88,7 @@ fn threshold_equality_fails() {
 fn duplicate_reads_count_under_current_rule() {
     let mut instance = fixed_instance(2);
     instance.objective["min_solutions"] = json!(3);
-    instance.objective["min_diversity_milli"] = json!(0);
+    instance.objective["min_diversity"] = json!(0);
     let reads = vec![witness(&instance, &[1, 1]); 3];
     assert_eq!(
         RuleSet::Current(profile())
@@ -286,7 +285,10 @@ fn missing_energy_threshold_is_an_input_error() {
     instance.objective = json!({});
     let error = validate_set(&FamilyRegistry::production(), &instance, &[], &profile())
         .expect_err("require an energy threshold");
-    assert_eq!(error.to_string(), "missing required field max_energy_milli");
+    assert_eq!(
+        error.to_string(),
+        "invalid_objective: objective.max_energy is required"
+    );
 }
 
 #[test]
@@ -326,7 +328,7 @@ fn pinned_count_and_diversity_failures_keep_their_variant_names() {
             .expect("filter threshold equality before count"),
         rejected("InsufficientSolutions")
     );
-    instance.objective["min_diversity_milli"] = json!(1);
+    instance.objective["min_diversity"] = json!(0.001);
     let reads = [witness(&instance, &[1, 1]), witness(&instance, &[-1, -1])];
     assert_eq!(
         validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
@@ -339,7 +341,7 @@ fn pinned_count_and_diversity_failures_keep_their_variant_names() {
 fn proposed_unique_ignores_current_counts_caps_and_diversity() {
     let mut instance = fixed_instance(2);
     instance.objective["min_solutions"] = json!(99);
-    instance.objective["min_diversity_milli"] = json!(1001);
+    instance.objective["min_diversity"] = json!(1.001);
     instance.objective["max_proof_solutions"] = json!(1);
     let reads = [
         witness(&instance, &[1, 1]),
@@ -361,23 +363,25 @@ fn proposed_unique_ignores_current_counts_caps_and_diversity() {
 
 #[test]
 fn replay_preserves_integer_energy_beyond_float_precision() {
-    for energy in [9_007_199_254_740_993_i64, -9_007_199_254_740_993_i64] {
+    // 9_007_199_254_741 natural is past 2^53 milli, where floats skip odd integers.
+    for units in [9_007_199_254_741_i64, -9_007_199_254_741_i64] {
+        let energy = units * 1000;
         let mut instance = fixed_instance(2);
         instance.physical["j"] = json!([0]);
-        instance.physical["offset"] = json!(energy);
-        instance.objective["max_energy_milli"] = json!(energy);
+        instance.physical["offset"] = json!(units);
+        instance.objective["max_energy"] = json!(units);
         let reads = [witness(&instance, &[1, 1])];
         assert_eq!(
             validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
                 .expect("preserve exact threshold equality"),
             rejected("InsufficientEnergy")
         );
-        instance.objective["max_energy_milli"] = json!(energy + 1);
+        instance.physical["h"] = json!([-0.001, 0]);
         assert_eq!(
             validate_set(&FamilyRegistry::production(), &instance, &reads, &profile())
                 .expect("preserve exact energy below target"),
             ProofDecision::Accepted {
-                best_energy_milli: energy,
+                best_energy_milli: energy - 1,
                 diversity_milli: 0,
                 valid_solution_count: 1
             }

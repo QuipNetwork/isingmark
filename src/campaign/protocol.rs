@@ -13,7 +13,7 @@ use super::{
     contracts::{
         EncodingOutcome, EvalError, Evaluation, EvaluationContext, FamilyEvaluator, Witness,
     },
-    families::FamilyRegistry,
+    families::{energy_threshold, numeric::natural_to_milli, FamilyRegistry},
     instance::Instance,
     CampaignError,
 };
@@ -171,19 +171,19 @@ pub fn select_proof(reads: &[(&[i8], i64)], target: &Target) -> Result<Vec<usize
 }
 
 pub(crate) fn target_from_objective(instance: &Instance) -> Result<Target, CampaignError> {
-    let energy = instance
-        .objective
-        .get("max_energy_milli")
-        .ok_or(CampaignError::MissingField("max_energy_milli"))?;
     let count = |field, default| {
         instance.objective.get(field).map_or(Ok(default), |value| {
             serde_json::from_value(value.clone()).map_err(CampaignError::from)
         })
     };
+    let min_diversity = instance
+        .objective
+        .get("min_diversity")
+        .map_or(Ok(0), natural_to_milli)?;
     Ok(Target {
-        max_energy_milli: serde_json::from_value(energy.clone())?,
+        max_energy_milli: energy_threshold(instance)?,
         min_solutions: count("min_solutions", 1)?,
-        min_diversity_milli: count("min_diversity_milli", 0)?,
+        min_diversity_milli: u32::try_from(min_diversity).map_err(|_| CampaignError::Overflow)?,
         max_proof_solutions: count("max_proof_solutions", u32::MAX)?,
     })
 }

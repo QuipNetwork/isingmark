@@ -33,9 +33,7 @@ use crate::{
 
 use super::{
     contracts::{EncodingOutcome, EvaluationContext, IsingEncoding, Witness},
-    families::{
-        canonical::pinned_digests, numeric::to_wire_encoding, FamilyRegistry, FIXED_FAMILY,
-    },
+    families::{canonical::pinned_digests, FamilyRegistry, FIXED_FAMILY},
     instance::{load_instance, Instance},
     protocol::{
         load_protocol_profile, select_proof, target_from_objective, ProofDecision, RuleSet,
@@ -612,8 +610,6 @@ impl TrialRunner {
         let preparation_started = Instant::now();
         let encoding = encoding(&self.registry, instance)?;
         let identity = InstanceIdentity::new(instance, &encoding)?;
-        // The miner sees milli units. Identity keeps the family's own offset.
-        let encoding = to_wire_encoding(&encoding, self.registry.for_instance(instance)?.scale())?;
         let target = target_from_objective(instance)?;
         let spec = topology(&encoding)?;
         let encoding_ns = nanos(preparation_started.elapsed())?;

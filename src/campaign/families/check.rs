@@ -3,7 +3,7 @@
 //!
 //! A fixture directory holds `<name>.instance.json` files, each with a
 //! `<name>.oracle.json` that lists witnesses and their expected validity and exact
-//! energy. No miner or solver runs.
+//! energy in natural units. No miner or solver runs.
 
 use std::{fs, path::Path};
 
@@ -14,7 +14,10 @@ use super::super::{
     instance::{load_instance, read_bounded, Instance},
     CampaignError,
 };
-use super::FamilyRegistry;
+use super::{
+    numeric::{milli_to_natural, natural_to_milli},
+    FamilyRegistry,
+};
 
 /// The largest number of instance fixtures one check reads.
 pub const MAX_FIXTURES: u64 = 4096;
@@ -30,7 +33,8 @@ struct Oracle {
 struct OracleWitness {
     spins: Vec<i8>,
     valid: bool,
-    energy_milli: i64,
+    /// Natural units.
+    energy: serde_json::Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -86,6 +90,17 @@ fn check_oracle(
     };
     for (index, expected) in oracle.witnesses.into_iter().enumerate() {
         report.witnesses += 1;
+        let expected_milli = match natural_to_milli(&expected.energy) {
+            Ok(milli) => milli,
+            Err(error) => {
+                report.failures.push(FamilyCheckFailure {
+                    fixture: name.to_owned(),
+                    witness: Some(index),
+                    reason: format!("oracle energy: {error}"),
+                });
+                continue;
+            }
+        };
         let witness = Witness {
             instance_id: instance.instance_id.clone(),
             spins: expected.spins,
@@ -96,13 +111,18 @@ fn check_oracle(
         let reason = match evaluator.evaluate(instance, &witness, &context) {
             Ok(evaluation)
                 if evaluation.valid == expected.valid
-                    && evaluation.energy_milli == Some(expected.energy_milli) =>
+                    && evaluation.energy_milli == Some(expected_milli) =>
             {
                 continue;
             }
             Ok(evaluation) => format!(
-                "expected valid {} at {} milli, got valid {} at {:?} milli",
-                expected.valid, expected.energy_milli, evaluation.valid, evaluation.energy_milli
+                "expected valid {} at energy {}, got valid {} at energy {}",
+                expected.valid,
+                milli_to_natural(expected_milli),
+                evaluation.valid,
+                evaluation
+                    .energy_milli
+                    .map_or_else(|| "none".to_owned(), milli_to_natural)
             ),
             Err(error) => error.to_string(),
         };

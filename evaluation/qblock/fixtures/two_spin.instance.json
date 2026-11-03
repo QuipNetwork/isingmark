@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "instance_id": "two-spin",
   "family": "ising-fixed",
   "model_version": "1",
@@ -9,16 +9,15 @@
   "physical": {
     "variables": ["s0", "s1"],
     "h": [0, 0],
-    "j": [-1000],
+    "j": [-1],
     "edges": [[0, 1]],
-    "units": "milli",
     "offset": 0,
     "auxiliaries": [],
     "precision_bound": 0.0,
     "exact": true
   },
   "search_space": {},
-  "objective": {"max_energy_milli": 1000},
+  "objective": {"max_energy": 1},
   "constraints": {},
   "hardness": {},
   "source_hashes": {}

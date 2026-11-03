@@ -19,12 +19,7 @@ use isingmark::{
             EncodingOutcome, EvaluationContext, FamilyConfig, FamilyEvaluator, IsingEncoding,
             Witness,
         },
-        families::{
-            canonical::CanonicalFamily,
-            check::family_check,
-            numeric::{to_wire_encoding, IntegerScale},
-            FamilyRegistry,
-        },
+        families::{canonical::CanonicalFamily, check::family_check, FamilyRegistry},
         instance::{load_instance, Instance},
         protocol::{load_protocol_profile, ProofDecision, RuleSet},
         runner::{
@@ -155,7 +150,7 @@ fn two_spin() -> Instance {
 
 fn template(nodes: &[u32], edges: &[(u32, u32)]) -> Value {
     json!({
-        "schema_version": 1,
+        "schema_version": 2,
         "instance_id": "chain",
         "family": "test/pinned-chain",
         "model_version": "1",
@@ -166,7 +161,7 @@ fn template(nodes: &[u32], edges: &[(u32, u32)]) -> Value {
             "topology": {"nodes": nodes, "edges": edges}
         },
         "search_space": {},
-        "objective": {"max_energy_milli": -2000},
+        "objective": {"max_energy": -2},
         "constraints": {},
         "hardness": {},
         "source_hashes": {}
@@ -580,96 +575,100 @@ async fn trial_records_identity() {
     );
 }
 
-// ---- IM-1c: exact units and wire conversion ----
+// ---- natural units in instance files ----
 
-fn encoding(h: Vec<i32>, j: Vec<i32>, offset: i64) -> IsingEncoding {
-    IsingEncoding {
-        variables: (0..h.len()).map(|index| format!("s{index}")).collect(),
-        edges: if j.is_empty() {
-            Vec::new()
-        } else {
-            vec![(0, 1)]
-        },
-        h,
-        j,
-        units: "ticks".into(),
-        offset,
-        auxiliaries: Vec::new(),
-        precision_bound: 0.0,
-        exact: true,
-    }
+fn evaluate(instance: &Instance, spins: Vec<i8>) -> isingmark::campaign::contracts::Evaluation {
+    FamilyRegistry::production()
+        .for_instance(instance)
+        .expect("fixed family")
+        .evaluate(instance, &witness(instance, spins), &context())
+        .expect("evaluation")
 }
 
 #[test]
 fn exact_threshold_and_offset() {
     let mut instance = two_spin();
-    instance.physical["offset"] = json!(7);
-    let evaluator = FamilyRegistry::production()
-        .for_instance(&instance)
-        .expect("fixed family");
-    for (threshold, valid) in [(-993, false), (-992, true)] {
-        instance.objective["max_energy_milli"] = json!(threshold);
-        let evaluation = evaluator
-            .evaluate(&instance, &witness(&instance, vec![1, 1]), &context())
-            .expect("evaluation");
+    instance.physical["offset"] = json!(0.007);
+    for (threshold, valid) in [(-0.993, false), (-0.992, true)] {
+        instance.objective["max_energy"] = json!(threshold);
+        let evaluation = evaluate(&instance, vec![1, 1]);
         assert_eq!(evaluation.energy_milli, Some(-993));
         assert_eq!(evaluation.valid, valid, "threshold {threshold}");
     }
 }
 
 #[test]
-fn wire_scale_is_explicit() {
-    let half = to_wire_encoding(
-        &encoding(vec![3, -5], vec![7], 9),
-        IntegerScale {
-            ticks_per_unit: 500,
-        },
-    )
-    .expect("exact doubling");
-    assert_eq!((half.h, half.j, half.offset), (vec![6, -10], vec![14], 18));
-    assert_eq!(half.units, "milli");
-    let error = to_wire_encoding(
-        &encoding(vec![3, 0], vec![2], 0),
-        IntegerScale {
-            ticks_per_unit: 2000,
-        },
-    )
-    .expect_err("3 / 2 milli");
-    assert_eq!(error.code, "unsupported_precision");
-    let same = encoding(vec![3, 0], vec![2], 4);
-    let milli = to_wire_encoding(&same, IntegerScale::MILLI).expect("identity");
+fn natural_decimals_load_as_exact_milli() {
+    let mut instance = two_spin();
+    instance.physical["h"] = json!([0.5, -0.001]);
+    instance.physical["j"] = json!([-1.25]);
+    instance.physical["offset"] = json!(2);
+    let encoding = exact(&instance);
     assert_eq!(
-        (&milli.h, &milli.j, milli.offset),
-        (&same.h, &same.j, same.offset)
+        (encoding.h, encoding.j, encoding.offset),
+        (vec![500, -1], vec![-1250], 2000)
     );
-    let error = to_wire_encoding(&same, IntegerScale { ticks_per_unit: 0 }).expect_err("zero");
-    assert_eq!(error.code, "invalid_scale");
+    for (threshold, valid) in [(json!(1.249), false), (json!(1.25), true)] {
+        instance.objective["max_energy"] = threshold;
+        let evaluation = evaluate(&instance, vec![1, 1]);
+        assert_eq!(evaluation.energy_milli, Some(1249));
+        assert_eq!(evaluation.valid, valid);
+    }
 }
 
 #[test]
-fn wire_conversion_rejects_i32_overflow() {
-    let error = to_wire_encoding(
-        &encoding(vec![i32::MAX, 0], Vec::new(), 0),
-        IntegerScale { ticks_per_unit: 1 },
-    )
-    .expect_err("i32::MAX * 1000");
+fn more_than_three_decimals_is_rejected() {
+    let mut instance = two_spin();
+    instance.physical["h"] = json!([0.0005, 0]);
+    let error = FamilyRegistry::production()
+        .for_instance(&instance)
+        .expect("fixed family")
+        .encode(&instance)
+        .expect_err("half a milli");
+    assert_eq!(error.code, "unsupported_precision");
+    let mut instance = two_spin();
+    instance.objective["max_energy"] = json!(1.0001);
+    let error = FamilyRegistry::production()
+        .for_instance(&instance)
+        .expect("fixed family")
+        .evaluate(&instance, &witness(&instance, vec![1, 1]), &context())
+        .expect_err("a tenth of a milli");
+    assert_eq!(error.code, "unsupported_precision");
+}
+
+#[test]
+fn natural_coefficients_reach_the_wire_endpoints() {
+    let mut instance = two_spin();
+    instance.physical["h"] = json!([-2_147_483.648, 2_147_483.647]);
+    instance.physical["j"] = json!([0]);
+    assert_eq!(exact(&instance).h, vec![i32::MIN, i32::MAX]);
+    instance.physical["h"] = json!([2_147_483.648, 0]);
+    let error = FamilyRegistry::production()
+        .for_instance(&instance)
+        .expect("fixed family")
+        .encode(&instance)
+        .expect_err("one milli past i32::MAX");
     assert_eq!(error.code, "overflow");
 }
 
 #[test]
-fn wire_bound_includes_offset() {
-    let error = to_wire_encoding(
-        &encoding(vec![1, 0], Vec::new(), i64::MAX / 1000),
-        IntegerScale::MILLI,
-    )
-    .err();
-    assert!(error.is_none(), "the bound fits at the edge");
-    let error = to_wire_encoding(
-        &encoding(vec![1000, 0], Vec::new(), i64::MAX),
-        IntegerScale::MILLI,
-    )
-    .expect_err("offset plus coefficients exceed i64");
-    assert_eq!(error.code, "overflow");
+fn milli_field_names_are_gone_from_instance_files() {
+    let mut instance = two_spin();
+    instance.objective = json!({"max_energy_milli": 1000});
+    let error = FamilyRegistry::production()
+        .for_instance(&instance)
+        .expect("fixed family")
+        .evaluate(&instance, &witness(&instance, vec![1, 1]), &context())
+        .expect_err("old field name");
+    assert_eq!(error.code, "invalid_objective");
+    let mut value = serde_json::to_value(two_spin()).expect("instance");
+    value["schema_version"] = json!(1);
+    let path = tempfile::NamedTempFile::new().expect("file");
+    fs::write(path.path(), value.to_string()).expect("write");
+    assert!(matches!(
+        load_instance(path.path()),
+        Err(CampaignError::UnsupportedVersion(1))
+    ));
 }
 
 #[test]
@@ -715,8 +714,8 @@ fn wrong_oracle() -> tempfile::TempDir {
     fs::write(
         dir.path().join("two_spin.oracle.json"),
         json!({"witnesses": [
-            {"spins": [1, 1], "valid": true, "energy_milli": -1000},
-            {"spins": [-1, 1], "valid": true, "energy_milli": 1000}
+            {"spins": [1, 1], "valid": true, "energy": -1},
+            {"spins": [-1, 1], "valid": true, "energy": 1.0}
         ]})
         .to_string(),
     )
@@ -732,6 +731,10 @@ fn family_check_reports_a_wrong_oracle() {
     assert_eq!(report.failures.len(), 1);
     assert_eq!(report.failures[0].fixture, "two_spin");
     assert_eq!(report.failures[0].witness, Some(1));
+    assert_eq!(
+        report.failures[0].reason,
+        "expected valid true at energy 1, got valid false at energy 1"
+    );
 }
 
 #[test]

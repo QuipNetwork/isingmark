@@ -1,6 +1,6 @@
 {
   "witnesses": [
-    {"spins": [1, 1], "valid": true, "energy_milli": -1000},
-    {"spins": [-1, 1], "valid": false, "energy_milli": 1000}
+    {"spins": [1, 1], "valid": true, "energy": -1},
+    {"spins": [-1, 1], "valid": false, "energy": 1}
   ]
 }
