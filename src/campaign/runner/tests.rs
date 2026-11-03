@@ -165,6 +165,7 @@ fn session_channels() -> (
             failed: Arc::new(AtomicBool::new(false)),
             task,
             ready: false,
+            features: Vec::new(),
             trials: 0,
         },
         receiver,
@@ -729,7 +730,12 @@ async fn preparation_ready_wait_does_not_spend_the_wall_budget() {
         let (session, _commands, events) = session_channels();
         let ready = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(25)).await;
-            events.send(SessionEvent::Ready).await.is_ok()
+            events
+                .send(SessionEvent::Ready {
+                    features: Vec::new(),
+                })
+                .await
+                .is_ok()
         });
         let mut runner = TrialRunner::new(
             resolve_backend(&policy.backend),

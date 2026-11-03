@@ -12,11 +12,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::oneshot;
 
+use quip_protocol::wire::encode_spins_packed;
+
 use super::{
-    drive_trial, duration, encoding, invalid, nanos, new_id, resolve_backend, stop_session,
-    topology, writable_directory, BudgetOutcome, CampaignError, EventKind, FamilyRegistry,
-    Instance, InstanceIdentity, LiveSession, PolicyManifest, Preparation, RuleSet, TerminalReason,
-    TraceWriter, Trial, TrialBudget, TrialState,
+    cancellation_requested, drive_trial, duration, encoding, invalid, nanos, new_id,
+    resolve_backend, stop_session, topology, writable_directory, BudgetOutcome, CampaignError,
+    EventKind, FamilyRegistry, Instance, InstanceIdentity, LiveSession, PolicyManifest,
+    Preparation, RuleSet, SessionEvent, TerminalReason, TraceWriter, Trial, TrialBudget,
+    TrialState,
 };
 use crate::{backend::BackendSpec, campaign::protocol::target_from_objective};
 
@@ -72,6 +75,24 @@ pub struct SolverDecl {
     pub anneal_time_us: u32,
 }
 
+/// Where a warm-started stage takes the states that it sends as `initial_spins`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InitialStates {
+    /// The lowest-energy distinct states captured by earlier stages of the trial.
+    Previous { count: u32 },
+    /// States drawn from the stage seed, so anyone can regenerate them from the trace.
+    Random { count: u32 },
+}
+
+impl InitialStates {
+    const fn count(self) -> u32 {
+        match self {
+            Self::Previous { count } | Self::Random { count } => count,
+        }
+    }
+}
+
 /// The share of the trial window that one stage may spend.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -102,6 +123,9 @@ pub struct Slot {
     pub fallback: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schedule: Option<Vec<ScheduleStage>>,
+    /// Start states for a method slot. The solver must advertise `initial-spins`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_states: Option<InitialStates>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -142,6 +166,8 @@ pub struct Stage {
     pub num_sweeps: u32,
     pub anneal_time_us: u32,
     pub allocation: Allocation,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_states: Option<InitialStates>,
 }
 
 /// A resolved slot: ordered stages that share one trial budget.
@@ -223,11 +249,21 @@ fn check_panel(panel: &Panel) -> Result<(), CampaignError> {
     }
     for slot in &panel.slots {
         let context = format!("{}/{}", panel.panel_id, slot.slot_id);
+        if slot
+            .initial_states
+            .is_some_and(|states| states.count() == 0)
+        {
+            return Err(invalid(format!(
+                "{context}: initial states need a positive count"
+            )));
+        }
         match (&slot.method, &slot.schedule) {
             (Some(_), None) => {}
             (None, Some(schedule)) => {
-                if slot.fallback.is_some() {
-                    return Err(invalid(format!("{context}: a schedule has no fallback")));
+                if slot.fallback.is_some() || slot.initial_states.is_some() {
+                    return Err(invalid(format!(
+                        "{context}: a schedule has no fallback or initial states"
+                    )));
                 }
                 check_schedule(&context, slot.device, schedule, &slots)?;
             }
@@ -334,6 +370,21 @@ pub fn validate_portfolio(
         return Err(invalid(format!(
             "{context}: every stage needs a stage_id, a backend, and a positive num_reads"
         )));
+    }
+    for (index, stage) in portfolio.stages.iter().enumerate() {
+        match stage.initial_states {
+            Some(InitialStates::Previous { .. }) if index == 0 => {
+                return Err(invalid(format!(
+                    "{context}: the first stage has no earlier states"
+                )))
+            }
+            Some(states) if states.count() == 0 || states.count() > stage.num_reads => {
+                return Err(invalid(format!(
+                    "{context}: initial states need a count from 1 to num_reads"
+                )))
+            }
+            _ => {}
+        }
     }
     let fixed = allocations
         .iter()
@@ -467,6 +518,15 @@ impl PortfolioRunner {
         state.trial.started = release_wall;
         state.session_id = new_id("session");
         state.release(instance, portfolio, budget)?;
+        state.elite_capacity = portfolio
+            .stages
+            .iter()
+            .filter_map(|stage| match stage.initial_states {
+                Some(InitialStates::Previous { count }) => usize::try_from(count).ok(),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
         let mut terminal = TerminalReason::InvalidRun;
         for (index, (stage, policy)) in portfolio.stages.iter().zip(&policies).enumerate() {
             if let Some(stop) = limit_reached(&state, policy, &mut cancellation)? {
@@ -484,6 +544,11 @@ impl PortfolioRunner {
                 &stage.stage_id,
                 repeat,
             );
+            let selection_started = Instant::now();
+            let (initial_spins, provenance) =
+                initial_states(&state, stage.initial_states, seed, spec.nodes.len());
+            state.initial_spins = initial_spins;
+            state.count("host_compute_ns", nanos(selection_started.elapsed())?)?;
             let allocation_end = match stage.allocation {
                 Allocation::Seconds(seconds) => {
                     Some(state.clock.elapsed().saturating_add(duration(seconds)?))
@@ -501,6 +566,7 @@ impl PortfolioRunner {
                 // The session protocol has no seed field, so the seed is recorded only.
                 json!({"index": index, "stage": stage, "repeat": repeat,
                     "solver_seed": format!("{seed:016x}"), "seed_delivery": "unavailable",
+                    "initial_states": provenance,
                     "deadline_ns": deadline.map(nanos).transpose()?}),
                 None,
             )?;
@@ -510,19 +576,32 @@ impl PortfolioRunner {
                 spec.clone(),
                 state.session_id.clone(),
             );
-            let outcome = drive_trial(
-                &mut session,
-                &mut state,
-                instance,
-                policy,
-                &self.rules,
-                &spec,
-                &encoding,
-                &target,
-                &mut cancellation,
-                deadline,
-            )
-            .await?;
+            let warm = stage.initial_states.is_some();
+            let refused = if warm && state.initial_spins.is_empty() {
+                Some(TerminalReason::UnsupportedPolicy)
+            } else if warm {
+                await_warm_start(&mut session, &state, &mut cancellation, deadline).await?
+            } else {
+                None
+            };
+            let outcome = match refused {
+                Some(outcome) => outcome,
+                None => {
+                    drive_trial(
+                        &mut session,
+                        &mut state,
+                        instance,
+                        policy,
+                        &self.rules,
+                        &spec,
+                        &encoding,
+                        &target,
+                        &mut cancellation,
+                        deadline,
+                    )
+                    .await?
+                }
+            };
             let allocation_spent = outcome == TerminalReason::WallTimeout
                 && allocation_end
                     .is_some_and(|end| state.trial.wall_limit.is_none_or(|wall| end < wall));
@@ -532,7 +611,8 @@ impl PortfolioRunner {
                     TerminalReason::WallTimeout => allocation_spent,
                     TerminalReason::MinerCrashed
                     | TerminalReason::MinerRejected
-                    | TerminalReason::IncompleteCapture => true,
+                    | TerminalReason::IncompleteCapture
+                    | TerminalReason::UnsupportedPolicy => true,
                     _ => false,
                 };
             if hand_over {
@@ -581,6 +661,100 @@ pub fn solver_seed(policy_id: &str, instance_id: &str, stage_id: &str, repeat: u
     let mut seed = [0; 8];
     hasher.finalize_xof().fill(&mut seed);
     u64::from_le_bytes(seed)
+}
+
+/// The miner feature that makes a solver use `initial_spins`.
+const INITIAL_SPINS_FEATURE: &str = "initial-spins";
+
+/// Wait for the handshake and refuse a miner that would ignore `initial_spins`.
+async fn await_warm_start(
+    session: &mut LiveSession,
+    state: &TrialState,
+    cancellation: &mut Option<oneshot::Receiver<()>>,
+    deadline: Option<std::time::Duration>,
+) -> Result<Option<TerminalReason>, CampaignError> {
+    let remaining = deadline.map(|limit| limit.saturating_sub(state.clock.elapsed()));
+    let event = tokio::select! {
+        biased;
+        () = cancellation_requested(cancellation) => return Ok(Some(TerminalReason::Cancelled)),
+        event = async {
+            match remaining {
+                Some(remaining) => tokio::time::timeout(remaining, session.next()).await.ok(),
+                None => Some(session.next().await),
+            }
+        } => event,
+    };
+    Ok(match event.transpose()? {
+        None => Some(TerminalReason::WallTimeout),
+        Some(Some(SessionEvent::Ready { .. })) => (!session
+            .features
+            .iter()
+            .any(|feature| feature == INITIAL_SPINS_FEATURE))
+        .then_some(TerminalReason::UnsupportedPolicy),
+        Some(_) => Some(TerminalReason::MinerCrashed),
+    })
+}
+
+/// The packed start states for a stage and the provenance recorded in `StageStart`.
+fn initial_states(
+    state: &TrialState,
+    declared: Option<InitialStates>,
+    seed: u64,
+    nodes: usize,
+) -> (Vec<Vec<u8>>, serde_json::Value) {
+    match declared {
+        None => (Vec::new(), serde_json::Value::Null),
+        Some(InitialStates::Previous { count }) => {
+            let chosen = state
+                .elite
+                .iter()
+                .take(usize::try_from(count).unwrap_or(usize::MAX));
+            let parents: Vec<_> = chosen
+                .clone()
+                .map(|kept| {
+                    json!({"job_id": kept.job_id, "index": kept.index,
+                        "energy_milli": kept.energy_milli})
+                })
+                .collect();
+            let spins = chosen
+                .map(|kept| encode_spins_packed(&kept.spins))
+                .collect();
+            (
+                spins,
+                json!({"previous": {"count": count, "parents": parents}}),
+            )
+        }
+        Some(InitialStates::Random { count }) => (
+            random_states(seed, nodes, count)
+                .iter()
+                .map(|spins| encode_spins_packed(spins))
+                .collect(),
+            json!({"random": {"count": count, "seed": format!("{seed:016x}")}}),
+        ),
+    }
+}
+
+/// `count` public random spin states of `nodes` spins, drawn from `seed`.
+#[must_use]
+pub fn random_states(seed: u64, nodes: usize, count: u32) -> Vec<Vec<i8>> {
+    let mut hasher = blake3::Hasher::new_derive_key("isingmark initial states v1");
+    hasher.update(&seed.to_le_bytes());
+    let mut reader = hasher.finalize_xof();
+    let mut bytes = vec![0_u8; nodes.div_ceil(8)];
+    (0..count)
+        .map(|_| {
+            reader.fill(&mut bytes);
+            (0..nodes)
+                .map(|node| {
+                    if bytes[node / 8] >> (node % 8) & 1 == 1 {
+                        1
+                    } else {
+                        -1
+                    }
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// A trial-wide limit or a cancellation that prevents the next stage from starting.
@@ -679,6 +853,7 @@ pub fn resolve_panel(
                     num_sweeps: solver.num_sweeps,
                     anneal_time_us: solver.anneal_time_us,
                     allocation,
+                    initial_states: source.initial_states,
                 });
             }
         }

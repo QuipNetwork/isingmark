@@ -4,7 +4,7 @@
 use std::{fs, path::Path};
 
 use isingmark::campaign::runner::portfolio::{
-    load_catalog, resolve_panel, Allocation, Applicability, Catalog,
+    load_catalog, resolve_panel, Allocation, Applicability, Catalog, InitialStates,
 };
 use serde_json::{json, Value};
 
@@ -190,7 +190,23 @@ fn committed_catalog_declares_four_cpu_and_two_gpu_slots_per_panel() {
             .iter()
             .map(|slot| slot.slot_id.as_str())
             .collect();
-        assert_eq!(ids, ["cpu-1", "cpu-2", "cpu-3", "cpu-4", "gpu-1", "gpu-2"]);
+        assert_eq!(
+            ids,
+            [
+                "cpu-1",
+                "cpu-2",
+                "cpu-3",
+                "cpu-4",
+                "gpu-1",
+                "gpu-2",
+                "control-random-48"
+            ]
+        );
+        let control = &panel.slots[6];
+        assert_eq!(
+            control.initial_states,
+            Some(InitialStates::Random { count: 48 })
+        );
         let cpu4 = panel.slots[3].schedule.as_ref().expect("cpu-4 schedule");
         let plan: Vec<_> = cpu4
             .iter()
@@ -227,8 +243,8 @@ mod execution {
             protocol::{load_protocol_profile, RuleSet},
             runner::{
                 portfolio::{
-                    solver_seed, Allocation, Applicability, PortfolioPolicy, PortfolioRunner,
-                    Stage, PORTFOLIO_BACKEND,
+                    random_states, solver_seed, Allocation, Applicability, InitialStates,
+                    PortfolioPolicy, PortfolioRunner, Stage, PORTFOLIO_BACKEND,
                 },
                 run_portfolio_campaign, CampaignConfig, TerminalReason, Trial,
             },
@@ -277,6 +293,7 @@ mod execution {
             num_sweeps: 10,
             anneal_time_us: 0,
             allocation,
+            initial_states: None,
         }
     }
 
@@ -663,5 +680,155 @@ mod execution {
         );
         assert_eq!(start.payload["seed_delivery"], "unavailable");
         assert_eq!(trial.identity.nonce, instance().nonce);
+    }
+
+    fn receipts_in(events: &[TraceEvent], session: &str) -> Vec<Vec<Value>> {
+        events
+            .iter()
+            .filter(|event| event.kind == EventKind::BatchReceipt && event.session_id == session)
+            .map(|event| {
+                event.payload["solutions"]
+                    .as_array()
+                    .expect("solutions")
+                    .clone()
+            })
+            .collect()
+    }
+
+    fn stage_starts(events: &[TraceEvent]) -> Vec<&TraceEvent> {
+        events
+            .iter()
+            .filter(|event| event.kind == EventKind::StageStart)
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn seeded_stage_records_parent_links() {
+        // The two-spin ground state is -1, so no proof is accepted and both stages run.
+        let mut input = instance();
+        input.objective["max_energy"] = json!(-5);
+        let mut seeded = stage("cpu-2", "warm", Allocation::Remainder);
+        seeded.num_reads = 2;
+        seeded.initial_states = Some(InitialStates::Previous { count: 2 });
+        let policy = portfolio(vec![
+            stage("cpu-3", "cold", Allocation::Seconds(0.3)),
+            seeded,
+        ]);
+        let dir = tempfile::tempdir().expect("output directory");
+        let runner = PortfolioRunner::new(dir.path().to_owned(), rules())
+            .with_backend(fake("cold", &["--num-solutions", "2"]))
+            .with_backend(fake("warm", &["--warm-start"]));
+        let budget = TrialBudget::new(Some(Duration::from_millis(800)), None).expect("budget");
+        let trial = runner
+            .run_trial(&input, &policy, &budget, 0, None)
+            .await
+            .expect("trial");
+        let events = events(&trial);
+        let starts = stage_starts(&events);
+        assert_eq!(
+            starts.len(),
+            2,
+            "{:?} {:?}",
+            stage_ends(&events),
+            trial.resources
+        );
+        let parents = starts[1].payload["initial_states"]["previous"]["parents"]
+            .as_array()
+            .expect("parents")
+            .clone();
+        assert_eq!(parents.len(), 2);
+        // Every parent names a state recorded by the first stage.
+        let first: Vec<_> = receipts_in(&events, &starts[0].session_id);
+        assert!(!first.is_empty());
+        for parent in &parents {
+            let job = parent["job_id"].as_str().expect("job id");
+            let receipt = events
+                .iter()
+                .find(|event| {
+                    event.kind == EventKind::BatchReceipt
+                        && event.job_id.as_deref() == Some(job)
+                        && event.session_id == starts[0].session_id
+                })
+                .expect("parent receipt");
+            let index = usize::try_from(parent["index"].as_u64().expect("index")).expect("index");
+            assert_eq!(
+                receipt.payload["solutions"][index]["recomputed_energy_milli"],
+                parent["energy_milli"]
+            );
+        }
+        // The warm miner echoes its start states, so they reach the second stage's receipts.
+        let second = receipts_in(&events, &starts[1].session_id);
+        assert!(second.iter().all(|solutions| solutions.len() == 4));
+    }
+
+    #[tokio::test]
+    async fn random_control_uses_48_states() {
+        let mut control = stage("control", "warm", Allocation::Remainder);
+        control.num_reads = 48;
+        control.initial_states = Some(InitialStates::Random { count: 48 });
+        let policy = portfolio(vec![control]);
+        let (_dir, trial) = run(
+            &policy,
+            vec![fake("warm", &["--warm-start"])],
+            Duration::from_secs(10),
+            None,
+        )
+        .await;
+        assert_eq!(trial.terminal, TerminalReason::Accepted);
+        let events = events(&trial);
+        let start = stage_starts(&events)[0];
+        assert_eq!(start.payload["initial_states"]["random"]["count"], 48);
+        let seed = solver_seed("toy/cpu-4", "two-spin", "control", 0);
+        assert_eq!(
+            start.payload["initial_states"]["random"]["seed"],
+            format!("{seed:016x}")
+        );
+        let expected = random_states(seed, 2, 48);
+        let solutions = &receipts_in(&events, &start.session_id)[0];
+        // One fixed read and one search read come first, then the 48 echoed start states.
+        let echoed: Vec<Vec<i8>> = solutions[2..]
+            .iter()
+            .map(|solution| serde_json::from_value(solution["spins"].clone()).expect("spins"))
+            .collect();
+        assert_eq!(echoed, expected);
+    }
+
+    #[tokio::test]
+    async fn warm_stage_refuses_a_miner_without_initial_spins() {
+        let mut control = stage("control", "cold", Allocation::Seconds(5.0));
+        control.num_reads = 4;
+        control.initial_states = Some(InitialStates::Random { count: 4 });
+        let policy = portfolio(vec![control, stage("cpu-1", "good", Allocation::Remainder)]);
+        let (_dir, trial) = run(
+            &policy,
+            vec![fake("cold", &["--num-solutions", "4"]), fake("good", &[])],
+            Duration::from_secs(10),
+            None,
+        )
+        .await;
+        assert_eq!(trial.terminal, TerminalReason::Accepted);
+        let events = events(&trial);
+        assert_eq!(
+            stage_ends(&events),
+            [
+                ("control".to_owned(), json!("unsupported_policy")),
+                ("cpu-1".to_owned(), json!("accepted"))
+            ]
+        );
+        let first = &stage_starts(&events)[0].session_id;
+        assert!(receipts_in(&events, first).is_empty());
+    }
+
+    #[test]
+    fn previous_states_cannot_seed_the_first_stage() {
+        let dir = tempfile::tempdir().expect("directory");
+        let mut first = stage("cpu-1", "a", Allocation::Remainder);
+        first.initial_states = Some(InitialStates::Previous { count: 1 });
+        let config = manifest(dir.path(), &json!([portfolio(vec![first])]), 10.0);
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let error = runtime
+            .block_on(run_portfolio_campaign(&config, Vec::new()))
+            .expect_err("no earlier states");
+        assert!(error.to_string().contains("earlier states"), "{error}");
     }
 }

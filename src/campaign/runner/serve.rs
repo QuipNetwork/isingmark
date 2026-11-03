@@ -315,6 +315,7 @@ mod tests {
                     )))
                 }),
                 ready: true,
+                features: Vec::new(),
                 trials: 0,
             });
             let shared = Mutex::new((Some("previous-policy".to_owned()), runner));

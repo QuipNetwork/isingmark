@@ -96,6 +96,9 @@ pub enum TerminalReason {
     MinerRejected,
     /// A portfolio stage returned fewer states than it read, so it fails admission.
     IncompleteCapture,
+    /// A stage could not run as declared: its miner lacks a required feature,
+    /// or no earlier stage captured a state to start from.
+    UnsupportedPolicy,
     Cancelled,
     InvalidRun,
 }
@@ -565,6 +568,8 @@ struct LiveSession {
     failed: Arc<AtomicBool>,
     task: JoinHandle<Result<RunReport, SessionError>>,
     ready: bool,
+    /// Capability features from the miner's `Hello`, known once `ready` is set.
+    features: Vec<String>,
     trials: u32,
 }
 
@@ -600,6 +605,7 @@ impl LiveSession {
             failed,
             task,
             ready: false,
+            features: Vec::new(),
             trials: 0,
         }
     }
@@ -609,8 +615,9 @@ impl LiveSession {
         if self.failed.load(Ordering::Acquire) {
             return Err(invalid("session event channel overflowed or closed"));
         }
-        if matches!(event, Some(SessionEvent::Ready)) {
+        if let Some(SessionEvent::Ready { features }) = &event {
             self.ready = true;
+            self.features.clone_from(features);
         }
         Ok(event)
     }
@@ -780,7 +787,7 @@ impl TrialRunner {
                 biased;
                 () = cancellation_requested(&mut cancellation) => Some(TerminalReason::Cancelled),
                 result = tokio::time::timeout(PREPARATION_TIMEOUT, session.next()) => match result {
-                    Ok(Ok(Some(SessionEvent::Ready))) => None,
+                    Ok(Ok(Some(SessionEvent::Ready { .. }))) => None,
                     Ok(Ok(_)) | Err(_) => Some(TerminalReason::MinerCrashed),
                     Ok(Err(error)) => return Err(error),
                 },
@@ -957,6 +964,20 @@ struct TrialState {
     registry: FamilyRegistry,
     /// Requested reads when every read's final state must arrive.
     complete_capture: Option<u32>,
+    /// The lowest-energy distinct states captured so far, at most `elite_capacity`.
+    elite: Vec<EliteState>,
+    elite_capacity: usize,
+    /// Packed start states sent with every job of the current stage.
+    initial_spins: Vec<Vec<u8>>,
+}
+
+/// A captured state with its parent link: the job and the index inside its batch.
+#[derive(Debug, Clone)]
+struct EliteState {
+    job_id: String,
+    index: usize,
+    spins: Vec<i8>,
+    energy_milli: i64,
 }
 
 impl TrialState {
@@ -1003,6 +1024,9 @@ impl TrialState {
             energies: Vec::new(),
             registry: FamilyRegistry::production(),
             complete_capture: None,
+            elite: Vec::new(),
+            elite_capacity: 0,
+            initial_spins: Vec::new(),
         }
     }
 
@@ -1111,7 +1135,7 @@ impl TrialState {
             });
         self.ledger.charge(&id, cost)?;
         self.count("batches", 1)?;
-        self.emit(EventKind::BatchReceipt, at, Some(id), json!({
+        self.emit(EventKind::BatchReceipt, at, Some(id.clone()), json!({
             "received_after_dispatch_ns": nanos(capture.received_after_dispatch)?,
             "solutions": capture.solutions.iter().map(|solution| json!({"spins": solution.spins,
                 "reported_energy_milli": solution.reported_energy_milli,
@@ -1119,10 +1143,37 @@ impl TrialState {
             "meta": capture.meta.as_ref().map(|meta| json!({"reads": meta.reads, "sweeps": meta.sweeps,
                 "device_access_time_us": meta.device_access_time_us, "qpu_access_us": meta.qpu_access_us, "extra": meta.extra}))
         }), Some(cost))?;
-        Ok(self.complete_capture.is_none_or(|requested| {
+        let complete = self.complete_capture.is_none_or(|requested| {
             let reads = capture.meta.as_ref().map_or(requested, |meta| meta.reads);
             u32::try_from(capture.solutions.len()).is_ok_and(|states| states >= reads)
-        }))
+        });
+        if complete && self.elite_capacity > 0 {
+            self.keep_elite(&id, capture);
+        }
+        Ok(complete)
+    }
+
+    fn keep_elite(&mut self, job_id: &str, capture: &BatchCapture) {
+        for (index, solution) in capture.solutions.iter().enumerate() {
+            if self.elite.iter().any(|kept| kept.spins == solution.spins) {
+                continue;
+            }
+            let position = self
+                .elite
+                .partition_point(|kept| kept.energy_milli <= solution.recomputed_energy_milli);
+            if position < self.elite_capacity {
+                self.elite.insert(
+                    position,
+                    EliteState {
+                        job_id: job_id.to_owned(),
+                        index,
+                        spins: solution.spins.clone(),
+                        energy_milli: solution.recomputed_energy_milli,
+                    },
+                );
+                self.elite.truncate(self.elite_capacity);
+            }
+        }
     }
 
     fn evaluate(
@@ -1258,7 +1309,7 @@ impl TrialState {
         target: &quip_protocol::target::Target,
     ) -> Result<(), CampaignError> {
         match event {
-            SessionEvent::Ready => Ok(()),
+            SessionEvent::Ready { .. } => Ok(()),
             SessionEvent::Dispatched { job_id, at } => self.dispatch(job_id, at),
             SessionEvent::Batch { capture, at } => {
                 if self.receive(&capture, at)? {
@@ -1354,6 +1405,9 @@ async fn drive_trial(
         }
         let id = new_id("job");
         let mut submission = submission(spec, encoding, policy, &id);
+        if let Some(ising) = submission.job.ising.as_mut() {
+            ising.initial_spins.clone_from(&state.initial_spins);
+        }
         submission.target.max_energy_milli = target.max_energy_milli;
         submission.target.min_solutions = target.min_solutions;
         submission.target.min_diversity_milli = target.min_diversity_milli;
@@ -1384,7 +1438,7 @@ async fn drive_trial(
                 event = next => match event { Ok(event) => event?, Err(terminal) => return Ok(terminal) },
             };
             match event {
-                Some(SessionEvent::Ready) => {}
+                Some(SessionEvent::Ready { .. }) => {}
                 Some(SessionEvent::Dispatched { job_id, at }) => {
                     state.dispatch(job_id, at)?;
                 }
