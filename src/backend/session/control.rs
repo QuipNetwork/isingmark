@@ -25,7 +25,10 @@ pub(crate) enum SessionCommand {
 }
 
 pub(crate) enum SessionEvent {
-    Ready,
+    /// The handshake finished. `features` are the miner's advertised capability features.
+    Ready {
+        features: Vec<String>,
+    },
     Dispatched {
         job_id: Vec<u8>,
         at: Instant,
@@ -102,8 +105,9 @@ pub(super) async fn drive_controlled(
     mut control: SessionControl,
     backend: &str,
     progress: &SessionProgress,
+    features: Vec<String>,
 ) {
-    if !control.emit(SessionEvent::Ready) {
+    if !control.emit(SessionEvent::Ready { features }) {
         return;
     }
     let mut pending: Option<Box<Submission>> = None;

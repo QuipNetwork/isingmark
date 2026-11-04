@@ -43,12 +43,16 @@ use quip_proto::v1::{
 };
 use quip_protocol::scoring::energy_milli;
 use quip_protocol::session::{build_hello, check_welcome, ExitCode, SessionError};
-use quip_protocol::wire::{decode_i32_le, encode_spins_packed};
+use quip_protocol::wire::{decode_i32_le, decode_spins_packed, encode_spins_packed};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::{Endpoint, Uri};
 
 #[derive(Parser)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Each flag toggles one independent fake-miner behavior from the command line."
+)]
 struct Cli {
     /// `unix://<path>` coordinator address, as passed by
     /// `isingmark::backend::session::run_session`.
@@ -80,6 +84,10 @@ struct Cli {
     /// something non-degenerate to compute over.
     #[arg(long, default_value_t = 1)]
     num_solutions: u32,
+    /// Advertise the `initial-spins` feature and return each supplied initial
+    /// state, up to `num_reads`, as one more solution.
+    #[arg(long)]
+    warm_start: bool,
     /// QPU access time in microseconds to report for each complete batch.
     #[arg(long, default_value_t = 0)]
     qpu_access_us: u64,
@@ -380,6 +388,7 @@ fn solve(
     topo: Option<&FakeTopo>,
     energy_lie_milli: i64,
     num_solutions: u32,
+    warm_start: bool,
 ) -> JobResult {
     let ising = job.ising.clone().unwrap_or_default();
     let h = decode_milli_f64(&ising.h).unwrap_or_default();
@@ -411,6 +420,19 @@ fn solve(
             spins: encode_spins_packed(&spins),
             energy_milli: true_energy + energy_lie_milli,
         });
+    }
+
+    if warm_start {
+        let limit = usize::try_from(ising.num_reads).unwrap_or(usize::MAX);
+        for packed in ising.initial_spins.iter().take(limit) {
+            if let Ok(spins) = decode_spins_packed(packed, n) {
+                let true_energy = energy_milli(&spins, &h, &j, &edges);
+                solutions.push(Solution {
+                    spins: packed.clone(),
+                    energy_milli: true_energy + energy_lie_milli,
+                });
+            }
+        }
     }
 
     let reads = if ising.num_reads == 0 {
@@ -476,6 +498,11 @@ async fn run() -> Result<(), ExitCode> {
             encodings: vec![CoefficientEncoding::I32 as i32],
             backend: Backend::Mock as i32,
             algorithm: Algorithm::External as i32,
+            features: if cli.warm_start {
+                vec!["initial-spins".to_owned()]
+            } else {
+                Vec::new()
+            },
             ..Capabilities::default()
         },
     )
@@ -649,8 +676,13 @@ async fn run() -> Result<(), ExitCode> {
                             .await
                             .map_err(|_| ExitCode::InternalFatal)?;
                     }
-                    let mut result =
-                        solve(&job, topo.as_ref(), cli.energy_lie_milli, cli.num_solutions);
+                    let mut result = solve(
+                        &job,
+                        topo.as_ref(),
+                        cli.energy_lie_milli,
+                        cli.num_solutions,
+                        cli.warm_start,
+                    );
                     if cli.omit_meta {
                         result.meta = None;
                     } else if let Some(meta) = &mut result.meta {

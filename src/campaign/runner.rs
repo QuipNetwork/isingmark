@@ -43,6 +43,7 @@ use super::{
     CampaignError,
 };
 
+pub mod portfolio;
 mod serve;
 pub use serve::serve_campaign;
 #[cfg(test)]
@@ -93,6 +94,11 @@ pub enum TerminalReason {
     EvaluationLimit,
     MinerCrashed,
     MinerRejected,
+    /// A portfolio stage returned fewer states than it read, so it fails admission.
+    IncompleteCapture,
+    /// A stage could not run as declared: its miner lacks a required feature,
+    /// or no earlier stage captured a state to start from.
+    UnsupportedPolicy,
     Cancelled,
     InvalidRun,
 }
@@ -178,6 +184,9 @@ struct Manifest {
     acceptance: Acceptance,
     instances: Vec<PathBuf>,
     policies: Vec<PolicyManifest>,
+    /// Resolved portfolio slots, selected by the `portfolio` backend.
+    #[serde(default)]
+    portfolios: Vec<portfolio::PortfolioPolicy>,
     trials_per_pair: u32,
     budget: ManifestBudget,
 }
@@ -202,6 +211,7 @@ struct ManifestBudget {
 struct LoadedCampaign {
     instances: Vec<Instance>,
     policies: Vec<PolicyManifest>,
+    portfolios: Vec<portfolio::PortfolioPolicy>,
     trials_per_pair: u32,
     budget: TrialBudget,
     rules: RuleSet,
@@ -299,10 +309,14 @@ fn load_campaign(config: &CampaignConfig) -> Result<LoadedCampaign, CampaignErro
         }
         instances.push(instance);
     }
+    let selects_portfolios = config.backend == portfolio::PORTFOLIO_BACKEND;
     let mut policy_ids = BTreeSet::new();
     let mut policies = Vec::new();
     for policy in manifest.policies {
         validate_policy(&policy)?;
+        if policy.backend == portfolio::PORTFOLIO_BACKEND {
+            return Err(invalid("the portfolio backend name is reserved"));
+        }
         if !policy_ids.insert(policy.policy_id.clone()) {
             return Err(invalid("duplicate policy_id"));
         }
@@ -310,14 +324,31 @@ fn load_campaign(config: &CampaignConfig) -> Result<LoadedCampaign, CampaignErro
             policies.push(policy);
         }
     }
-    if instances.is_empty() || policies.is_empty() || manifest.trials_per_pair == 0 {
+    let portfolios = select_portfolios(
+        manifest.portfolios,
+        &budget,
+        &mut policy_ids,
+        selects_portfolios,
+    )?;
+    let backends: Vec<String> = if selects_portfolios {
+        portfolios
+            .iter()
+            .flat_map(|portfolio| portfolio.stages.iter().map(|stage| stage.backend.clone()))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    } else {
+        vec![config.backend.clone()]
+    };
+    let selected = policies.len() + portfolios.len();
+    if instances.is_empty() || selected == 0 || manifest.trials_per_pair == 0 {
         return Err(invalid(
             "campaign requires instances, matching backend policies, and trials",
         ));
     }
     let trials = u64::try_from(instances.len())
         .map_err(|_| CampaignError::Overflow)?
-        .checked_mul(u64::try_from(policies.len()).map_err(|_| CampaignError::Overflow)?)
+        .checked_mul(u64::try_from(selected).map_err(|_| CampaignError::Overflow)?)
         .and_then(|pairs| pairs.checked_mul(u64::from(manifest.trials_per_pair)))
         .ok_or(CampaignError::Overflow)?;
     let estimate = ResourceEstimate {
@@ -330,17 +361,48 @@ fn load_campaign(config: &CampaignConfig) -> Result<LoadedCampaign, CampaignErro
             .budget
             .device_budget_s
             .map(|seconds| seconds * trials as f64),
-        backends: vec![config.backend.clone()],
+        backends,
     };
     Ok(LoadedCampaign {
         instances,
         policies,
+        portfolios,
         trials_per_pair: manifest.trials_per_pair,
         budget,
         rules,
         registry: config.registry,
         estimate,
     })
+}
+
+/// Validate every portfolio, and keep them only when the portfolio backend is selected.
+fn select_portfolios(
+    declared: Vec<portfolio::PortfolioPolicy>,
+    budget: &TrialBudget,
+    policy_ids: &mut BTreeSet<String>,
+    selected: bool,
+) -> Result<Vec<portfolio::PortfolioPolicy>, CampaignError> {
+    let mut portfolios = Vec::new();
+    for portfolio in declared {
+        portfolio::validate_portfolio(&portfolio, budget)?;
+        if !policy_ids.insert(portfolio.policy_id.clone()) {
+            return Err(invalid("duplicate policy_id"));
+        }
+        if selected {
+            portfolios.push(portfolio);
+        }
+    }
+    Ok(portfolios)
+}
+
+/// Refuse the portfolio backend on paths that run one backend per campaign.
+fn single_backend(config: &CampaignConfig) -> Result<(), CampaignError> {
+    if config.backend == portfolio::PORTFOLIO_BACKEND {
+        return Err(invalid(
+            "portfolio policies run only through run_portfolio_campaign",
+        ));
+    }
+    Ok(())
 }
 
 fn resolve_backend(name: &str) -> BackendSpec {
@@ -376,7 +438,59 @@ fn writable_directory(path: &Path) -> Result<(), CampaignError> {
 /// # Errors
 /// Returns input, accounting, transport-observation, or durable-output failures.
 pub async fn run_campaign(config: &CampaignConfig) -> Result<CampaignReport, CampaignError> {
+    if config.backend == portfolio::PORTFOLIO_BACKEND {
+        return run_portfolio_campaign(config, Vec::new()).await;
+    }
     run_campaign_with_backend(config, resolve_backend(&config.backend)).await
+}
+
+/// Run the manifest's portfolios. `overrides` replace registry backends by name.
+///
+/// # Errors
+/// Same as [`run_campaign`]. The campaign backend must be `portfolio`.
+pub async fn run_portfolio_campaign(
+    config: &CampaignConfig,
+    overrides: Vec<BackendSpec>,
+) -> Result<CampaignReport, CampaignError> {
+    if config.backend != portfolio::PORTFOLIO_BACKEND {
+        return Err(invalid("portfolio campaigns select the portfolio backend"));
+    }
+    let loaded = load_campaign(config)?;
+    let mut report = CampaignReport {
+        resources: loaded.estimate,
+        trials: Vec::new(),
+    };
+    if config.dry_run {
+        return Ok(report);
+    }
+    writable_directory(&config.output)?;
+    let runner = overrides.into_iter().fold(
+        portfolio::PortfolioRunner::new(config.output.clone(), loaded.rules)
+            .with_registry(loaded.registry),
+        portfolio::PortfolioRunner::with_backend,
+    );
+    let mut result = Ok(());
+    'trials: for portfolio in &loaded.portfolios {
+        for instance in &loaded.instances {
+            for repeat in 0..loaded.trials_per_pair {
+                match runner
+                    .run_trial(instance, portfolio, &loaded.budget, repeat, None)
+                    .await
+                {
+                    Ok(trial) => report.trials.push(trial),
+                    Err(error) => {
+                        result = Err(error);
+                        break 'trials;
+                    }
+                }
+            }
+        }
+    }
+    // Terminated trials remain available even when a later trial fails.
+    let mut file = File::create(config.output.join("campaign.json")).map_err(invalid)?;
+    serde_json::to_writer(&mut file, &report).map_err(invalid)?;
+    result?;
+    Ok(report)
 }
 
 /// Run with an explicit backend, including the conformance fake miner.
@@ -387,6 +501,7 @@ pub async fn run_campaign_with_backend(
     config: &CampaignConfig,
     backend: BackendSpec,
 ) -> Result<CampaignReport, CampaignError> {
+    single_backend(config)?;
     let loaded = load_campaign(config)?;
     let mut report = CampaignReport {
         resources: loaded.estimate,
@@ -453,6 +568,8 @@ struct LiveSession {
     failed: Arc<AtomicBool>,
     task: JoinHandle<Result<RunReport, SessionError>>,
     ready: bool,
+    /// Capability features from the miner's `Hello`, known once `ready` is set.
+    features: Vec<String>,
     trials: u32,
 }
 
@@ -488,6 +605,7 @@ impl LiveSession {
             failed,
             task,
             ready: false,
+            features: Vec::new(),
             trials: 0,
         }
     }
@@ -497,10 +615,19 @@ impl LiveSession {
         if self.failed.load(Ordering::Acquire) {
             return Err(invalid("session event channel overflowed or closed"));
         }
-        if matches!(event, Some(SessionEvent::Ready)) {
+        if let Some(SessionEvent::Ready { features }) = &event {
             self.ready = true;
+            self.features.clone_from(features);
         }
         Ok(event)
+    }
+}
+
+impl LiveSession {
+    /// Stop by aborting the transport instead of a graceful finish, so shutdown
+    /// does not wait for jobs still in flight.
+    fn abandon(&mut self) {
+        self.ready = false;
     }
 }
 
@@ -660,7 +787,7 @@ impl TrialRunner {
                 biased;
                 () = cancellation_requested(&mut cancellation) => Some(TerminalReason::Cancelled),
                 result = tokio::time::timeout(PREPARATION_TIMEOUT, session.next()) => match result {
-                    Ok(Ok(Some(SessionEvent::Ready))) => None,
+                    Ok(Ok(Some(SessionEvent::Ready { .. }))) => None,
                     Ok(Ok(_)) | Err(_) => Some(TerminalReason::MinerCrashed),
                     Ok(Err(error)) => return Err(error),
                 },
@@ -690,6 +817,7 @@ impl TrialRunner {
                 &encoding,
                 &target,
                 &mut cancellation,
+                budget.wall_limit,
             )
             .await
         };
@@ -718,39 +846,61 @@ impl TrialRunner {
         policy: &PolicyManifest,
         target: &quip_protocol::target::Target,
     ) -> Result<(), CampaignError> {
-        let Some(mut session) = self.session.take() else {
+        let Some(session) = self.session.take() else {
             return Ok(());
         };
-        if session.failed.load(Ordering::Acquire) {
-            return Err(invalid("session event delivery failed"));
-        }
-        if session.ready {
-            let _ = session.commands.send(SessionCommand::Finish).await;
-        } else {
-            session.task.abort();
-            let _ = (&mut session.task).await;
-            session.events.close();
-        }
-        while let Ok(event) = session.events.try_recv() {
-            state.observe(event, instance, policy, &self.rules, target)?;
-        }
-        state.cancel_pending(terminal)?;
-        if session.ready {
-            while let Some(event) = session.next().await? {
-                state.observe(event, instance, policy, &self.rules, target)?;
-                state.cancel_pending(terminal)?;
-            }
-            let outcome = (&mut session.task).await.map_err(invalid)?;
-            state.session_outcome = Some(match outcome {
-                Ok(report) => {
-                    json!({"handshake_ok": report.handshake_ok, "miner_exit_code": report.miner_exit_code,
-                    "miner_unresponsive": report.miner_unresponsive, "orphan_results": report.orphan_results})
-                }
-                Err(error) => json!({"error": error.to_string()}),
-            });
-        }
-        Ok(())
+        stop_session(
+            session,
+            state,
+            terminal,
+            instance,
+            policy,
+            &self.rules,
+            target,
+        )
+        .await
     }
+}
+
+/// End `session` after `terminal`, keeping every late event and cancelling pending jobs.
+async fn stop_session(
+    mut session: LiveSession,
+    state: &mut TrialState,
+    terminal: TerminalReason,
+    instance: &Instance,
+    policy: &PolicyManifest,
+    rules: &RuleSet,
+    target: &quip_protocol::target::Target,
+) -> Result<(), CampaignError> {
+    if session.failed.load(Ordering::Acquire) {
+        return Err(invalid("session event delivery failed"));
+    }
+    if session.ready {
+        let _ = session.commands.send(SessionCommand::Finish).await;
+    } else {
+        session.task.abort();
+        let _ = (&mut session.task).await;
+        session.events.close();
+    }
+    while let Ok(event) = session.events.try_recv() {
+        state.observe(event, instance, policy, rules, target)?;
+    }
+    state.cancel_pending(terminal)?;
+    if session.ready {
+        while let Some(event) = session.next().await? {
+            state.observe(event, instance, policy, rules, target)?;
+            state.cancel_pending(terminal)?;
+        }
+        let outcome = (&mut session.task).await.map_err(invalid)?;
+        state.session_outcome = Some(match outcome {
+            Ok(report) => {
+                json!({"handshake_ok": report.handshake_ok, "miner_exit_code": report.miner_exit_code,
+                    "miner_unresponsive": report.miner_unresponsive, "orphan_results": report.orphan_results})
+            }
+            Err(error) => json!({"error": error.to_string()}),
+        });
+    }
+    Ok(())
 }
 
 fn topology(encoding: &IsingEncoding) -> Result<TopologySpec, CampaignError> {
@@ -812,6 +962,24 @@ struct TrialState {
     witnesses: Vec<Witness>,
     energies: Vec<i64>,
     registry: FamilyRegistry,
+    /// Requested reads when every read's final state must arrive.
+    complete_capture: Option<u32>,
+    /// The lowest-energy distinct states captured so far, at most `elite_capacity`.
+    elite: Vec<EliteState>,
+    elite_capacity: usize,
+    /// Spins in a well-formed state. Malformed reads stay in the trace only.
+    elite_nodes: usize,
+    /// Packed start states sent with every job of the current stage.
+    initial_spins: Vec<Vec<u8>>,
+}
+
+/// A captured state with its parent link: the job and the index inside its batch.
+#[derive(Debug, Clone)]
+struct EliteState {
+    job_id: String,
+    index: usize,
+    spins: Vec<i8>,
+    energy_milli: i64,
 }
 
 impl TrialState {
@@ -857,13 +1025,18 @@ impl TrialState {
             witnesses: Vec::new(),
             energies: Vec::new(),
             registry: FamilyRegistry::production(),
+            complete_capture: None,
+            elite: Vec::new(),
+            elite_capacity: 0,
+            elite_nodes: 0,
+            initial_spins: Vec::new(),
         }
     }
 
     fn release(
         &mut self,
         instance: &Instance,
-        policy: &PolicyManifest,
+        policy: &impl Serialize,
         budget: &TrialBudget,
     ) -> Result<(), CampaignError> {
         self.emit(
@@ -951,7 +1124,8 @@ impl TrialState {
         ) >= duration(policy.host_compute_limit_s)?)
     }
 
-    fn receive(&mut self, capture: &BatchCapture, at: Instant) -> Result<(), CampaignError> {
+    /// Record a batch. Returns false when complete capture is required and states are missing.
+    fn receive(&mut self, capture: &BatchCapture, at: Instant) -> Result<bool, CampaignError> {
         let id = String::from_utf8(capture.job_id.clone()).map_err(invalid)?;
         if !self.pending.remove(&id) {
             return Err(invalid("capture has no matching dispatch"));
@@ -964,14 +1138,51 @@ impl TrialState {
             });
         self.ledger.charge(&id, cost)?;
         self.count("batches", 1)?;
-        self.emit(EventKind::BatchReceipt, at, Some(id), json!({
+        self.emit(EventKind::BatchReceipt, at, Some(id.clone()), json!({
             "received_after_dispatch_ns": nanos(capture.received_after_dispatch)?,
             "solutions": capture.solutions.iter().map(|solution| json!({"spins": solution.spins,
                 "reported_energy_milli": solution.reported_energy_milli,
                 "recomputed_energy_milli": solution.recomputed_energy_milli})).collect::<Vec<_>>(),
             "meta": capture.meta.as_ref().map(|meta| json!({"reads": meta.reads, "sweeps": meta.sweeps,
                 "device_access_time_us": meta.device_access_time_us, "qpu_access_us": meta.qpu_access_us, "extra": meta.extra}))
-        }), Some(cost))
+        }), Some(cost))?;
+        let complete = self.complete_capture.is_none_or(|requested| {
+            let reads = capture.meta.as_ref().map_or(requested, |meta| meta.reads);
+            u32::try_from(capture.solutions.len()).is_ok_and(|states| states >= reads)
+        });
+        if !complete {
+            self.count("incomplete_captures", 1)?;
+        } else if self.elite_capacity > 0 {
+            let started = Instant::now();
+            self.keep_elite(&id, capture);
+            self.count("host_compute_ns", nanos(started.elapsed())?)?;
+        }
+        Ok(complete)
+    }
+
+    fn keep_elite(&mut self, job_id: &str, capture: &BatchCapture) {
+        for (index, solution) in capture.solutions.iter().enumerate() {
+            if solution.spins.len() != self.elite_nodes
+                || self.elite.iter().any(|kept| kept.spins == solution.spins)
+            {
+                continue;
+            }
+            let position = self
+                .elite
+                .partition_point(|kept| kept.energy_milli <= solution.recomputed_energy_milli);
+            if position < self.elite_capacity {
+                self.elite.insert(
+                    position,
+                    EliteState {
+                        job_id: job_id.to_owned(),
+                        index,
+                        spins: solution.spins.clone(),
+                        energy_milli: solution.recomputed_energy_milli,
+                    },
+                );
+                self.elite.truncate(self.elite_capacity);
+            }
+        }
     }
 
     fn evaluate(
@@ -1107,11 +1318,13 @@ impl TrialState {
         target: &quip_protocol::target::Target,
     ) -> Result<(), CampaignError> {
         match event {
-            SessionEvent::Ready => Ok(()),
+            SessionEvent::Ready { .. } => Ok(()),
             SessionEvent::Dispatched { job_id, at } => self.dispatch(job_id, at),
             SessionEvent::Batch { capture, at } => {
-                self.receive(&capture, at)?;
-                self.evaluate(instance, policy, rules, target, &capture)
+                if self.receive(&capture, at)? {
+                    self.evaluate(instance, policy, rules, target, &capture)?;
+                }
+                Ok(())
             }
             SessionEvent::Rejected { job_id, reason, at } => self.reject(job_id, &reason, at),
             SessionEvent::Failed { reason, at } => self.emit(
@@ -1182,9 +1395,11 @@ async fn drive_trial(
     encoding: &IsingEncoding,
     target: &quip_protocol::target::Target,
     cancellation: &mut Option<oneshot::Receiver<()>>,
+    deadline: Option<Duration>,
 ) -> Result<TerminalReason, CampaignError> {
+    let expired = |state: &TrialState| deadline.is_some_and(|limit| state.clock.elapsed() >= limit);
     loop {
-        if state.expired() {
+        if expired(state) {
             return Ok(TerminalReason::WallTimeout);
         }
         if state
@@ -1199,6 +1414,9 @@ async fn drive_trial(
         }
         let id = new_id("job");
         let mut submission = submission(spec, encoding, policy, &id);
+        if let Some(ising) = submission.job.ising.as_mut() {
+            ising.initial_spins.clone_from(&state.initial_spins);
+        }
         submission.target.max_energy_milli = target.max_energy_milli;
         submission.target.min_solutions = target.min_solutions;
         submission.target.min_diversity_milli = target.min_diversity_milli;
@@ -1212,7 +1430,7 @@ async fn drive_trial(
         }
         loop {
             let next = async {
-                if let Some(limit) = state.trial.wall_limit {
+                if let Some(limit) = deadline {
                     tokio::time::timeout(
                         limit.saturating_sub(state.clock.elapsed()),
                         session.next(),
@@ -1229,17 +1447,19 @@ async fn drive_trial(
                 event = next => match event { Ok(event) => event?, Err(terminal) => return Ok(terminal) },
             };
             match event {
-                Some(SessionEvent::Ready) => {}
+                Some(SessionEvent::Ready { .. }) => {}
                 Some(SessionEvent::Dispatched { job_id, at }) => {
                     state.dispatch(job_id, at)?;
                 }
                 Some(SessionEvent::Batch { capture, at }) => {
-                    state.receive(&capture, at)?;
+                    if !state.receive(&capture, at)? {
+                        return Ok(TerminalReason::IncompleteCapture);
+                    }
                     state.evaluate(instance, policy, rules, target, &capture)?;
                     if state.trial.accepted_wall.is_some() {
                         return Ok(TerminalReason::Accepted);
                     }
-                    if state.expired() {
+                    if expired(state) {
                         return Ok(TerminalReason::WallTimeout);
                     }
                     if state

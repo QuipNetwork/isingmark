@@ -98,6 +98,10 @@ pub enum EventKind {
     TargetChange,
     Cancellation,
     TrialTermination,
+    /// A portfolio stage starts its own session inside the trial budget.
+    StageStart,
+    /// A portfolio stage ended, with its outcome and session outcome.
+    StageEnd,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

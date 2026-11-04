@@ -61,8 +61,24 @@ async fn main() -> ExitCode {
 async fn run_campaign_command(args: CampaignArgs) -> ExitCode {
     use isingmark::campaign::{
         families::{check::family_check, FamilyRegistry},
-        runner::{run_campaign, serve_campaign},
+        runner::{
+            portfolio::{backend_available, load_catalog, resolve_panel},
+            run_campaign, serve_campaign,
+        },
     };
+    if let Some(CampaignCommand::PortfolioCheck(inputs)) = &args.command {
+        // An incomplete panel exits non-zero so no caller can treat it as complete.
+        return match load_catalog(&inputs.policies).and_then(|catalog| {
+            resolve_panel(&catalog, &inputs.panel, &inputs.family, &backend_available)
+        }) {
+            Ok(report) => match write_campaign_json(&report) {
+                Ok(()) if report.complete => ExitCode::SUCCESS,
+                Ok(()) => ExitCode::FAILURE,
+                Err(error) => campaign_failure(&error),
+            },
+            Err(error) => campaign_failure(&error),
+        };
+    }
     if let Some(CampaignCommand::FamilyCheck(inputs)) = args.command {
         return match family_check(
             &FamilyRegistry::production(),

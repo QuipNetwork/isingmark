@@ -784,7 +784,11 @@ async fn drive_session(
         .unwrap_or_else(PoisonError::into_inner)
         .take();
     if let Some(control) = control {
-        control::drive_controlled(inbound, tx, control, backend_name, progress).await;
+        let features = hello
+            .capabilities
+            .map(|caps| caps.features)
+            .unwrap_or_default();
+        control::drive_controlled(inbound, tx, control, backend_name, progress, features).await;
         return;
     }
 
