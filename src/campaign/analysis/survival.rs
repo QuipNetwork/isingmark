@@ -253,7 +253,7 @@ pub fn estimate_curves(
     ])
 }
 
-fn validate_trace(trial: &Trial) -> Result<(), AnalysisError> {
+pub(crate) fn validate_trace(trial: &Trial) -> Result<(), AnalysisError> {
     if trial.terminal == TerminalReason::InvalidRun {
         return Err(AnalysisError::CorruptTrace(format!(
             "trial {} ended as InvalidRun",
@@ -292,7 +292,7 @@ fn curve_grid(design: &[f64], successes: impl Iterator<Item = f64>, limit: f64) 
     grid
 }
 
-fn wall_observation(trial: &Trial) -> Result<(Duration, bool), AnalysisError> {
+pub(crate) fn wall_observation(trial: &Trial) -> Result<(Duration, bool), AnalysisError> {
     let accepted = wall_outcome(
         trial.accepted_wall,
         trial.wall_limit.unwrap_or(Duration::MAX),
@@ -346,7 +346,11 @@ fn wall_estimates(
     Ok(points)
 }
 
-fn wall_probability(observations: &[(Duration, bool)], time: f64, censoring: &Censoring) -> f64 {
+pub(crate) fn wall_probability(
+    observations: &[(Duration, bool)],
+    time: f64,
+    censoring: &Censoring,
+) -> f64 {
     let mut next = 0;
     let mut successes = 0;
     let mut survival = 1.0;
@@ -369,13 +373,13 @@ fn wall_probability(observations: &[(Duration, bool)], time: f64, censoring: &Ce
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DeviceResult {
+pub(crate) enum DeviceResult {
     Success,
     Failure,
     Unresolved,
 }
 
-fn device_result(trial: &Trial, budget_ns: u64) -> DeviceResult {
+pub(crate) fn device_result(trial: &Trial, budget_ns: u64) -> DeviceResult {
     if trial.accepted_wall.is_some() {
         return match budget_outcome(&trial.device_total, budget_ns) {
             BudgetOutcome::Within => DeviceResult::Success,
@@ -404,7 +408,7 @@ fn device_result(trial: &Trial, budget_ns: u64) -> DeviceResult {
     }
 }
 
-fn device_budget_ns(seconds: f64) -> Result<u64, AnalysisError> {
+pub(crate) fn device_budget_ns(seconds: f64) -> Result<u64, AnalysisError> {
     let invalid = || {
         AnalysisError::CorruptTrace(format!(
             "device grid time {seconds} is outside the budget range"
@@ -517,7 +521,7 @@ fn point_bands<T>(
 
 // Nearest rank: the one-based ceil(m * p)-th order statistic, without interpolation.
 // Callers supply nonempty bootstrap output and p = 1/40 or 39/40 (2.5% or 97.5%).
-fn nearest_rank(samples: &mut [f64], fortieths: u32) -> f64 {
+pub(crate) fn nearest_rank(samples: &mut [f64], fortieths: u32) -> f64 {
     samples.sort_unstable_by(f64::total_cmp);
     let rank = (samples.len() as u64 * u64::from(fortieths)).div_ceil(40);
     let index = usize::try_from(rank - 1).expect("percentile rank is within the sample");
