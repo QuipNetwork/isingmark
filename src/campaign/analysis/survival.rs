@@ -23,6 +23,8 @@ pub struct Curve {
     pub observation_limit_s: f64,
     pub trials: u64,
     pub instances: u64,
+    /// Independent resampling clusters: the instances, or the groups that join them.
+    pub groups: u64,
     /// Trial count unresolved at the observation limit, without instance weighting.
     pub unresolved: u64,
     pub assumptions: Vec<String>,
@@ -50,13 +52,23 @@ impl Default for AnalysisDesign {
 }
 
 impl AnalysisDesign {
-    fn band_assumption(&self, instances: u64) -> String {
-        format!(
-            "Pointwise two-sided 95% instance cluster bootstrap bands, nearest rank percentiles, \
-             alpha=0.025 per side, resamples={}, seed={}. Exact Clopper-Pearson endpoint \
-             overrides use independent n={instances} instances.",
-            self.bootstrap_resamples, self.bootstrap_seed
-        )
+    fn band_assumption(&self, instances: u64, groups: u64) -> String {
+        if instances == groups {
+            format!(
+                "Pointwise two-sided 95% instance cluster bootstrap bands, nearest rank percentiles, \
+                 alpha=0.025 per side, resamples={}, seed={}. Exact Clopper-Pearson endpoint \
+                 overrides use independent n={instances} instances.",
+                self.bootstrap_resamples, self.bootstrap_seed
+            )
+        } else {
+            format!(
+                "Pointwise two-sided 95% group cluster bootstrap bands, nearest rank percentiles, \
+                 alpha=0.025 per side, resamples={}, seed={}. Each of the {groups} groups weighs its \
+                 instances equally and counts as one observation. Exact Clopper-Pearson endpoint \
+                 overrides use independent n={groups} groups.",
+                self.bootstrap_resamples, self.bootstrap_seed
+            )
+        }
     }
 }
 
@@ -152,6 +164,20 @@ pub fn estimate_curves(
     trials: &[Trial],
     design: &AnalysisDesign,
 ) -> Result<Vec<Curve>, AnalysisError> {
+    estimate_grouped_curves(trials, &BTreeMap::new(), design)
+}
+
+/// [`estimate_curves`] with instances joined into resampling groups. `groups` maps an instance id
+/// to its group id, and an instance without an entry is its own group. Each group counts as one
+/// observation and weighs its instances equally, so pooling never changes instance weights.
+///
+/// # Errors
+/// Returns the errors of [`estimate_curves`].
+pub fn estimate_grouped_curves(
+    trials: &[Trial],
+    groups: &BTreeMap<String, String>,
+    design: &AnalysisDesign,
+) -> Result<Vec<Curve>, AnalysisError> {
     if trials.is_empty()
         || design.wall_grid_s.is_empty()
         || design.device_grid_s.is_empty()
@@ -159,13 +185,7 @@ pub fn estimate_curves(
     {
         return Err(AnalysisError::Empty);
     }
-    let mut instances: BTreeMap<&str, Vec<&Trial>> = BTreeMap::new();
-    for trial in trials {
-        validate_trace(trial)?;
-        // Validate before checking window equality so a missing observation stays corrupt.
-        wall_observation(trial)?;
-        instances.entry(&trial.instance_id).or_default().push(trial);
-    }
+    let (clusters, instance_count) = validated_clusters(trials, groups)?;
     let wall_limit = trials
         .iter()
         .filter_map(|trial| trial.wall_limit)
@@ -202,15 +222,15 @@ pub fn estimate_curves(
         }),
         device_limit,
     );
-    let wall_points = wall_estimates(&instances, &wall_grid, design)?;
-    let device_points = device_estimates(&instances, &device_grid, design)?;
+    let wall_points = wall_estimates(&clusters, &wall_grid, design)?;
+    let device_points = device_estimates(&clusters, &device_grid, design)?;
     let device_limit_ns = device_budget_ns(device_limit)?;
     let unresolved = trials
         .iter()
         .filter(|trial| device_result(trial, device_limit_ns) == DeviceResult::Unresolved)
         .count() as u64;
     let trial_count = trials.len() as u64;
-    let instance_count = instances.len() as u64;
+    let group_count = clusters.len() as u64;
     Ok(vec![
         Curve {
             basis: TimeBasis::WallClock,
@@ -221,10 +241,11 @@ pub fn estimate_curves(
             observation_limit_s: wall_limit,
             trials: trial_count,
             instances: instance_count,
+            groups: group_count,
             unresolved: 0,
             assumptions: vec![
                 design.censoring.assumption(),
-                design.band_assumption(instance_count),
+                design.band_assumption(instance_count, group_count),
             ],
         },
         Curve {
@@ -236,10 +257,11 @@ pub fn estimate_curves(
             observation_limit_s: device_limit,
             trials: trial_count,
             instances: instance_count,
+            groups: group_count,
             unresolved,
             assumptions: vec![
                 design.censoring.assumption(),
-                design.band_assumption(instance_count),
+                design.band_assumption(instance_count, group_count),
                 "Device proofs are scored independently of wall-clock caps and terminal reasons. \
                  Without a proof, wall-clock and policy limits form a joint observation condition: \
                  stops before the device budget is spent remain unresolved, never independent censors. \
@@ -251,6 +273,37 @@ pub fn estimate_curves(
             ],
         },
     ])
+}
+
+/// One resampling group: the trials of each of its instances.
+type GroupCluster<'a> = Vec<Vec<&'a Trial>>;
+
+/// Validate every trial, then nest the trials by group and instance. Returns the clusters and the
+/// number of distinct instances.
+fn validated_clusters<'a>(
+    trials: &'a [Trial],
+    groups: &BTreeMap<String, String>,
+) -> Result<(Vec<GroupCluster<'a>>, u64), AnalysisError> {
+    let mut grouped: BTreeMap<&str, BTreeMap<&str, Vec<&'a Trial>>> = BTreeMap::new();
+    for trial in trials {
+        validate_trace(trial)?;
+        // Validate before checking window equality so a missing observation stays corrupt.
+        wall_observation(trial)?;
+        let instance = trial.instance_id.as_str();
+        let group = groups.get(instance).map_or(instance, String::as_str);
+        grouped
+            .entry(group)
+            .or_default()
+            .entry(instance)
+            .or_default()
+            .push(trial);
+    }
+    let instance_count = grouped.values().map(BTreeMap::len).sum::<usize>() as u64;
+    let clusters = grouped
+        .into_values()
+        .map(|instances| instances.into_values().collect())
+        .collect();
+    Ok((clusters, instance_count))
 }
 
 pub(crate) fn validate_trace(trial: &Trial) -> Result<(), AnalysisError> {
@@ -308,31 +361,29 @@ pub(crate) fn wall_observation(trial: &Trial) -> Result<(Duration, bool), Analys
 }
 
 fn wall_estimates(
-    instances: &BTreeMap<&str, Vec<&Trial>>,
+    groups: &[Vec<Vec<&Trial>>],
     grid: &[f64],
     design: &AnalysisDesign,
 ) -> Result<Vec<CurvePoint>, AnalysisError> {
-    let mut clusters = Vec::with_capacity(instances.len());
-    for trials in instances.values() {
-        let mut observations = trials
-            .iter()
-            .map(|trial| wall_observation(trial))
-            .collect::<Result<Vec<_>, _>>()?;
-        observations.sort_unstable_by_key(|&(time, _)| time);
-        clusters.push(observations);
+    let mut clusters = Vec::with_capacity(groups.len());
+    for instances in groups {
+        let mut group = Vec::with_capacity(instances.len());
+        for trials in instances {
+            group.push(sorted_observations(trials)?);
+        }
+        clusters.push(group);
     }
     let mut points = Vec::with_capacity(grid.len());
     for &time in grid {
-        let statistic = |sample: &[&[(Duration, bool)]]| {
-            sample
-                .iter()
-                .map(|observations| wall_probability(observations, time, &design.censoring))
-                .sum::<f64>()
-                / count_f64(sample.len())
+        let statistic = |sample: &[&[Vec<(Duration, bool)>]]| {
+            group_mean(sample, |observations| {
+                wall_probability(observations, time, &design.censoring)
+            })
         };
         // KM can reach one after censoring without every trial having succeeded.
         let all_succeeded = clusters
             .iter()
+            .flatten()
             .flatten()
             .all(|&(observed, accepted)| accepted && observed.as_secs_f64() <= time);
         points.push(point_bands(
@@ -344,6 +395,27 @@ fn wall_estimates(
         )?);
     }
     Ok(points)
+}
+
+/// The wall observations of one instance, earliest first.
+pub(crate) fn sorted_observations(
+    trials: &[&Trial],
+) -> Result<Vec<(Duration, bool)>, AnalysisError> {
+    let mut observations = trials
+        .iter()
+        .map(|trial| wall_observation(trial))
+        .collect::<Result<Vec<_>, _>>()?;
+    observations.sort_unstable_by_key(|&(time, _)| time);
+    Ok(observations)
+}
+
+/// The mean over groups of the mean over each group's instances.
+pub(crate) fn group_mean<T>(sample: &[&[T]], instance: impl Fn(&T) -> f64) -> f64 {
+    sample
+        .iter()
+        .map(|instances| instances.iter().map(&instance).sum::<f64>() / count_f64(instances.len()))
+        .sum::<f64>()
+        / count_f64(sample.len())
 }
 
 pub(crate) fn wall_probability(
@@ -419,27 +491,25 @@ pub(crate) fn device_budget_ns(seconds: f64) -> Result<u64, AnalysisError> {
 }
 
 fn device_estimates(
-    instances: &BTreeMap<&str, Vec<&Trial>>,
+    clusters: &[Vec<Vec<&Trial>>],
     grid: &[f64],
     design: &AnalysisDesign,
 ) -> Result<Vec<CurvePoint>, AnalysisError> {
-    let clusters: Vec<_> = instances.values().cloned().collect();
     let mut points = Vec::with_capacity(grid.len());
     for &time in grid {
         let budget_ns = device_budget_ns(time)?;
-        let statistic = |sample: &[&[&Trial]], include_unresolved| {
-            sample
-                .iter()
-                .map(|trials| device_probability(trials, budget_ns, include_unresolved))
-                .sum::<f64>()
-                / count_f64(sample.len())
+        let statistic = |sample: &[&[Vec<&Trial>]], include_unresolved| {
+            group_mean(sample, |trials| {
+                device_probability(trials, budget_ns, include_unresolved)
+            })
         };
         let all_succeeded = clusters
             .iter()
             .flatten()
+            .flatten()
             .all(|trial| device_result(trial, budget_ns) == DeviceResult::Success);
         points.push(point_bands(
-            &clusters,
+            clusters,
             design,
             |sample| statistic(sample, false),
             |sample| statistic(sample, true),
@@ -449,7 +519,11 @@ fn device_estimates(
     Ok(points)
 }
 
-fn device_probability(trials: &[&Trial], budget_ns: u64, include_unresolved: bool) -> f64 {
+pub(crate) fn device_probability(
+    trials: &[&Trial],
+    budget_ns: u64,
+    include_unresolved: bool,
+) -> f64 {
     let count = trials
         .iter()
         .filter(|trial| match device_result(trial, budget_ns) {

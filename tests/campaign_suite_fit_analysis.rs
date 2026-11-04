@@ -49,6 +49,7 @@ fn run(
         wall_s: Some(wall_s),
         device_s: Some(wall_s),
         wall_basis: WallBasis::Measured,
+        rung: None,
         energies_milli: (0..models)
             .map(|index| {
                 (
@@ -175,7 +176,7 @@ fn missing_states_count_against_the_classical_run() {
     assert!(!beat.beats());
     // 17 of 30 at or below still reaches, and 10 s is slow, so the QPU holds both tests.
     assert_eq!(label.tier, Tier::One);
-    // 15 at the reference and 15 missing does not reach on a majority of 30.
+    // 15 at the reference and 15 missing neither reaches nor bounds: the missing states decide.
     let half = [
         run(ClassicalDevice::Cpu, "cpu", 30, 1.0, |index| {
             (index < 15).then_some(0)
@@ -184,11 +185,9 @@ fn missing_states_count_against_the_classical_run() {
             (index < 15).then_some(0)
         }),
     ];
-    let speed = tier(&qpu, &half)
-        .expect("a reference has a tier")
-        .speed
-        .expect("a bound");
-    assert!(!speed.reached);
+    let label = tier(&qpu, &half).expect("a reference has a tier");
+    assert!(label.speed.is_none());
+    assert_eq!(label.tier, Tier::NeedsMeasurement);
 }
 
 #[test]
@@ -254,11 +253,87 @@ fn a_label_records_rule_version_three_and_no_capture_has_no_tier() {
     assert!(tier(&empty, &runs).is_none());
 }
 
+#[test]
+fn seeds_of_one_rung_reach_only_when_every_seed_reaches() {
+    let qpu = reference(30, 0.25);
+    let seed = |name: &str, offset: i64| {
+        let mut seed = run(ClassicalDevice::Cuda, name, 30, 1.0, every(offset));
+        seed.rung = Some("cluster-s1".into());
+        seed
+    };
+    let runs = [
+        run(ClassicalDevice::Cpu, "cpu", 30, 10.0, every(0)),
+        seed("cuda-seed-0", 0),
+        seed("cuda-seed-1", 1),
+    ];
+    let label = tier(&qpu, &runs).expect("a reference has a tier");
+    assert_eq!(label.speed.expect("a speed pick").name, "cpu");
+    assert_eq!(label.tier, Tier::One);
+}
+
+#[test]
+fn missing_states_never_establish_a_speed_bound() {
+    let qpu = reference(30, 0.25);
+    let mut runs = vec![
+        run(ClassicalDevice::Cpu, "cpu", 30, 1.0, every(1)),
+        run(ClassicalDevice::Cuda, "cuda", 30, 1.0, every(1)),
+    ];
+    assert_eq!(tier_of(&qpu, &runs), Tier::Two);
+    runs.push(run(ClassicalDevice::Cpu, "cpu-empty", 30, 100.0, |_| None));
+    let label = tier(&qpu, &runs).expect("a reference has a tier");
+    assert_ne!(label.speed.expect("a bound").name, "cpu-empty");
+    assert_eq!(label.tier, Tier::Two);
+}
+
+#[test]
+fn non_finite_timing_is_missing_timing() {
+    let qpu = reference(30, 0.25);
+    let cuda = run(ClassicalDevice::Cuda, "cuda", 30, 1.0, every(-1));
+    let mut nan_wall = run(ClassicalDevice::Cpu, "cpu", 30, 1.0, every(-1));
+    nan_wall.wall_s = Some(f64::NAN);
+    assert_eq!(
+        tier_of(&qpu, &[nan_wall, cuda.clone()]),
+        Tier::NeedsMeasurement
+    );
+    let mut nan_budget = run(ClassicalDevice::Cpu, "cpu", 30, 1.0, every(-1));
+    nan_budget.budget_s = Some(f64::NAN);
+    assert_eq!(
+        tier_of(&qpu, &[nan_budget, cuda.clone()]),
+        Tier::NeedsMeasurement
+    );
+    let mut negative = run(ClassicalDevice::Cpu, "cpu", 30, 1.0, every(-1));
+    negative.device_s = Some(-1.0);
+    negative.wall_s = Some(-1.0);
+    assert_eq!(
+        tier_of(&qpu, &[negative, cuda.clone()]),
+        Tier::NeedsMeasurement
+    );
+    let cpu = run(ClassicalDevice::Cpu, "cpu", 30, 1.0, every(-1));
+    assert_eq!(
+        tier_of(&reference(30, f64::NAN), &[cpu, cuda]),
+        Tier::NeedsMeasurement
+    );
+}
+
+#[test]
+fn a_scaled_beat_run_is_marked_estimated() {
+    let qpu = reference(30, 0.25);
+    let mut cpu = run(ClassicalDevice::Cpu, "cpu", 30, 1.0, every(-1));
+    cpu.wall_basis = WallBasis::Scaled;
+    let cuda = run(ClassicalDevice::Cuda, "cuda", 30, 0.5, every(1));
+    let label = tier(&qpu, &[cpu, cuda]).expect("a reference has a tier");
+    let beat = label.beat_run.as_ref().expect("a beating run");
+    assert!(beat.estimated);
+    assert!(label.reason.contains("estimated"), "{}", label.reason);
+}
+
 #[derive(Clone, Copy)]
 enum Outcome {
     Accepted(u64),
     Timeout,
     IncompleteCapture,
+    /// Stopped by the host limit before the device budget was spent: unresolved on the device clock.
+    Halted,
 }
 
 /// A trial whose trace holds one termination event, with a 30 s device budget.
@@ -266,7 +341,7 @@ fn trial(dir: &Path, id: &str, instance: &str, window_s: u64, outcome: Outcome) 
     let events = dir.join(format!("{id}.jsonl"));
     let accepted = match outcome {
         Outcome::Accepted(seconds) => Some(seconds),
-        Outcome::Timeout | Outcome::IncompleteCapture => None,
+        Outcome::Timeout | Outcome::IncompleteCapture | Outcome::Halted => None,
     };
     let event = TraceEvent {
         version: TRACE_VERSION,
@@ -300,15 +375,18 @@ fn trial(dir: &Path, id: &str, instance: &str, window_s: u64, outcome: Outcome) 
         resources: BTreeMap::new(),
         events,
         accepted_wall: accepted.map(Duration::from_secs),
-        device_total: DeviceTime::from_exact_ns(if accepted.is_some() {
-            1_000_000_000
-        } else {
-            30_000_000_000
-        }),
+        device_total: DeviceTime::from_exact_ns(
+            if accepted.is_some() || matches!(outcome, Outcome::Halted) {
+                1_000_000_000
+            } else {
+                30_000_000_000
+            },
+        ),
         terminal: match outcome {
             Outcome::Accepted(_) => TerminalReason::Accepted,
             Outcome::Timeout => TerminalReason::WallTimeout,
             Outcome::IncompleteCapture => TerminalReason::IncompleteCapture,
+            Outcome::Halted => TerminalReason::HostComputeLimit,
         },
         preparation: Preparation::Cold,
         identity: InstanceIdentity {
@@ -409,7 +487,14 @@ fn fixed_windows_must_match_across_arms_but_km_may_differ() {
     let synthetic = pair("x-w62-p1200", 4_575, 4_575);
     let groups = Groups::new();
     assert_eq!(
-        paired_difference(&synthetic, &a, &b, &groups, &AnalysisDesign::default()),
+        paired_difference(
+            &synthetic,
+            &a,
+            &groups,
+            &b,
+            &groups,
+            &AnalysisDesign::default()
+        ),
         Err(AnalysisError::MixedBasis)
     );
     let km = AnalysisDesign {
@@ -418,12 +503,14 @@ fn fixed_windows_must_match_across_arms_but_km_may_differ() {
         },
         ..AnalysisDesign::default()
     };
-    let differences =
-        estimated(paired_difference(&synthetic, &a, &b, &groups, &km).expect("KM difference"));
+    let differences = estimated(
+        paired_difference(&synthetic, &a, &groups, &b, &groups, &km).expect("KM difference"),
+    );
     let wall = basis(&differences, TimeBasis::WallClock);
     close(at(wall, 10.0).0, 1.0);
-    // The grid stops at the longer window, and the censored B arm stays at zero.
-    assert_eq!(wall.grid_s.last(), Some(&1_200.0));
+    // B is unobserved after 600 s, so the difference stops at the shorter window.
+    assert_eq!(wall.grid_s.last(), Some(&60.0));
+    assert!(wall.grid_s.iter().all(|time| *time <= 600.0));
 }
 
 #[test]
@@ -436,6 +523,7 @@ fn a_missing_state_is_a_failure_in_the_difference() {
         paired_difference(
             &pair("x-w62-p1200", 4_575, 4_575),
             &a,
+            &Groups::new(),
             &b,
             &Groups::new(),
             &AnalysisDesign::default(),
@@ -466,6 +554,7 @@ fn all_timeouts_keep_an_exact_band_on_both_sides() {
         paired_difference(
             &pair("x-w62-p1200", 4_575, 4_575),
             &a,
+            &Groups::new(),
             &b,
             &Groups::new(),
             &AnalysisDesign::default(),
@@ -493,6 +582,7 @@ fn unequal_coverage_compares_only_the_common_groups() {
         paired_difference(
             &pair("x-w62-p1200", 4_575, 4_575),
             &a,
+            &Groups::new(),
             &b,
             &Groups::new(),
             &AnalysisDesign::default(),
@@ -518,11 +608,12 @@ fn grouped_instances_count_as_one_observation() {
     let curves = arm_curves(&a, &groups, &AnalysisDesign::default()).expect("A curves");
     assert!(curves
         .iter()
-        .all(|curve| curve.instances == 1 && curve.trials == 3));
+        .all(|curve| (curve.instances, curve.groups, curve.trials) == (3, 1, 3)));
     let differences = estimated(
         paired_difference(
             &pair("x-w62-p1200", 4_575, 4_575),
             &a,
+            &groups,
             &b,
             &groups,
             &AnalysisDesign::default(),
@@ -555,7 +646,14 @@ fn physical_pairs_stay_unmatched_and_panels_never_mix() {
     let design = AnalysisDesign::default();
     let groups = Groups::new();
     assert_eq!(
-        paired_difference(&pair("p-charge", 4_575, 4_575), &a, &b, &groups, &design),
+        paired_difference(
+            &pair("p-charge", 4_575, 4_575),
+            &a,
+            &groups,
+            &b,
+            &groups,
+            &design
+        ),
         Ok(DifferenceOutcome::NotComparable(
             NotComparable::UnmatchedSize
         ))
@@ -563,7 +661,7 @@ fn physical_pairs_stay_unmatched_and_panels_never_mix() {
     let mut mixed = pair("x-w62-p1200", 4_575, 4_575);
     mixed.b.panel = TargetPanel::Common;
     assert_eq!(
-        paired_difference(&mixed, &a, &b, &groups, &design),
+        paired_difference(&mixed, &a, &groups, &b, &groups, &design),
         Ok(DifferenceOutcome::NotComparable(
             NotComparable::PanelMismatch
         ))
@@ -573,6 +671,7 @@ fn physical_pairs_stay_unmatched_and_panels_never_mix() {
         paired_difference(
             &pair("x-w62-p1200", 4_575, 4_575),
             &a,
+            &groups,
             &disjoint,
             &groups,
             &design
@@ -716,4 +815,266 @@ fn campaign_rows_keep_costs_coverage_and_missing_timing() {
     assert_eq!(b_line[column("device_timing")], "missing");
     assert_eq!(b_line[column("device_s_upper")], "");
     assert_eq!(b_line[column("comparison")], "estimated");
+}
+
+fn synthetic() -> PairSpec {
+    pair("x-w62-p1200", 4_575, 4_575)
+}
+
+fn wall_band_at_10(
+    a: &[Trial],
+    a_groups: &Groups,
+    b: &[Trial],
+    b_groups: &Groups,
+) -> (f64, f64, f64) {
+    let differences = estimated(
+        paired_difference(
+            &synthetic(),
+            a,
+            a_groups,
+            b,
+            b_groups,
+            &AnalysisDesign::default(),
+        )
+        .expect("difference"),
+    );
+    at(basis(&differences, TimeBasis::WallClock), 10.0)
+}
+
+fn group_map(pairs: &[(&str, &str)]) -> Groups {
+    pairs
+        .iter()
+        .map(|(instance, group)| ((*instance).to_string(), (*group).to_string()))
+        .collect()
+}
+
+#[test]
+fn groups_weigh_their_instances_equally() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let mut a: Vec<Trial> = (0..9)
+        .map(|index| {
+            trial(
+                dir.path(),
+                &format!("a-{index}"),
+                "busy",
+                1_200,
+                Outcome::Accepted(5),
+            )
+        })
+        .collect();
+    a.push(trial(
+        dir.path(),
+        "a-quiet",
+        "quiet",
+        1_200,
+        Outcome::Timeout,
+    ));
+    let groups = group_map(&[("busy", "g"), ("quiet", "g")]);
+    let curves = arm_curves(&a, &groups, &AnalysisDesign::default()).expect("curves");
+    let wall = curves
+        .iter()
+        .find(|curve| curve.basis == TimeBasis::WallClock)
+        .expect("wall curve");
+    let index = wall
+        .grid_s
+        .iter()
+        .position(|time| time.total_cmp(&10.0).is_eq())
+        .expect("10 s point");
+    close(wall.estimate[index], 0.5);
+    let b: Vec<Trial> = ["busy", "quiet"]
+        .iter()
+        .map(|instance| {
+            trial(
+                dir.path(),
+                &format!("b-{instance}"),
+                instance,
+                1_200,
+                Outcome::Timeout,
+            )
+        })
+        .collect();
+    close(wall_band_at_10(&a, &groups, &b, &groups).0, 0.5);
+}
+
+#[test]
+fn each_arm_uses_its_own_group_map() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let outcomes = |prefix: &str| {
+        vec![
+            trial(
+                dir.path(),
+                &format!("{prefix}-0"),
+                "i0",
+                1_200,
+                Outcome::Accepted(5),
+            ),
+            trial(
+                dir.path(),
+                &format!("{prefix}-1"),
+                "i1",
+                1_200,
+                Outcome::Timeout,
+            ),
+        ]
+    };
+    let (a, b) = (outcomes("a"), outcomes("b"));
+    let a_groups = group_map(&[("i0", "g0"), ("i1", "g1")]);
+    let b_groups = group_map(&[("i0", "g1"), ("i1", "g0")]);
+    let (rows, outcome) = ab_rows(
+        &synthetic(),
+        &ArmEvidence::Campaign {
+            trials: &a,
+            groups: &a_groups,
+        },
+        &ArmEvidence::Campaign {
+            trials: &b,
+            groups: &b_groups,
+        },
+        &AnalysisDesign::default(),
+    )
+    .expect("rows");
+    assert_eq!(rows[1].groups, 2);
+    let differences = estimated(outcome);
+    // Group differences are +1 and -1, so the joint band must have width.
+    let (estimate, lower, upper) = at(basis(&differences, TimeBasis::WallClock), 10.0);
+    close(estimate, 0.0);
+    assert!(lower < 0.0 && upper > 0.0, "[{lower}, {upper}]");
+}
+
+#[test]
+fn resampling_keeps_the_arms_paired() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let arm_of = |prefix: &str, first: Outcome, second: Outcome| {
+        vec![
+            trial(dir.path(), &format!("{prefix}-0"), "i0", 1_200, first),
+            trial(dir.path(), &format!("{prefix}-1"), "i1", 1_200, second),
+        ]
+    };
+    let none = Groups::new();
+    let a = arm_of("a", Outcome::Accepted(5), Outcome::Timeout);
+    let same = arm_of("same", Outcome::Accepted(5), Outcome::Timeout);
+    let (estimate, lower, upper) = wall_band_at_10(&a, &none, &same, &none);
+    close(estimate, 0.0);
+    close(lower, 0.0);
+    close(upper, 0.0);
+    let opposite = arm_of("opposite", Outcome::Timeout, Outcome::Accepted(5));
+    let (estimate, lower, upper) = wall_band_at_10(&a, &none, &opposite, &none);
+    close(estimate, 0.0);
+    assert!(lower < 0.0 && upper > 0.0, "[{lower}, {upper}]");
+}
+
+#[test]
+fn unresolved_device_time_keeps_the_zero_success_bound() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let mut a = Vec::new();
+    for group in 0..10 {
+        let instance = format!("i{group}");
+        for index in 0..9 {
+            a.push(trial(
+                dir.path(),
+                &format!("a-{group}-{index}"),
+                &instance,
+                1_200,
+                Outcome::Timeout,
+            ));
+        }
+        a.push(trial(
+            dir.path(),
+            &format!("a-{group}-h"),
+            &instance,
+            1_200,
+            Outcome::Halted,
+        ));
+    }
+    let b = arm(
+        dir.path(),
+        "b",
+        &(0..10).collect::<Vec<_>>(),
+        1_200,
+        Outcome::Timeout,
+    );
+    let none = Groups::new();
+    let differences = estimated(
+        paired_difference(
+            &synthetic(),
+            &a,
+            &none,
+            &b,
+            &none,
+            &AnalysisDesign::default(),
+        )
+        .expect("difference"),
+    );
+    let exact = binomial_upper(0, 10, 0.025).expect("exact bound");
+    let (estimate, _, upper) = at(basis(&differences, TimeBasis::QpuDeviceAccess), 30.0);
+    close(estimate, 0.0);
+    assert!(upper >= exact, "{upper} < {exact}");
+}
+
+#[test]
+fn an_early_lost_capture_lowers_state_coverage() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let mut a = arm(dir.path(), "a", &[0, 1], 1_200, Outcome::Accepted(5));
+    a[0].resources.insert("incomplete_captures".into(), 1);
+    let groups = Groups::new();
+    let (rows, _) = ab_rows(
+        &synthetic(),
+        &ArmEvidence::Campaign {
+            trials: &a,
+            groups: &groups,
+        },
+        &ArmEvidence::Campaign {
+            trials: &a,
+            groups: &groups,
+        },
+        &AnalysisDesign::default(),
+    )
+    .expect("rows");
+    close(rows[0].state_coverage.expect("coverage"), 0.5);
+}
+
+#[test]
+fn the_csv_marks_a_scaled_beat_run() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let cell = load_archived_cell(Path::new(INDEX), "ice-twisted-w62-dimer1200").expect("cell");
+    let classical = |device, name: &str, wall_s: f64, offset: i64, wall_basis| ClassicalRun {
+        device,
+        name: name.into(),
+        budget_s: None,
+        wall_s: Some(wall_s),
+        device_s: Some(wall_s),
+        wall_basis,
+        rung: None,
+        energies_milli: cell
+            .reference
+            .energies_milli
+            .iter()
+            .map(|(model, energy)| (model.clone(), Some(energy + offset)))
+            .collect(),
+    };
+    let runs = [
+        classical(ClassicalDevice::Cpu, "cpu", 1.0, -1, WallBasis::Scaled),
+        classical(ClassicalDevice::Cuda, "cuda", 0.5, 0, WallBasis::Measured),
+    ];
+    let b = arm(dir.path(), "b", &[0], 1_200, Outcome::Accepted(5));
+    let groups = Groups::new();
+    let (rows, _) = ab_rows(
+        &synthetic(),
+        &ArmEvidence::Archived {
+            cell: &cell,
+            runs: &runs,
+        },
+        &ArmEvidence::Campaign {
+            trials: &b,
+            groups: &groups,
+        },
+        &AnalysisDesign::default(),
+    )
+    .expect("rows");
+    let csv = ab_csv(&rows);
+    let header: Vec<&str> = AB_CSV_HEADER.split(',').collect();
+    let a_line: Vec<&str> = csv.lines().nth(1).expect("A row").split(',').collect();
+    let column = |name: &str| header.iter().position(|field| *field == name).expect(name);
+    assert_eq!(a_line[column("tier_beat_wall")], "scaled");
+    assert_eq!(a_line[column("tier_speed_wall")], "measured");
 }

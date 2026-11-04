@@ -17,9 +17,9 @@ use crate::campaign::{contracts::TimeBasis, runner::Trial};
 use super::{
     confidence::{binomial_lower, binomial_upper, cluster_bootstrap},
     survival::{
-        device_budget_ns, device_result, estimate_curves, nearest_rank, validate_trace,
-        wall_observation, wall_probability, AnalysisDesign, AnalysisError, Censoring, Curve,
-        DeviceResult,
+        device_budget_ns, device_probability, estimate_grouped_curves, group_mean, nearest_rank,
+        sorted_observations, validate_trace, wall_observation, wall_probability, AnalysisDesign,
+        AnalysisError, Censoring, Curve,
     },
 };
 
@@ -117,31 +117,17 @@ pub enum DifferenceOutcome {
     NotComparable(NotComparable),
 }
 
-/// Copies of `trials` whose instance id is their group, so a group counts as one observation.
-#[must_use]
-pub fn grouped(trials: &[Trial], groups: &Groups) -> Vec<Trial> {
-    trials
-        .iter()
-        .map(|trial| {
-            let mut trial = trial.clone();
-            if let Some(group) = groups.get(&trial.instance_id) {
-                trial.instance_id.clone_from(group);
-            }
-            trial
-        })
-        .collect()
-}
-
-/// The wall and device curves of one campaign arm, weighted by group.
+/// The wall and device curves of one campaign arm. Each group counts as one observation and
+/// weighs its instances equally.
 ///
 /// # Errors
-/// Returns the errors of [`estimate_curves`].
+/// Returns the errors of [`estimate_grouped_curves`].
 pub fn arm_curves(
     trials: &[Trial],
     groups: &Groups,
     design: &AnalysisDesign,
 ) -> Result<Vec<Curve>, AnalysisError> {
-    estimate_curves(&grouped(trials, groups), design)
+    estimate_grouped_curves(trials, groups, design)
 }
 
 /// Success and possible success of one arm in one group at one grid point.
@@ -156,7 +142,9 @@ type GroupPoint = (ArmPoint, ArmPoint);
 
 /// The A−B wall and device success differences over groups present in both arms.
 ///
-/// Wall differences use the design's censoring within each group. Device differences treat an
+/// Each arm maps its own instances to groups. Within a group each instance has equal weight.
+/// Wall differences use the design's censoring within each instance and stop at the shortest
+/// observation window of either arm, so no tail is extrapolated. Device differences treat an
 /// unresolved trial as a failure for the estimate and as either outcome for the band. Bands are
 /// pointwise two-sided 95 percent nearest-rank intervals from joint group resampling.
 ///
@@ -166,8 +154,9 @@ type GroupPoint = (ArmPoint, ArmPoint);
 pub fn paired_difference(
     pair: &PairSpec,
     a: &[Trial],
+    a_groups: &Groups,
     b: &[Trial],
-    groups: &Groups,
+    b_groups: &Groups,
     design: &AnalysisDesign,
 ) -> Result<DifferenceOutcome, AnalysisError> {
     if pair.size_status() == SizeStatus::UnmatchedSize {
@@ -195,18 +184,13 @@ pub fn paired_difference(
     if design.censoring == Censoring::FixedWindow && limits.any(|limit| limit != first) {
         return Err(AnalysisError::MixedBasis);
     }
-    let (common, a_only, b_only) = split_groups(a, b, groups);
+    let (common, a_only, b_only) = split_groups(a, a_groups, b, b_groups);
     if common.is_empty() {
         return Ok(DifferenceOutcome::NotComparable(
             NotComparable::NoCommonGroups,
         ));
     }
-    let wall_limit = a
-        .iter()
-        .chain(b)
-        .filter_map(|trial| trial.wall_limit)
-        .max()
-        .map_or(0.0, |limit| limit.as_secs_f64());
+    let wall_limit = common_support(a.iter().chain(b))?;
     let wall_grid: Vec<f64> = design
         .wall_grid_s
         .iter()
@@ -255,54 +239,69 @@ pub fn paired_difference(
     ]))
 }
 
+/// The shortest wall observation window over both arms, or the latest success when no trial
+/// has a window.
+fn common_support<'a>(
+    trials: impl Iterator<Item = &'a Trial> + Clone,
+) -> Result<f64, AnalysisError> {
+    if let Some(limit) = trials.clone().filter_map(|trial| trial.wall_limit).min() {
+        return Ok(limit.as_secs_f64());
+    }
+    let mut latest = Duration::ZERO;
+    for trial in trials {
+        latest = latest.max(wall_observation(trial)?.0);
+    }
+    Ok(latest.as_secs_f64())
+}
+
+/// The instances of one arm in one group, each with its trials.
+type Instances<'a> = Vec<Vec<&'a Trial>>;
+
+/// One group: the instances of A, then of B.
+type GroupTrials<'a> = (Instances<'a>, Instances<'a>);
+
 /// Groups with trials in both arms, then the counts of groups in only A and only B.
 fn split_groups<'a>(
     a: &'a [Trial],
+    a_groups: &Groups,
     b: &'a [Trial],
-    groups: &Groups,
+    b_groups: &Groups,
 ) -> (Vec<GroupTrials<'a>>, u64, u64) {
-    let mut by_group: BTreeMap<String, GroupTrials<'a>> = BTreeMap::new();
-    for trial in a {
-        by_group
-            .entry(group_of(trial, groups))
-            .or_default()
-            .0
-            .push(trial);
-    }
-    for trial in b {
-        by_group
-            .entry(group_of(trial, groups))
-            .or_default()
-            .1
-            .push(trial);
+    type ByInstance<'a> = BTreeMap<&'a str, Vec<&'a Trial>>;
+    let mut by_group: BTreeMap<&str, (ByInstance<'a>, ByInstance<'a>)> = BTreeMap::new();
+    for (trials, groups, side) in [(a, a_groups, 0), (b, b_groups, 1)] {
+        for trial in trials {
+            let instance = trial.instance_id.as_str();
+            let group = groups.get(instance).map_or(instance, String::as_str);
+            let entry = by_group.entry(group).or_default();
+            let arm = if side == 0 {
+                &mut entry.0
+            } else {
+                &mut entry.1
+            };
+            arm.entry(instance).or_default().push(trial);
+        }
     }
     let a_only = by_group.values().filter(|(_, b)| b.is_empty()).count() as u64;
     let b_only = by_group.values().filter(|(a, _)| a.is_empty()).count() as u64;
     let common = by_group
         .into_values()
         .filter(|(a, b)| !a.is_empty() && !b.is_empty())
+        .map(|(a, b)| (a.into_values().collect(), b.into_values().collect()))
         .collect();
     (common, a_only, b_only)
-}
-
-fn group_of(trial: &Trial, groups: &Groups) -> String {
-    groups
-        .get(&trial.instance_id)
-        .unwrap_or(&trial.instance_id)
-        .clone()
 }
 
 fn difference_assumption(design: &AnalysisDesign, groups: u64) -> String {
     format!(
         "Pointwise two-sided 95% bands from {} joint resamples of complete groups across A and B, \
          seed={}, nearest rank percentiles. Only the {groups} groups with trials in both arms enter. \
-         An arm with no success or only successes widens the band by its exact Clopper-Pearson bound.",
+         Each group weighs its instances equally. Wall differences stop at the shortest \
+         observation window of either arm. An arm with no observed success or only successes \
+         widens the band by its exact Clopper-Pearson bound.",
         design.bootstrap_resamples, design.bootstrap_seed
     )
 }
-
-/// The trials of one group: A, then B.
-type GroupTrials<'a> = (Vec<&'a Trial>, Vec<&'a Trial>);
 
 type Arms<'a> = [GroupTrials<'a>];
 
@@ -311,13 +310,11 @@ fn wall_points(
     grid: &[f64],
     censoring: &Censoring,
 ) -> Result<Vec<Vec<GroupPoint>>, AnalysisError> {
-    let observations = |trials: &[&Trial]| {
-        let mut observations = trials
+    let observations = |instances: &Instances<'_>| {
+        instances
             .iter()
-            .map(|trial| wall_observation(trial))
-            .collect::<Result<Vec<(Duration, bool)>, _>>()?;
-        observations.sort_unstable_by_key(|&(time, _)| time);
-        Ok::<_, AnalysisError>(observations)
+            .map(|trials| sorted_observations(trials))
+            .collect::<Result<Vec<_>, _>>()
     };
     common
         .iter()
@@ -326,8 +323,10 @@ fn wall_points(
             Ok(grid
                 .iter()
                 .map(|&time| {
-                    let point = |observations: &[(Duration, bool)]| {
-                        let success = wall_probability(observations, time, censoring);
+                    let point = |instances: &[Vec<(Duration, bool)>]| {
+                        let success = group_mean(&[instances], |observations| {
+                            wall_probability(observations, time, censoring)
+                        });
                         ArmPoint {
                             success,
                             possible: success,
@@ -345,19 +344,13 @@ fn device_points(common: &Arms<'_>, grid: &[f64]) -> Result<Vec<Vec<GroupPoint>>
         .iter()
         .map(|seconds| device_budget_ns(*seconds))
         .collect::<Result<Vec<_>, _>>()?;
-    let point = |trials: &[&Trial], budget_ns: u64| {
-        let results: Vec<DeviceResult> = trials
-            .iter()
-            .map(|trial| device_result(trial, budget_ns))
-            .collect();
-        let share = |accept: &dyn Fn(DeviceResult) -> bool| {
-            count_f64(results.iter().filter(|result| accept(**result)).count())
-                / count_f64(results.len())
-        };
-        ArmPoint {
-            success: share(&|result| result == DeviceResult::Success),
-            possible: share(&|result| result != DeviceResult::Failure),
-        }
+    let point = |instances: &Instances<'_>, budget_ns: u64| ArmPoint {
+        success: group_mean(&[instances.as_slice()], |trials| {
+            device_probability(trials, budget_ns, false)
+        }),
+        possible: group_mean(&[instances.as_slice()], |trials| {
+            device_probability(trials, budget_ns, true)
+        }),
     };
     Ok(common
         .iter()
@@ -371,8 +364,9 @@ fn device_points(common: &Arms<'_>, grid: &[f64]) -> Result<Vec<Vec<GroupPoint>>
 }
 
 /// The estimate and band at one grid point. The lower band resamples A success minus B possible,
-/// the upper A possible minus B success. An arm at zero or full success widens the band by its
-/// exact bound, so a band never claims certainty from a degenerate bootstrap.
+/// the upper A possible minus B success. An arm with no observed success, counting unresolved
+/// trials as failures, or with only successes widens the band by its exact bound, so a band never
+/// claims certainty from a degenerate bootstrap.
 fn difference_point(
     clusters: &[Vec<GroupPoint>],
     index: usize,
@@ -397,16 +391,14 @@ fn difference_point(
     let zero = binomial_upper(0, groups, 0.025)?;
     let full = 1.0 - binomial_lower(groups, groups, 0.025)?;
     let a_success = mean(&all, &|(a, _)| a.success);
-    let a_possible = mean(&all, &|(a, _)| a.possible);
     let b_success = mean(&all, &|(_, b)| b.success);
-    let b_possible = mean(&all, &|(_, b)| b.possible);
-    if a_possible <= 0.0 {
+    if a_success <= 0.0 {
         upper += zero;
     }
     if a_success >= 1.0 {
         lower -= full;
     }
-    if b_possible <= 0.0 {
+    if b_success <= 0.0 {
         lower -= zero;
     }
     if b_success >= 1.0 {

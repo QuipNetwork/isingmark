@@ -140,11 +140,13 @@ pub struct AbRow {
     pub comparison: &'static str,
     /// The energy reference: `qpu80_pp` for an archived arm, the target rule for a campaign arm.
     pub reference: String,
-    /// Resampling groups of a campaign arm, reference models of an archived arm.
+    /// Instances of a campaign arm, reference models of an archived arm.
     pub models: u64,
+    /// Independent resampling groups. An archived arm counts each reference model.
+    pub groups: u64,
     pub trials: u64,
     pub unresolved: u64,
-    /// Share of trials with every state captured.
+    /// Share of trials with every state captured in every stage.
     pub state_coverage: Option<f64>,
     /// Wall success F at each of [`WALL_REPORT_S`], `None` beyond the observation window.
     pub wall: Vec<(f64, Option<Band>)>,
@@ -176,12 +178,13 @@ pub fn ab_rows(
         (
             ArmEvidence::Campaign {
                 trials: a_trials,
-                groups,
+                groups: a_groups,
             },
             ArmEvidence::Campaign {
-                trials: b_trials, ..
+                trials: b_trials,
+                groups: b_groups,
             },
-        ) => paired_difference(pair, a_trials, b_trials, groups, design)?,
+        ) => paired_difference(pair, a_trials, a_groups, b_trials, b_groups, design)?,
         _ if pair.size_status() == SizeStatus::UnmatchedSize => {
             DifferenceOutcome::NotComparable(NotComparable::UnmatchedSize)
         }
@@ -230,9 +233,18 @@ fn campaign_row(
             .map(|trial| trial.resources.get(key).copied())
             .try_fold(0_u64, |sum, value| sum.checked_add(value?))
     };
+    // A portfolio can lose states in an early stage and still end accepted.
     let complete = trials
         .iter()
-        .filter(|trial| trial.terminal != TerminalReason::IncompleteCapture)
+        .filter(|trial| {
+            trial.terminal != TerminalReason::IncompleteCapture
+                && trial
+                    .resources
+                    .get("incomplete_captures")
+                    .copied()
+                    .unwrap_or(0)
+                    == 0
+        })
         .count();
     Ok(AbRow {
         pair_id: pair.pair_id.clone(),
@@ -242,6 +254,7 @@ fn campaign_row(
         comparison,
         reference: arm.target_rule.clone(),
         models: wall.map_or(0, |curve| curve.instances),
+        groups: wall.map_or(0, |curve| curve.groups),
         trials: trials.len() as u64,
         unresolved: device.map_or(0, |curve| curve.unresolved),
         state_coverage: (!trials.is_empty())
@@ -288,6 +301,7 @@ fn archived_row(
         comparison,
         reference: "qpu80_pp".into(),
         models: cell.reference.energies_milli.len() as u64,
+        groups: cell.reference.energies_milli.len() as u64,
         trials: 0,
         unresolved: 0,
         state_coverage: None,
@@ -316,12 +330,12 @@ fn band_at(curve: &Curve, time: f64) -> Option<Band> {
 
 /// The CSV header of [`ab_csv`].
 pub const AB_CSV_HEADER: &str = "pair_id,side,source,family,family_revision,parameter_digest,\
-policy_id,size_spins,target_rule,panel,size_status,comparison,reference,models,trials,unresolved,\
+policy_id,size_spins,target_rule,panel,size_status,comparison,reference,models,groups,trials,unresolved,\
 state_coverage,wall_f_1,wall_f_1_lower,wall_f_1_upper,wall_f_10,wall_f_10_lower,wall_f_10_upper,\
 wall_f_30,wall_f_30_lower,wall_f_30_upper,wall_f_60,wall_f_60_lower,wall_f_60_upper,wall_f_1200,\
 wall_f_1200_lower,wall_f_1200_upper,device_g_30,device_g_30_lower,device_g_30_upper,device_timing,\
 device_s_lower,device_s_upper,host_compute_s,evaluations,tier_rule_version,historical_tier,\
-tier_speed_wall";
+tier_beat_wall,tier_speed_wall";
 
 /// The rows as CSV under [`AB_CSV_HEADER`]. A missing value is an empty field.
 #[must_use]
@@ -344,6 +358,7 @@ pub fn ab_csv(rows: &[AbRow]) -> String {
             row.comparison.into(),
             row.reference.clone(),
             row.models.to_string(),
+            row.groups.to_string(),
             row.trials.to_string(),
             row.unresolved.to_string(),
             optional(row.state_coverage),
@@ -373,18 +388,18 @@ pub fn ab_csv(rows: &[AbRow]) -> String {
                 .map(|label| label.tier.label().to_owned())
                 .unwrap_or_default(),
         );
+        let basis = |estimated: bool| if estimated { "scaled" } else { "measured" }.to_owned();
+        let label = row.tier.as_ref();
         fields.push(
-            row.tier
-                .as_ref()
+            label
+                .and_then(|label| label.beat_run.as_ref())
+                .map(|run| basis(run.estimated))
+                .unwrap_or_default(),
+        );
+        fields.push(
+            label
                 .and_then(|label| label.speed.as_ref())
-                .map(|speed| {
-                    if speed.estimated {
-                        "scaled"
-                    } else {
-                        "measured"
-                    }
-                    .to_owned()
-                })
+                .map(|speed| basis(speed.estimated))
                 .unwrap_or_default(),
         );
         let quoted: Vec<String> = fields.iter().map(|field| quote(field)).collect();

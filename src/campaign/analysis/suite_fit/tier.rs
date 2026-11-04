@@ -75,6 +75,9 @@ pub struct ClassicalRun {
     /// Core-seconds per model on CPU, card-seconds per model on CUDA.
     pub device_s: Option<f64>,
     pub wall_basis: WallBasis,
+    /// Runs of one device that share a rung, such as the seeds of one sweep count, form one speed
+    /// candidate. It reaches only when every run reaches, with the timing of the first run.
+    pub rung: Option<String>,
     /// Energy in milli per attempted model, `None` when the state is missing.
     pub energies_milli: BTreeMap<String, Option<i64>>,
 }
@@ -83,7 +86,7 @@ impl ClassicalRun {
     /// The wall per model when its basis may decide a tier.
     fn tier_wall(&self) -> Option<f64> {
         match self.wall_basis {
-            WallBasis::Measured | WallBasis::Scaled => self.wall_s,
+            WallBasis::Measured | WallBasis::Scaled => seconds(self.wall_s),
             WallBasis::Modeled => None,
         }
     }
@@ -177,7 +180,13 @@ pub fn tier_runs(reference: &QpuReference, runs: &[ClassicalRun]) -> Vec<TierRun
         let Some(wall_s) = run.tier_wall() else {
             continue;
         };
-        let budget_s = run.budget_s.unwrap_or(wall_s);
+        let budget_s = match run.budget_s {
+            None => wall_s,
+            Some(budget_s) => match seconds(Some(budget_s)) {
+                Some(budget_s) => budget_s,
+                None => continue,
+            },
+        };
         if budget_s > BEAT_BUDGET_S {
             continue;
         }
@@ -249,18 +258,32 @@ impl SpeedRun {
 }
 
 /// The speed pick over both devices among runs with a timed wall, device-seconds, and at least
-/// [`MIN_MODELS`] common models. A reached run wins over any bound. Among reached runs the fewest
-/// device-seconds win, among bounds the most. Ties go to CUDA, then to the earlier run.
+/// [`MIN_MODELS`] common models. Runs sharing a rung form one candidate. A reached candidate wins
+/// over any bound. Among reached candidates the fewest device-seconds win, among bounds the most.
+/// Ties go to CUDA, then to the earlier candidate. A candidate whose reach depends on missing
+/// states is unresolved and takes no part. Without a finite postprocess time there is no pick.
 #[must_use]
 pub fn speed_run(reference: &QpuReference, runs: &[ClassicalRun]) -> Option<SpeedRun> {
-    let qpu_wall_s = qpu_wall(reference.post_s);
+    let post_s = seconds(Some(reference.post_s))?;
+    let qpu_wall_s = qpu_wall(post_s);
     let picks: Vec<SpeedRun> = [ClassicalDevice::Cuda, ClassicalDevice::Cpu]
         .into_iter()
         .filter_map(|device| {
-            let candidates: Vec<SpeedRun> = runs
+            let mut by_rung: Vec<Vec<&ClassicalRun>> = Vec::new();
+            for run in runs.iter().filter(|run| run.device == device) {
+                let shared = run.rung.as_ref().and_then(|rung| {
+                    by_rung
+                        .iter_mut()
+                        .find(|members| members[0].rung.as_ref() == Some(rung))
+                });
+                match shared {
+                    Some(members) => members.push(run),
+                    None => by_rung.push(vec![run]),
+                }
+            }
+            let candidates: Vec<SpeedRun> = by_rung
                 .iter()
-                .filter(|run| run.device == device)
-                .filter_map(|run| speed_candidate(reference, run, qpu_wall_s))
+                .filter_map(|members| speed_candidate(reference, members, qpu_wall_s))
                 .collect();
             pick(candidates)
         })
@@ -268,30 +291,60 @@ pub fn speed_run(reference: &QpuReference, runs: &[ClassicalRun]) -> Option<Spee
     pick(picks)
 }
 
-fn speed_candidate(
-    reference: &QpuReference,
-    run: &ClassicalRun,
-    qpu_wall_s: f64,
-) -> Option<SpeedRun> {
-    let wall_s = run.tier_wall()?;
-    let device_s = run.device_s?;
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Reach {
+    Reached,
+    NotReached,
+    /// The missing states decide whether the run reaches.
+    Unresolved,
+}
+
+/// Whether a run is at or below the reference on more than half of its common models.
+fn reach(reference: &QpuReference, run: &ClassicalRun) -> Reach {
     let common = run.common(reference);
-    if common.len() < MIN_MODELS {
-        return None;
-    }
     let at_or_below = common
         .iter()
         .filter(|(target, energy)| energy.is_some_and(|energy| energy <= *target))
         .count();
+    let missing = common.iter().filter(|(_, energy)| energy.is_none()).count();
+    if at_or_below * 2 > common.len() {
+        Reach::Reached
+    } else if (at_or_below + missing) * 2 > common.len() {
+        Reach::Unresolved
+    } else {
+        Reach::NotReached
+    }
+}
+
+fn speed_candidate(
+    reference: &QpuReference,
+    members: &[&ClassicalRun],
+    qpu_wall_s: f64,
+) -> Option<SpeedRun> {
+    let first = members.first()?;
+    let wall_s = first.tier_wall()?;
+    let device_s = seconds(first.device_s)?;
+    let models = first.common(reference).len();
+    if models < MIN_MODELS {
+        return None;
+    }
+    let outcomes: Vec<Reach> = members.iter().map(|run| reach(reference, run)).collect();
+    let reached = if outcomes.contains(&Reach::NotReached) {
+        false
+    } else if outcomes.contains(&Reach::Unresolved) {
+        return None;
+    } else {
+        true
+    };
     Some(SpeedRun {
-        device: run.device,
-        name: run.name.clone(),
+        device: first.device,
+        name: first.name.clone(),
         wall_s,
         device_s,
         qpu_wall_s,
-        reached: at_or_below * 2 > common.len(),
-        models: common.len(),
-        estimated: run.estimated(),
+        reached,
+        models,
+        estimated: first.estimated(),
     })
 }
 
@@ -394,11 +447,13 @@ pub fn tier(reference: &QpuReference, runs: &[ClassicalRun]) -> Option<TierLabel
         return Some(label(Tier::NeedsMeasurement, parts.join("; ")));
     };
     let verb = if beating { "beats" } else { "does not beat" };
+    let estimated = |estimated: bool| if estimated { " (estimated wall)" } else { "" };
     let reason = format!(
-        "Beat test: {} `{}` {verb} the QPU, below the reference on {} of {} models. \
-         Speed test: {} `{}` {} at {} s per model, {:.1} times the QPU wall of {} s.",
+        "Beat test: {} `{}`{} {verb} the QPU, below the reference on {} of {} models. \
+         Speed test: {} `{}` {} at {} s per model{}, {:.1} times the QPU wall of {} s.",
         run.device.label(),
         run.name,
+        estimated(run.estimated),
         run.classical_wins,
         run.common,
         speed.device.label(),
@@ -409,6 +464,7 @@ pub fn tier(reference: &QpuReference, runs: &[ClassicalRun]) -> Option<TierLabel
             "never reaches the reference, a lower bound"
         },
         speed.wall_s,
+        estimated(speed.estimated),
         speed.ratio(),
         speed.qpu_wall_s,
     );
@@ -469,6 +525,11 @@ fn count_f64(count: usize) -> f64 {
 )]
 fn milli_f64(milli: i64) -> f64 {
     milli as f64
+}
+
+/// A finite, nonnegative number of seconds, else missing timing.
+fn seconds(value: Option<f64>) -> Option<f64> {
+    value.filter(|seconds| seconds.is_finite() && *seconds >= 0.0)
 }
 
 fn milli_units(milli: i64) -> f64 {
