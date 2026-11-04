@@ -25,6 +25,7 @@ pub enum CampaignError {
     MissingField(&'static str),
     Overflow,
     InvalidRun(String),
+    InvalidArchive(String),
     Eval(EvalError),
 }
 
@@ -43,6 +44,7 @@ impl fmt::Display for CampaignError {
             Self::MissingField(field) => write!(formatter, "missing required field {field}"),
             Self::Overflow => write!(formatter, "coefficient or energy exceeds its integer range"),
             Self::InvalidRun(reason) => write!(formatter, "invalid run: {reason}"),
+            Self::InvalidArchive(reason) => write!(formatter, "invalid archive index: {reason}"),
             Self::Eval(error) => error.fmt(formatter),
         }
     }
@@ -59,7 +61,8 @@ impl Error for CampaignError {
             | Self::TooLarge { .. }
             | Self::MissingField(_)
             | Self::Overflow
-            | Self::InvalidRun(_) => None,
+            | Self::InvalidRun(_)
+            | Self::InvalidArchive(_) => None,
         }
     }
 }
@@ -93,6 +96,7 @@ impl From<CampaignError> for EvalError {
             CampaignError::MissingField(_) => "missing_field",
             CampaignError::Overflow => "overflow",
             CampaignError::InvalidRun(_) => "invalid_run",
+            CampaignError::InvalidArchive(_) => "invalid_archive",
             CampaignError::Eval(error) => return error.clone(),
         };
         Self {

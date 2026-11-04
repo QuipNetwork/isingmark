@@ -12,6 +12,7 @@ use isingmark::campaign::analysis::suite_fit::tier::{
 };
 use isingmark::campaign::{
     analysis::confidence::binomial_upper,
+    analysis::suite_fit::table::{ab_csv, ab_rows, load_archived_cell, ArmEvidence, AB_CSV_HEADER},
     analysis::suite_fit::{
         arm_curves, paired_difference, ArmSpec, Difference, DifferenceOutcome, Groups,
         NotComparable, PairSpec, Side, SizeStatus, TargetPanel,
@@ -580,4 +581,139 @@ fn physical_pairs_stay_unmatched_and_panels_never_mix() {
             NotComparable::NoCommonGroups
         ))
     );
+}
+
+const INDEX: &str = "evaluation/qblock/archive-index.json";
+
+#[test]
+fn an_archived_cell_loads_its_qpu_reference() {
+    let cell = load_archived_cell(Path::new(INDEX), "ice-charge").expect("archived cell");
+    assert_eq!(cell.reference.energies_milli.len(), 100);
+    assert!((cell.reference.post_s - 0.25).abs() < f64::EPSILON);
+    assert_eq!(cell.family, "ice-tiles");
+    assert_eq!(
+        cell.reference
+            .energies_milli
+            .get("06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0"),
+        Some(&-1_523_188)
+    );
+    assert_eq!(cell.source_path, "new-pow/targets-pp-100.json");
+    assert!(load_archived_cell(Path::new(INDEX), "no-such-cell").is_err());
+}
+
+#[test]
+fn an_archived_arm_has_no_curve_and_no_difference() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let cell = load_archived_cell(Path::new(INDEX), "ice-twisted-w62-dimer1200").expect("cell");
+    let b = arm(dir.path(), "b", &[0, 1, 2], 1_200, Outcome::Accepted(5));
+    let groups = Groups::new();
+    let (rows, outcome) = ab_rows(
+        &pair("x-w62-p1200", 4_575, 4_575),
+        &ArmEvidence::Archived {
+            cell: &cell,
+            runs: &[],
+        },
+        &ArmEvidence::Campaign {
+            trials: &b,
+            groups: &groups,
+        },
+        &AnalysisDesign::default(),
+    )
+    .expect("rows");
+    assert_eq!(
+        outcome,
+        DifferenceOutcome::NotComparable(NotComparable::ArchivedArm)
+    );
+    let [a_row, b_row] = &rows;
+    assert_eq!(
+        (a_row.source, a_row.models, a_row.trials),
+        ("archived", 100, 0)
+    );
+    assert!(a_row.wall.iter().all(|(_, band)| band.is_none()));
+    assert!(a_row.device_30.is_none() && a_row.state_coverage.is_none());
+    let label = a_row.tier.as_ref().expect("a historical label");
+    assert_eq!(
+        (label.rule_version, label.tier),
+        (3, Tier::NeedsMeasurement)
+    );
+    assert_eq!(
+        (b_row.source, b_row.models, b_row.trials),
+        ("campaign", 3, 3)
+    );
+    assert!(b_row.tier.is_none());
+    let band = b_row
+        .wall
+        .iter()
+        .find(|(time, _)| time.total_cmp(&10.0).is_eq())
+        .and_then(|(_, band)| *band);
+    close(band.expect("F(10)").estimate, 1.0);
+
+    let csv = ab_csv(&rows);
+    let mut lines = csv.lines();
+    assert_eq!(lines.next(), Some(AB_CSV_HEADER));
+    let a_line: Vec<&str> = lines.next().expect("A row").split(',').collect();
+    let header: Vec<&str> = AB_CSV_HEADER.split(',').collect();
+    let column = |name: &str| header.iter().position(|field| *field == name).expect(name);
+    assert_eq!(a_line[column("comparison")], "archived_arm");
+    assert_eq!(a_line[column("wall_f_1200")], "");
+    assert_eq!(a_line[column("historical_tier")], "Needs measurement");
+    assert_eq!(a_line[column("tier_rule_version")], "3");
+    assert_eq!(a_line[column("reference")], "qpu80_pp");
+}
+
+#[test]
+fn campaign_rows_keep_costs_coverage_and_missing_timing() {
+    let dir = tempfile::tempdir().expect("temporary traces");
+    let mut a = arm(dir.path(), "a", &[0, 1, 2, 3], 1_200, Outcome::Accepted(5));
+    a.push(trial(
+        dir.path(),
+        "a-4",
+        "i4",
+        1_200,
+        Outcome::IncompleteCapture,
+    ));
+    for trial in &mut a {
+        trial
+            .resources
+            .insert("host_compute_ns".into(), 2_000_000_000);
+        trial.resources.insert("evaluations".into(), 3);
+    }
+    let mut b = arm(
+        dir.path(),
+        "b",
+        &[0, 1, 2, 3, 4],
+        1_200,
+        Outcome::Accepted(5),
+    );
+    b[0].device_total = DeviceTime::missing();
+    let groups = Groups::new();
+    let (rows, outcome) = ab_rows(
+        &pair("x-w62-p1200", 4_575, 4_575),
+        &ArmEvidence::Campaign {
+            trials: &a,
+            groups: &groups,
+        },
+        &ArmEvidence::Campaign {
+            trials: &b,
+            groups: &groups,
+        },
+        &AnalysisDesign::default(),
+    )
+    .expect("rows");
+    assert!(matches!(outcome, DifferenceOutcome::Estimated(_)));
+    let [a_row, b_row] = &rows;
+    close(a_row.state_coverage.expect("coverage"), 0.8);
+    close(a_row.host_compute_s.expect("host"), 10.0);
+    assert_eq!(a_row.evaluations, Some(15));
+    // Four 1 s proofs and one 30 s capture failure.
+    close(a_row.device_s_upper.expect("device upper"), 34.0);
+    assert_eq!(b_row.device_s_upper, None);
+    assert_eq!(b_row.host_compute_s, None);
+    let csv = ab_csv(&rows);
+    let header: Vec<&str> = AB_CSV_HEADER.split(',').collect();
+    let b_line: Vec<&str> = csv.lines().nth(2).expect("B row").split(',').collect();
+    let column = |name: &str| header.iter().position(|field| *field == name).expect(name);
+    assert_eq!(b_line[column("device_timing")], "missing");
+    assert_eq!(b_line[column("device_s_upper")], "");
+    assert_eq!(b_line[column("comparison")], "estimated");
 }

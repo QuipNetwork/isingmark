@@ -5,6 +5,7 @@
 //! A−B difference exists only for a matched pair whose arms both hold campaign trials. It resamples
 //! complete groups jointly across both arms. A Tier label from [`tier`] is historical context only.
 
+pub mod table;
 pub mod tier;
 
 use std::{collections::BTreeMap, time::Duration};
