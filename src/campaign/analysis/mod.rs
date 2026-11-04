@@ -3,4 +3,5 @@
 
 pub mod confidence;
 pub mod costs;
+pub mod suite_fit;
 pub mod survival;
