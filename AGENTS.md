@@ -109,7 +109,8 @@ corpora/              chain corpora (chain-h0, chain-ternary), the smoke
                       frozen-model example per problem cell, except
                       cbfm-p-f17 (no frozen model), sports-break, and
                       paint-shop (own graphs)
-evaluation/qblock/    campaign configs, fixtures, and the evidence source list
+evaluation/qblock/    campaign configs, fixtures, report templates, and the
+                      evidence source list
 fixtures/             topology specs; suite-live-2026-09-21.spec.json is the
                       live suite topology
 reports/              import-map.md: provenance and destination tickets
