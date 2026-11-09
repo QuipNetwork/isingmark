@@ -160,7 +160,7 @@ Of the CPU kernels, `cpu-sa`, `cpu-gibbs`, and `cpu-sb` ship as release assets. 
 cargo build --release --features experimental
 ```
 
-`beit` (`quip-beit-sa`) and `cuopt` (`quip-cuopt-milp`) are not published as release assets, so `tools/fetch-miners.sh` cannot supply them. Build them from `quip.network/ising-solver-beit` (Rust) and `quip.network/ising-solver-nvidia` (Python), then put the binaries on `PATH`. Both need an external resource to run jobs: `beit` needs `BEIT_CUSTOMER_KEY` and bills per sample, `cuopt` needs a self-hosted cuOpt server.
+`beit` (`quip-beit-sa`) and `cuopt` (`quip-cuopt-milp`) are not published as release assets, so `tools/fetch-miners.sh` cannot supply them. Build them from `quip.network/quip-solver-beit` (Rust) and `quip.network/quip-solver-cuopt` (Python), then put the binaries on `PATH`. Both need an external resource to run jobs: `beit` needs `BEIT_CUSTOMER_KEY` and bills per sample, `cuopt` needs a self-hosted cuOpt server.
 
 ## License
 
