@@ -1,0 +1,67 @@
+{
+  "schema_revision": 1,
+  "ticket": "QUI-2232 (RP-2)",
+  "protocol": "QUI-2230 (RP-0)",
+  "cell": "ice-charge",
+  "frozen_on": "2026-11-10",
+  "pass_rule": {
+    "statement": "Reproduced when the Tier label under rule v3 is the same, the mean energy gap is within two archived standard deviations of the archived mean, and the time to target is within a factor of 2 of the archived value. Otherwise not reproduced, or incomplete when a measure cannot be computed.",
+    "tier_rule_version": 3,
+    "gap_sd_multiple": 2.0,
+    "time_factor": 2.0
+  },
+  "archived": {
+    "source": "new-pow/notion/rows.json, rule version 3, built 2026-10-27, recomputed from the stored per-model results",
+    "tier": "3",
+    "gap": {
+      "mean_units": 1.9496,
+      "sd_units": 0.966,
+      "models": 100,
+      "run": "CUDA m100/sf-s65536, energies after descent"
+    },
+    "wins": {
+      "qpu": 0,
+      "ties": 0,
+      "classical": 100
+    },
+    "time_to_target_s": {
+      "cpu": 1.8966,
+      "cuda": 4.563666062676502
+    },
+    "best_device": "cpu",
+    "time_basis": {
+      "cpu": "median core-seconds per model of rung depth-2s-100 (glasssa, 1 anneal, 72,155 sweeps, 1 thread, 30 models)",
+      "cuda": "median batch wall divided by jobs per batch of m100/sf-s65536 (33 to 34 jobs share one card)"
+    },
+    "speed_ratio": 5.42,
+    "qpu_post_s": 0.25
+  },
+  "policies": {
+    "file": "ice-charge.policies.json",
+    "blake3": "be3bf35100920f0dc00c90e15e9fef6a515bc25a3e67b84db872bf0a544ee23c",
+    "cpu": {
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "substitutes_for": "glasssa depth-2s-100",
+      "difference": "quip-cpu-sa default schedule and seed instead of the glasssa schedule (b0 0.1, bk 0.4, b1 2.5, unit 62, seed 1)"
+    },
+    "cuda": {
+      "policy_id": "rp2-cuda-sa-r64-s65536",
+      "substitutes_for": "round4-cuda-harness m100/sf-s65536",
+      "difference": "quip-cuda-sa default schedule and seed, one job at a time, and no greedy or loop descent after the anneal"
+    }
+  },
+  "cohort": {
+    "recipe": "ice-charge",
+    "count": 30,
+    "topology": "fixtures/suite-live-2026-09-21.spec.json",
+    "topology_blake3": "2249dc8aa95c67dbb09794e19efc1ebc2d2f8bfcfb4a1a79ff3bf76c33eb9bde",
+    "max_energy": -1000000.0,
+    "verdict_until_rp6": "incomplete: waiting on RP-6"
+  },
+  "control": {
+    "index": "evaluation/qblock/archive-index.json",
+    "index_blake3": "bb9b98ec4b8db71dac800a3e0726252fa5bd621a9c8a82f40334e812d132b8f7",
+    "rows": 100,
+    "max_energy_rule": "(qpu80_pp + 1) / 1000"
+  }
+}

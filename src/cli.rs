@@ -93,6 +93,25 @@ pub enum CampaignCommand {
     PortfolioCheck(PortfolioCheckArgs),
     /// Generate a fresh cohort of canonical instances and a manifest that lists them.
     Cohort(CohortArgs),
+    /// Compare reproduction campaign outputs with a frozen archived row and write the verdict.
+    ReproduceReport(ReproduceReportArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ReproduceReportArgs {
+    /// Frozen comparison file, for example
+    /// `evaluation/qblock/configs/reproduction/ice-charge.json`. Run from the repository root.
+    #[arg(long)]
+    pub frozen: PathBuf,
+    /// Campaign output directory of the control arm (the archived models). Repeatable.
+    #[arg(long)]
+    pub control: Vec<PathBuf>,
+    /// Campaign output directory of the fresh cohort. Repeatable.
+    #[arg(long)]
+    pub fresh: Vec<PathBuf>,
+    /// New directory for `comparison.json` and `comparison.md`.
+    #[arg(long)]
+    pub out: PathBuf,
 }
 
 #[derive(Debug, Args)]
