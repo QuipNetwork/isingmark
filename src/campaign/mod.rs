@@ -6,6 +6,7 @@ use std::{error::Error, fmt, io};
 use contracts::EvalError;
 
 pub mod analysis;
+pub mod cohort;
 pub mod contracts;
 pub mod families;
 pub mod instance;

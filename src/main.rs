@@ -93,6 +93,26 @@ async fn run_campaign_command(args: CampaignArgs) -> ExitCode {
             Err(error) => campaign_failure(&error),
         };
     }
+    if let Some(CampaignCommand::Cohort(inputs)) = args.command {
+        let request = isingmark::campaign::cohort::CohortRequest {
+            recipe: inputs.recipe,
+            count: inputs.count,
+            topology: inputs.topology,
+            max_energy: inputs.max_energy,
+            policies: inputs.policies,
+            out: inputs.out,
+        };
+        return match isingmark::campaign::cohort::write_cohort(
+            &FamilyRegistry::production(),
+            &request,
+        ) {
+            Ok(record) => match write_campaign_json(&record) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => campaign_failure(&error),
+            },
+            Err(error) => campaign_failure(&error),
+        };
+    }
     if let Some(CampaignCommand::Serve(inputs)) = args.command {
         return match serve_campaign(
             &inputs.into_config(false),
