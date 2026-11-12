@@ -1,0 +1,2497 @@
+{
+  "cell": "ice-charge",
+  "control": {
+    "cpu": {
+      "summary": {
+        "device": "cpu",
+        "policy_id": "rp2-cpu-sa-r1-s72155",
+        "trials": 100,
+        "with_state": 100,
+        "terminals": {
+          "accepted": 23,
+          "evaluation_limit": 77
+        },
+        "energy_units": {
+          "median": -1527.502,
+          "mean": -1527.6707200000005,
+          "min": -1556.308,
+          "max": -1503.562
+        },
+        "median_wall_s": 4.4774455185
+      },
+      "gap": {
+        "mean_units": -0.8672000000000001,
+        "sd_units": 1.318662714091573,
+        "models": 100
+      },
+      "qpu_wins": 77,
+      "ties": 0,
+      "classical_wins": 23,
+      "missing": 0,
+      "at_or_below": 23,
+      "reached": false,
+      "time_to_target_s": null
+    },
+    "cuda": {
+      "summary": {
+        "device": "cuda",
+        "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+        "trials": 100,
+        "with_state": 100,
+        "terminals": {
+          "accepted": 100
+        },
+        "energy_units": {
+          "median": -1530.5349999999999,
+          "mean": -1530.5475400000003,
+          "min": -1559.022,
+          "max": -1506.486
+        },
+        "median_wall_s": 23.274044127499998
+      },
+      "gap": {
+        "mean_units": 2.00962,
+        "sd_units": 0.8538241815088707,
+        "models": 100
+      },
+      "qpu_wins": 0,
+      "ties": 0,
+      "classical_wins": 100,
+      "missing": 0,
+      "at_or_below": 100,
+      "reached": true,
+      "time_to_target_s": 23.274044127499998
+    }
+  },
+  "tier": {
+    "rule_version": 3,
+    "tier": "three",
+    "reason": "Beat test: CUDA `rp2-cuda-msa-descent-r64-s65536` beats the QPU, below the reference on 100 of 100 models. Speed test: CUDA `rp2-cuda-msa-descent-r64-s65536` reaches the reference at 23.274044127499998 s per model, 66.5 times the QPU wall of 0.35 s.",
+    "beat_run": {
+      "device": "cuda",
+      "name": "rp2-cuda-msa-descent-r64-s65536",
+      "wall_s": 23.274044127499998,
+      "budget_s": 23.274044127499998,
+      "estimated": false,
+      "stat": {
+        "mean_units": 2.00962,
+        "sd_units": 0.8538241815088707,
+        "models": 100
+      },
+      "common": 100,
+      "missing": 0,
+      "qpu_wins": 0,
+      "ties": 0,
+      "classical_wins": 100,
+      "classical_mean_milli": -1530547.54
+    },
+    "speed": {
+      "device": "cuda",
+      "name": "rp2-cuda-msa-descent-r64-s65536",
+      "wall_s": 23.274044127499998,
+      "device_s": 23.274044127499998,
+      "qpu_wall_s": 0.35,
+      "reached": true,
+      "models": 100,
+      "estimated": false
+    }
+  },
+  "checks": [
+    {
+      "name": "tier",
+      "archived": "3",
+      "reproduced": "3",
+      "pass": true
+    },
+    {
+      "name": "gap",
+      "archived": "+1.950 (sd 0.966), pass within 1.932",
+      "reproduced": "+2.010 (sd 0.854, 100 models)",
+      "pass": true
+    },
+    {
+      "name": "time_to_target",
+      "archived": "cpu 1.8966 s",
+      "reproduced": "cpu did not reach (23 of 100 at or below)",
+      "pass": false
+    }
+  ],
+  "control_verdict": "not reproduced: time_to_target failed",
+  "fresh": {
+    "cpu": {
+      "device": "cpu",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "trials": 30,
+      "with_state": 30,
+      "terminals": {
+        "evaluation_limit": 30
+      },
+      "energy_units": {
+        "median": -1531.549,
+        "mean": -1529.993133333333,
+        "min": -1552.704,
+        "max": -1510.414
+      },
+      "median_wall_s": 4.511944242
+    },
+    "cuda": {
+      "device": "cuda",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "trials": 30,
+      "with_state": 30,
+      "terminals": {
+        "evaluation_limit": 30
+      },
+      "energy_units": {
+        "median": -1534.3890000000001,
+        "mean": -1532.5116666666665,
+        "min": -1553.894,
+        "max": -1512.654
+      },
+      "median_wall_s": 23.284145844
+    }
+  },
+  "fresh_verdict": "incomplete: waiting on RP-6",
+  "trials": [
+    {
+      "instance_id": "ice-charge-a-06fef0b7a59d82ae",
+      "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1523320,
+      "states": 1,
+      "wall_s": 4.414915312
+    },
+    {
+      "instance_id": "ice-charge-a-3693ad03d06a4f1b",
+      "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1538380,
+      "states": 1,
+      "wall_s": 4.437543548
+    },
+    {
+      "instance_id": "ice-charge-a-44d4c467f1f53cd7",
+      "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1539608,
+      "states": 1,
+      "wall_s": 4.47187391
+    },
+    {
+      "instance_id": "ice-charge-a-6ded25b00b725b18",
+      "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1518650,
+      "states": 1,
+      "wall_s": 4.490194183
+    },
+    {
+      "instance_id": "ice-charge-a-82eaa641178c5c14",
+      "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1519984,
+      "states": 1,
+      "wall_s": 4.527840135
+    },
+    {
+      "instance_id": "ice-charge-a-c270a7e6dbd5afe9",
+      "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1530960,
+      "states": 1,
+      "wall_s": 4.511584793
+    },
+    {
+      "instance_id": "ice-charge-a-de2165e7794b2c62",
+      "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1530544,
+      "states": 1,
+      "wall_s": 4.476183091
+    },
+    {
+      "instance_id": "ice-charge-a-e971748565fb320b",
+      "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1529476,
+      "states": 1,
+      "wall_s": 4.580459467
+    },
+    {
+      "instance_id": "ice-charge-a-eb6df06be1a91653",
+      "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1535300,
+      "states": 1,
+      "wall_s": 4.400045352
+    },
+    {
+      "instance_id": "ice-charge-a-f0b92be60b511a5b",
+      "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1525868,
+      "states": 1,
+      "wall_s": 4.405264985
+    },
+    {
+      "instance_id": "ice-charge-a-f492433bdfd96008",
+      "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1525526,
+      "states": 1,
+      "wall_s": 4.371455468
+    },
+    {
+      "instance_id": "ice-charge-a-f9b13936a44a41eb",
+      "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1513382,
+      "states": 1,
+      "wall_s": 4.440874279
+    },
+    {
+      "instance_id": "ice-charge-a-20c6f90b90e7ebd2",
+      "nonce": "20c6f90b90e7ebd258f61dd384af381ca21140ecae4db8c2e6ae5be84b3055c0",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1527392,
+      "states": 1,
+      "wall_s": 4.556977603
+    },
+    {
+      "instance_id": "ice-charge-a-4091932f01d39d60",
+      "nonce": "4091932f01d39d60fd050219c4bc4bf9d14182db0a25f6e5c055b056f60b81b0",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1524236,
+      "states": 1,
+      "wall_s": 4.41853518
+    },
+    {
+      "instance_id": "ice-charge-a-4bfc7843d1054398",
+      "nonce": "4bfc7843d105439890fabfbda3899ca397abafb5bc7ce7e450d17c778e3dc5cd",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1527548,
+      "states": 1,
+      "wall_s": 4.41795079
+    },
+    {
+      "instance_id": "ice-charge-a-865afbcd6754cc2d",
+      "nonce": "865afbcd6754cc2dbb6436097731bdc3bce54451200a7949aabf380c49550d1b",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1541626,
+      "states": 1,
+      "wall_s": 4.449171478
+    },
+    {
+      "instance_id": "ice-charge-a-9e60bd92c4199542",
+      "nonce": "9e60bd92c41995426bbd6f2fcdf568da6005843336084c5b6f9a74383c931309",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1523862,
+      "states": 1,
+      "wall_s": 4.366849183
+    },
+    {
+      "instance_id": "ice-charge-a-5c720df6eadbb520",
+      "nonce": "5c720df6eadbb52038a8f9476d982fbcf1d4a9a9ccc4943e2e6c0f6f5fe24fb2",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1551818,
+      "states": 1,
+      "wall_s": 4.613482799
+    },
+    {
+      "instance_id": "ice-charge-a-5b999b54beca0910",
+      "nonce": "5b999b54beca091068b860b6d9b87737c11933422a027ced1d81a9561043ab13",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1518422,
+      "states": 1,
+      "wall_s": 4.490884882
+    },
+    {
+      "instance_id": "ice-charge-a-6c2cc91ae97e3d67",
+      "nonce": "6c2cc91ae97e3d673a38d4c8b9c5c32cb009ee082bf9fa53df0422b5e24d98d9",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1524270,
+      "states": 1,
+      "wall_s": 4.525848899
+    },
+    {
+      "instance_id": "ice-charge-a-c5352701953ae025",
+      "nonce": "c5352701953ae025330965ee8d0e79f25a58590a8263bec2066395a7c4a12b3c",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1556308,
+      "states": 1,
+      "wall_s": 4.502744548
+    },
+    {
+      "instance_id": "ice-charge-a-478fbb0f2f657ab5",
+      "nonce": "478fbb0f2f657ab5fd8fafe3b038cf52ff33a0568a8d8ffe4915470845a0e0e7",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1529200,
+      "states": 1,
+      "wall_s": 4.542171608
+    },
+    {
+      "instance_id": "ice-charge-a-76f583284885047f",
+      "nonce": "76f583284885047f32af3fc92a41538be9b29ff314e3e6c48fff60b5d9c7ac82",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1504622,
+      "states": 1,
+      "wall_s": 4.591298256
+    },
+    {
+      "instance_id": "ice-charge-a-b1fda87775ac52db",
+      "nonce": "b1fda87775ac52dbf4dced91164c741aa53a7fc1e0546162aa52441fba02bc23",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1530948,
+      "states": 1,
+      "wall_s": 4.529830744
+    },
+    {
+      "instance_id": "ice-charge-a-f35d699083fea96f",
+      "nonce": "f35d699083fea96fcd817874f947056d64e60a413166628e10f8cbcbe99e8485",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1526476,
+      "states": 1,
+      "wall_s": 4.397967663
+    },
+    {
+      "instance_id": "ice-charge-a-350acc8e4ee6983a",
+      "nonce": "350acc8e4ee6983a539c8427388d19503b44e3cd31ebbd68dd2b82011886e720",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1529548,
+      "states": 1,
+      "wall_s": 4.513240799
+    },
+    {
+      "instance_id": "ice-charge-a-01301f9930b8725d",
+      "nonce": "01301f9930b8725def1a8e8be8567c2459ab2ff30ff20a9ec32ca3b5b1ee3d8e",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1546684,
+      "states": 1,
+      "wall_s": 4.36691375
+    },
+    {
+      "instance_id": "ice-charge-a-5197cc6465fcccde",
+      "nonce": "5197cc6465fcccdefb0a190d48a9732260a6ec143b90a18b32868bb5128819ce",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1532014,
+      "states": 1,
+      "wall_s": 4.432423459
+    },
+    {
+      "instance_id": "ice-charge-a-f5d8bbe266187d57",
+      "nonce": "f5d8bbe266187d57279a03ec76619ed0b19f5841d3f08ffda4aa9dcb70d1cb79",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1504406,
+      "states": 1,
+      "wall_s": 4.53716671
+    },
+    {
+      "instance_id": "ice-charge-a-95966b447e6d5f5d",
+      "nonce": "95966b447e6d5f5d7b460e91fd68116896805fc776c7b96c3ea92da2b629c25e",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1549344,
+      "states": 1,
+      "wall_s": 4.527965845
+    },
+    {
+      "instance_id": "ice-charge-a-04bd0dda00efacee",
+      "nonce": "04bd0dda00efacee019fec53e2c796c466dcc4a743f353736f0f118392d95f0a",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1527212,
+      "states": 1,
+      "wall_s": 4.448788004
+    },
+    {
+      "instance_id": "ice-charge-a-d5fe8e597659bdfd",
+      "nonce": "d5fe8e597659bdfdfe340576d3473422832cec0853a7f9f350d6c5c3412270c0",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1531520,
+      "states": 1,
+      "wall_s": 4.377865298
+    },
+    {
+      "instance_id": "ice-charge-a-dbe39db10eaa50d4",
+      "nonce": "dbe39db10eaa50d422fa97017830943f40e0485d1443e6e23ed1ed418ca0e8e6",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1532856,
+      "states": 1,
+      "wall_s": 4.461371387
+    },
+    {
+      "instance_id": "ice-charge-a-23578229123fdb10",
+      "nonce": "23578229123fdb10a612fb0b1d50ee6bdf1216c5a97e359f6bb9c4eae186335f",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1519126,
+      "states": 1,
+      "wall_s": 4.491917093
+    },
+    {
+      "instance_id": "ice-charge-a-498214ae780cd1d5",
+      "nonce": "498214ae780cd1d5983323992cac1527d2e9d6b21747074a38b5ff09db6cefcc",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1527642,
+      "states": 1,
+      "wall_s": 4.477433368
+    },
+    {
+      "instance_id": "ice-charge-a-c486fa8287249900",
+      "nonce": "c486fa82872499002db55f54429c580b6fcd79b40f18cc5ae3ce4b465a4b1788",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1525656,
+      "states": 1,
+      "wall_s": 4.477457669
+    },
+    {
+      "instance_id": "ice-charge-a-23e1c6ffe969aebd",
+      "nonce": "23e1c6ffe969aebd095117658540181a96a875ec148beccafd16943f0bb1bd20",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1533890,
+      "states": 1,
+      "wall_s": 4.374877989
+    },
+    {
+      "instance_id": "ice-charge-a-d74640e4fb791cd0",
+      "nonce": "d74640e4fb791cd0c03d62cc13052562fd7ce6601a8574d0a9c96a0d3c1a67d9",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1523666,
+      "states": 1,
+      "wall_s": 4.454224655
+    },
+    {
+      "instance_id": "ice-charge-a-c5f47abaa4d13743",
+      "nonce": "c5f47abaa4d13743f509f6891336adce9b91dd946eb5d7b8dda5a1cb8e2cb29c",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1538324,
+      "states": 1,
+      "wall_s": 4.39462493
+    },
+    {
+      "instance_id": "ice-charge-a-686ae104d132777a",
+      "nonce": "686ae104d132777a0d5322d7cf52ee11d32c038b071d4d2045a489fc1214a8e9",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1526548,
+      "states": 1,
+      "wall_s": 4.423444763
+    },
+    {
+      "instance_id": "ice-charge-a-f6908178c75c26a9",
+      "nonce": "f6908178c75c26a9239baa5e443231fe4f5728a629af9259361a052c22055f10",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1506980,
+      "states": 1,
+      "wall_s": 4.423529818
+    },
+    {
+      "instance_id": "ice-charge-a-ef0b559904b82a57",
+      "nonce": "ef0b559904b82a5781e734c61b382f2276a8ea30f5f92c373274882a60afa1a4",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1530892,
+      "states": 1,
+      "wall_s": 4.556629889
+    },
+    {
+      "instance_id": "ice-charge-a-22b49e4637c454e9",
+      "nonce": "22b49e4637c454e97a6e01de44c9b79b63fe5f052d720a1dc618406d4a13c9c4",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1531386,
+      "states": 1,
+      "wall_s": 4.328965989
+    },
+    {
+      "instance_id": "ice-charge-a-c900edcaff51baea",
+      "nonce": "c900edcaff51baea44e428cd040d95eeb654af4b78e6f4aee7b3a84066a0f764",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1516770,
+      "states": 1,
+      "wall_s": 4.372883527
+    },
+    {
+      "instance_id": "ice-charge-a-afe52c88c5fdbbcd",
+      "nonce": "afe52c88c5fdbbcd050770056968e385625c327d166959351b8c7b8aebfbb097",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1522324,
+      "states": 1,
+      "wall_s": 4.452941402
+    },
+    {
+      "instance_id": "ice-charge-a-83ced0a817a8b5ee",
+      "nonce": "83ced0a817a8b5ee5c777c1e3a032f10719884691415e885f5a952135493c010",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1523494,
+      "states": 1,
+      "wall_s": 4.436694227
+    },
+    {
+      "instance_id": "ice-charge-a-197ebd64bece92b4",
+      "nonce": "197ebd64bece92b401ca493c25bfe37c2765815237fae791371835e558a2f324",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1534100,
+      "states": 1,
+      "wall_s": 4.564019008
+    },
+    {
+      "instance_id": "ice-charge-a-f33fc5b920b23929",
+      "nonce": "f33fc5b920b23929b763c832c0103e5c2c197e168dfe95539060f46fa9dc21b1",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1536892,
+      "states": 1,
+      "wall_s": 4.406717642
+    },
+    {
+      "instance_id": "ice-charge-a-2a22d5118cbcbde5",
+      "nonce": "2a22d5118cbcbde5aed78f862257b34f6c9480131687612119a35d57f4ffc05a",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1531422,
+      "states": 1,
+      "wall_s": 4.523404696
+    },
+    {
+      "instance_id": "ice-charge-a-b67e41f22408a54f",
+      "nonce": "b67e41f22408a54f453422f5b888cafa023fda62e5b76640872c82938c2fcd42",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1518796,
+      "states": 1,
+      "wall_s": 4.497483721
+    },
+    {
+      "instance_id": "ice-charge-a-bdd0835f59476f52",
+      "nonce": "bdd0835f59476f52efda752880a3b6ad0f5bad288ff3a147f91fdcb57730c20e",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1527456,
+      "states": 1,
+      "wall_s": 4.530634809
+    },
+    {
+      "instance_id": "ice-charge-a-7ebf214fa923be01",
+      "nonce": "7ebf214fa923be01bdba8e9109f5fa856140be0d643221502d2f11df06be45f7",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1529432,
+      "states": 1,
+      "wall_s": 4.418190036
+    },
+    {
+      "instance_id": "ice-charge-a-9e8038e562a9c71f",
+      "nonce": "9e8038e562a9c71f614fa5467750cb143c02f88212b55324b95652df5da51ae9",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1520386,
+      "states": 1,
+      "wall_s": 4.420360374
+    },
+    {
+      "instance_id": "ice-charge-a-afa8b225ef34cfb9",
+      "nonce": "afa8b225ef34cfb95384f3017adb55369040bdaac473a5ac1c1d37f1e58bea3d",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1525008,
+      "states": 1,
+      "wall_s": 4.402613162
+    },
+    {
+      "instance_id": "ice-charge-a-23dd8aedcdce95f7",
+      "nonce": "23dd8aedcdce95f7a0813669fdb6715024c2d445ceb07bcd7eb0d6be3549b22e",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1508534,
+      "states": 1,
+      "wall_s": 4.406842443
+    },
+    {
+      "instance_id": "ice-charge-a-c478e396a62118fc",
+      "nonce": "c478e396a62118fcc35efc6ec95c054559c9fb674a4d8d33371d6986d2d0f0f4",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1527662,
+      "states": 1,
+      "wall_s": 4.414522178
+    },
+    {
+      "instance_id": "ice-charge-a-49ec362a97f39da6",
+      "nonce": "49ec362a97f39da6f19c780cc244fd05bf7c7fee9f5c5effcf6198002730eee8",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1540518,
+      "states": 1,
+      "wall_s": 4.446564067
+    },
+    {
+      "instance_id": "ice-charge-a-76e920fd3d8f7b5c",
+      "nonce": "76e920fd3d8f7b5cbfc1a1cc8103ea61ec527d42fa78e3477271345bf1d9e4c3",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1521670,
+      "states": 1,
+      "wall_s": 4.719676274
+    },
+    {
+      "instance_id": "ice-charge-a-1160d2f4eb0c5634",
+      "nonce": "1160d2f4eb0c56342fab3d9269032086a87d1c65af27bb3957bcbdf566c35968",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1536196,
+      "states": 1,
+      "wall_s": 4.442475362
+    },
+    {
+      "instance_id": "ice-charge-a-61b5ae108a70ef32",
+      "nonce": "61b5ae108a70ef32aef159b3e7a8da5f5ce4638d783610fabc22bb1c476b779b",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1535356,
+      "states": 1,
+      "wall_s": 4.408024839
+    },
+    {
+      "instance_id": "ice-charge-a-f170fa6078df38e9",
+      "nonce": "f170fa6078df38e9b3b2e1ba1fbd0e03bbb8338f0140c0ff66266ce859a816be",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1529030,
+      "states": 1,
+      "wall_s": 4.467865205
+    },
+    {
+      "instance_id": "ice-charge-a-c98ff2b705d9aa19",
+      "nonce": "c98ff2b705d9aa194c06de09bda096223ea5f6d7cb95abbe19cdce775780b736",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1540348,
+      "states": 1,
+      "wall_s": 4.445571011
+    },
+    {
+      "instance_id": "ice-charge-a-91c82a15532d60dd",
+      "nonce": "91c82a15532d60dd1774b6ba77bc13bb5f9b8b66d9243f80cec8a6bf3e8e52db",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1528762,
+      "states": 1,
+      "wall_s": 4.559303381
+    },
+    {
+      "instance_id": "ice-charge-a-2b66f72eb053f479",
+      "nonce": "2b66f72eb053f479ccd11d5b6bfc4ec5b71dd55b19ae1efa4dc8d3d545d127fd",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1521930,
+      "states": 1,
+      "wall_s": 4.525242724
+    },
+    {
+      "instance_id": "ice-charge-a-03faf0f8924b22f2",
+      "nonce": "03faf0f8924b22f29a5956f886ac224795d30b62416fce81f13ef25e70fcdf71",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1520896,
+      "states": 1,
+      "wall_s": 4.550170278
+    },
+    {
+      "instance_id": "ice-charge-a-9a7677995cd44dc7",
+      "nonce": "9a7677995cd44dc78e3432699f961e838575dd68f32f1b5e05b017c6706228cb",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1529580,
+      "states": 1,
+      "wall_s": 4.477967971
+    },
+    {
+      "instance_id": "ice-charge-a-a0d69066f1aa0104",
+      "nonce": "a0d69066f1aa0104488d6151bb9a6d82253d602e2f8871e85ae68d4db59bd73a",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1546178,
+      "states": 1,
+      "wall_s": 4.533646982
+    },
+    {
+      "instance_id": "ice-charge-a-93ad5dc94df10819",
+      "nonce": "93ad5dc94df10819a109b0463bb7b8ef446ab918374a99ec20e9e747bc42eb87",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1526494,
+      "states": 1,
+      "wall_s": 4.511822213
+    },
+    {
+      "instance_id": "ice-charge-a-d05210e102c9fb85",
+      "nonce": "d05210e102c9fb857e63eb939dd54b6c633ac489caa5d6bed377ab4fd73a04a4",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1516538,
+      "states": 1,
+      "wall_s": 4.318552276
+    },
+    {
+      "instance_id": "ice-charge-a-4b1300ca0854f634",
+      "nonce": "4b1300ca0854f634102f01e56657c5bb64a84ab8551bb25d0342041da8eeec9f",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1520654,
+      "states": 1,
+      "wall_s": 4.51078306
+    },
+    {
+      "instance_id": "ice-charge-a-3b4b3eb3b58d88a1",
+      "nonce": "3b4b3eb3b58d88a16c4ce4a83d787fdeb1c0eb280b37dd4699abea9fe6cfaafe",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1532522,
+      "states": 1,
+      "wall_s": 4.521699059
+    },
+    {
+      "instance_id": "ice-charge-a-0bc55a77a0a7cc73",
+      "nonce": "0bc55a77a0a7cc73b6f2d33c8b3bf2f2816a346ef2db8182c872f9d144ffa684",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1519278,
+      "states": 1,
+      "wall_s": 4.518388315
+    },
+    {
+      "instance_id": "ice-charge-a-6a69614384c65460",
+      "nonce": "6a69614384c65460f4018c9807452a538b882c28a67d4693b152482c697794cd",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1532278,
+      "states": 1,
+      "wall_s": 4.488760065
+    },
+    {
+      "instance_id": "ice-charge-a-3dca6bcef451ccd1",
+      "nonce": "3dca6bcef451ccd1349fd4b39eadaaba75b1b1149e720fac00d291aa23872852",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1527852,
+      "states": 1,
+      "wall_s": 4.442491174
+    },
+    {
+      "instance_id": "ice-charge-a-51ecb7e702826789",
+      "nonce": "51ecb7e702826789746b4d298498e6c1f98bc7785d23e17321a07c953217aad4",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1525092,
+      "states": 1,
+      "wall_s": 4.57316926
+    },
+    {
+      "instance_id": "ice-charge-a-cdaa6a2fe5d76757",
+      "nonce": "cdaa6a2fe5d767576b1f63be5429bf6eee3057376b9e84e2e97ada64e459c7a6",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1537736,
+      "states": 1,
+      "wall_s": 4.435635416
+    },
+    {
+      "instance_id": "ice-charge-a-49fdb44aa358f0ed",
+      "nonce": "49fdb44aa358f0ed36e898db0b32b313b506509706f173f00dcde7fb8fbcc9a3",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1534046,
+      "states": 1,
+      "wall_s": 4.483785221
+    },
+    {
+      "instance_id": "ice-charge-a-e601f7ad66eabdf2",
+      "nonce": "e601f7ad66eabdf2facac11add018707a70afa835d1bae64eb2e48202b6db362",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1525130,
+      "states": 1,
+      "wall_s": 4.488377308
+    },
+    {
+      "instance_id": "ice-charge-a-bebea539f71cef87",
+      "nonce": "bebea539f71cef87c325600d8434f207612f7267ed55b49033fc8206eb80417b",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1534876,
+      "states": 1,
+      "wall_s": 4.434824285
+    },
+    {
+      "instance_id": "ice-charge-a-2edbb2ff8adfff6e",
+      "nonce": "2edbb2ff8adfff6e943fdf62d3b73c153d44b1b8779326ea1a02e2b30bfca74f",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1537406,
+      "states": 1,
+      "wall_s": 4.522301745
+    },
+    {
+      "instance_id": "ice-charge-a-2160cd9243ce8bc5",
+      "nonce": "2160cd9243ce8bc5a2fc4f16c2b3115b44b7147825cb6b88b84d8ace42fd4e06",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1521782,
+      "states": 1,
+      "wall_s": 4.422044731
+    },
+    {
+      "instance_id": "ice-charge-a-286da913159a121d",
+      "nonce": "286da913159a121dbb32d2b1b67b2a1c93817bcf4fb00f1b69fdce8de5b4e7eb",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1512530,
+      "states": 1,
+      "wall_s": 4.482828666
+    },
+    {
+      "instance_id": "ice-charge-a-426045a75b731f3b",
+      "nonce": "426045a75b731f3ba29369f1506f184c4f8bbcda615c0ec661e04c57fb363fbb",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1513040,
+      "states": 1,
+      "wall_s": 4.469593362
+    },
+    {
+      "instance_id": "ice-charge-a-927a1c9d0f900ebf",
+      "nonce": "927a1c9d0f900ebf43f9e6f43c4965e2dda1ce08c5341d41bb5dbd4486095abc",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1523728,
+      "states": 1,
+      "wall_s": 4.538277741
+    },
+    {
+      "instance_id": "ice-charge-a-829236a4de28c0aa",
+      "nonce": "829236a4de28c0aa3c3499291b14cdd793b4089096132bb9d7bf14420cef6cf3",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1537386,
+      "states": 1,
+      "wall_s": 4.48947207
+    },
+    {
+      "instance_id": "ice-charge-a-801fab3ba54abae9",
+      "nonce": "801fab3ba54abae9f787c14c32b40d2dd55059570b597956b2712b773929b4ed",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1528748,
+      "states": 1,
+      "wall_s": 4.540897079
+    },
+    {
+      "instance_id": "ice-charge-a-8b91201ce6f34a44",
+      "nonce": "8b91201ce6f34a444ca0dfcc1fd0d229682c2ed9698df0c7b504b322f42851c4",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1522042,
+      "states": 1,
+      "wall_s": 4.47291263
+    },
+    {
+      "instance_id": "ice-charge-a-4db22b63e4e53c5b",
+      "nonce": "4db22b63e4e53c5bc1ed0f555090d53fc513762f3dcb320df29c4de0b38c843e",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1519630,
+      "states": 1,
+      "wall_s": 4.527501194
+    },
+    {
+      "instance_id": "ice-charge-a-ede2846abc26fbf0",
+      "nonce": "ede2846abc26fbf06dbb052875b2dd84ff63da83ccaa3238afad2160bbafacf4",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1533712,
+      "states": 1,
+      "wall_s": 4.483637719
+    },
+    {
+      "instance_id": "ice-charge-a-5524b4e9a7084430",
+      "nonce": "5524b4e9a7084430797471595a77467f37f09aab3b4926a085a5929d19cece10",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1503562,
+      "states": 1,
+      "wall_s": 4.543806784
+    },
+    {
+      "instance_id": "ice-charge-a-d9094a7cf389fd95",
+      "nonce": "d9094a7cf389fd957d3ea1cbe7cc3eb9b7dcefd85e267dc2b93372b3064fac29",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1517992,
+      "states": 1,
+      "wall_s": 4.362013246
+    },
+    {
+      "instance_id": "ice-charge-a-c6b1550eba4ecbc5",
+      "nonce": "c6b1550eba4ecbc5bacf79f59bcf6593d4b988e1aa359ea70bf8c548b3f7e81a",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1513518,
+      "states": 1,
+      "wall_s": 4.519724783
+    },
+    {
+      "instance_id": "ice-charge-a-13b3d4fc64cf9a6b",
+      "nonce": "13b3d4fc64cf9a6b5b140a33b4ffd5abad47f7bb34e032812d734e1c6f00743b",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1540390,
+      "states": 1,
+      "wall_s": 4.510248519
+    },
+    {
+      "instance_id": "ice-charge-a-d0f807ef1cb8d26e",
+      "nonce": "d0f807ef1cb8d26ec1c6b1a1690a5866d060d738618c59c93641c9ff4fd5de51",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1534070,
+      "states": 1,
+      "wall_s": 4.503254414
+    },
+    {
+      "instance_id": "ice-charge-a-98791ba7d2e06853",
+      "nonce": "98791ba7d2e06853983c8b71be994673009f281f533242024acec1c1ae7f0b7d",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1526658,
+      "states": 1,
+      "wall_s": 4.482977347
+    },
+    {
+      "instance_id": "ice-charge-a-1da394acc377d9ce",
+      "nonce": "1da394acc377d9ce9c34639a99b654f0d04bc8db835211c585119044d6dc47f9",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1547364,
+      "states": 1,
+      "wall_s": 4.401327757
+    },
+    {
+      "instance_id": "ice-charge-a-ac51b2374f7605ac",
+      "nonce": "ac51b2374f7605acdac121e600d8652ffe204d0363fd806ec7a5c87443799961",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1544800,
+      "states": 1,
+      "wall_s": 4.497479519
+    },
+    {
+      "instance_id": "ice-charge-a-7d4d4ededa2cdf47",
+      "nonce": "7d4d4ededa2cdf475618bed6dc6c51680ecdc902d51c7e256df0a60e7c61a483",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "accepted",
+      "best_milli": -1515614,
+      "states": 1,
+      "wall_s": 4.413021907
+    },
+    {
+      "instance_id": "ice-charge-a-dd25ff0e0999ab17",
+      "nonce": "dd25ff0e0999ab17546a06d2182521062f38da69ec920fed089d4faa25aa81e9",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1512580,
+      "states": 1,
+      "wall_s": 4.562641877
+    },
+    {
+      "instance_id": "ice-charge-a-2a48e97f039a4917",
+      "nonce": "2a48e97f039a49177f02802234f88361ca9fc225d30296e18a7f31b3a9de05a5",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1519864,
+      "states": 1,
+      "wall_s": 4.45099622
+    },
+    {
+      "instance_id": "ice-charge-a-06fef0b7a59d82ae",
+      "nonce": "06fef0b7a59d82ae777cf83a30d9e9d834bca1be8a3e71c58dbee636ca0cc2d0",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1525068,
+      "states": 64,
+      "wall_s": 23.054746108
+    },
+    {
+      "instance_id": "ice-charge-a-3693ad03d06a4f1b",
+      "nonce": "3693ad03d06a4f1b9d2755fa1c011deafd8364b03b7cc5b6ee94613f161021df",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1541930,
+      "states": 64,
+      "wall_s": 23.179884299
+    },
+    {
+      "instance_id": "ice-charge-a-44d4c467f1f53cd7",
+      "nonce": "44d4c467f1f53cd7a36c52ba8e4dda7cdbec82c3f9e8b441c53c066ff6aa213e",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1542116,
+      "states": 64,
+      "wall_s": 23.461332937
+    },
+    {
+      "instance_id": "ice-charge-a-6ded25b00b725b18",
+      "nonce": "6ded25b00b725b1880e5940838ec83f2e85a5edc6e5c9704b4edbf6de1264476",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1521544,
+      "states": 64,
+      "wall_s": 23.3966931
+    },
+    {
+      "instance_id": "ice-charge-a-82eaa641178c5c14",
+      "nonce": "82eaa641178c5c1456be3ed4e9e1ef759733d069e182ca27ab7379942136b7f0",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1522832,
+      "states": 64,
+      "wall_s": 23.256770106
+    },
+    {
+      "instance_id": "ice-charge-a-c270a7e6dbd5afe9",
+      "nonce": "c270a7e6dbd5afe90f997c20cb59d59811cb0385e9d520f0d27ac5c4823c3421",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1535576,
+      "states": 64,
+      "wall_s": 23.231605695
+    },
+    {
+      "instance_id": "ice-charge-a-de2165e7794b2c62",
+      "nonce": "de2165e7794b2c621cf0178ff33c8dc7d52f995737f7ff74807453edf61b1457",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1531544,
+      "states": 64,
+      "wall_s": 23.358581211
+    },
+    {
+      "instance_id": "ice-charge-a-e971748565fb320b",
+      "nonce": "e971748565fb320b36858afdf73fc91779d020cf04b15f789388b0f25b98615f",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1531414,
+      "states": 64,
+      "wall_s": 23.220582938
+    },
+    {
+      "instance_id": "ice-charge-a-eb6df06be1a91653",
+      "nonce": "eb6df06be1a9165364f3ce221e02e53adf272849396af714d530ef6b9c07470c",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1539250,
+      "states": 64,
+      "wall_s": 23.278465751
+    },
+    {
+      "instance_id": "ice-charge-a-f0b92be60b511a5b",
+      "nonce": "f0b92be60b511a5bfcc16021d4a4e96adde3ddca9ba8ef83b253bd5099b9f6eb",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1529690,
+      "states": 64,
+      "wall_s": 23.517117828
+    },
+    {
+      "instance_id": "ice-charge-a-f492433bdfd96008",
+      "nonce": "f492433bdfd9600872d489f97daa09ff8089ac0f3b637a35396bd3ee5c79bf18",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1528184,
+      "states": 64,
+      "wall_s": 23.574058522
+    },
+    {
+      "instance_id": "ice-charge-a-f9b13936a44a41eb",
+      "nonce": "f9b13936a44a41eb3e03e9e3655300c8e963984fc07c68981ae88f56987e243f",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1515882,
+      "states": 64,
+      "wall_s": 23.605311712
+    },
+    {
+      "instance_id": "ice-charge-a-20c6f90b90e7ebd2",
+      "nonce": "20c6f90b90e7ebd258f61dd384af381ca21140ecae4db8c2e6ae5be84b3055c0",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1530992,
+      "states": 64,
+      "wall_s": 23.682009465
+    },
+    {
+      "instance_id": "ice-charge-a-4091932f01d39d60",
+      "nonce": "4091932f01d39d60fd050219c4bc4bf9d14182db0a25f6e5c055b056f60b81b0",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1527084,
+      "states": 64,
+      "wall_s": 23.580150441
+    },
+    {
+      "instance_id": "ice-charge-a-4bfc7843d1054398",
+      "nonce": "4bfc7843d105439890fabfbda3899ca397abafb5bc7ce7e450d17c778e3dc5cd",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1530238,
+      "states": 64,
+      "wall_s": 23.265102113
+    },
+    {
+      "instance_id": "ice-charge-a-865afbcd6754cc2d",
+      "nonce": "865afbcd6754cc2dbb6436097731bdc3bce54451200a7949aabf380c49550d1b",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1545594,
+      "states": 64,
+      "wall_s": 23.325495501
+    },
+    {
+      "instance_id": "ice-charge-a-9e60bd92c4199542",
+      "nonce": "9e60bd92c41995426bbd6f2fcdf568da6005843336084c5b6f9a74383c931309",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1526060,
+      "states": 64,
+      "wall_s": 23.222242309
+    },
+    {
+      "instance_id": "ice-charge-a-5c720df6eadbb520",
+      "nonce": "5c720df6eadbb52038a8f9476d982fbcf1d4a9a9ccc4943e2e6c0f6f5fe24fb2",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1556224,
+      "states": 64,
+      "wall_s": 23.290983666
+    },
+    {
+      "instance_id": "ice-charge-a-5b999b54beca0910",
+      "nonce": "5b999b54beca091068b860b6d9b87737c11933422a027ced1d81a9561043ab13",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1521204,
+      "states": 64,
+      "wall_s": 23.279676821
+    },
+    {
+      "instance_id": "ice-charge-a-6c2cc91ae97e3d67",
+      "nonce": "6c2cc91ae97e3d673a38d4c8b9c5c32cb009ee082bf9fa53df0422b5e24d98d9",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1528192,
+      "states": 64,
+      "wall_s": 23.302158491
+    },
+    {
+      "instance_id": "ice-charge-a-c5352701953ae025",
+      "nonce": "c5352701953ae025330965ee8d0e79f25a58590a8263bec2066395a7c4a12b3c",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1559022,
+      "states": 64,
+      "wall_s": 23.304849919
+    },
+    {
+      "instance_id": "ice-charge-a-478fbb0f2f657ab5",
+      "nonce": "478fbb0f2f657ab5fd8fafe3b038cf52ff33a0568a8d8ffe4915470845a0e0e7",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1532494,
+      "states": 64,
+      "wall_s": 23.228269172
+    },
+    {
+      "instance_id": "ice-charge-a-76f583284885047f",
+      "nonce": "76f583284885047f32af3fc92a41538be9b29ff314e3e6c48fff60b5d9c7ac82",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1506486,
+      "states": 64,
+      "wall_s": 23.58946346
+    },
+    {
+      "instance_id": "ice-charge-a-b1fda87775ac52db",
+      "nonce": "b1fda87775ac52dbf4dced91164c741aa53a7fc1e0546162aa52441fba02bc23",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1530556,
+      "states": 64,
+      "wall_s": 23.259095019
+    },
+    {
+      "instance_id": "ice-charge-a-f35d699083fea96f",
+      "nonce": "f35d699083fea96fcd817874f947056d64e60a413166628e10f8cbcbe99e8485",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1531042,
+      "states": 64,
+      "wall_s": 23.252597873
+    },
+    {
+      "instance_id": "ice-charge-a-350acc8e4ee6983a",
+      "nonce": "350acc8e4ee6983a539c8427388d19503b44e3cd31ebbd68dd2b82011886e720",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1531848,
+      "states": 64,
+      "wall_s": 23.260603688
+    },
+    {
+      "instance_id": "ice-charge-a-01301f9930b8725d",
+      "nonce": "01301f9930b8725def1a8e8be8567c2459ab2ff30ff20a9ec32ca3b5b1ee3d8e",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1547340,
+      "states": 64,
+      "wall_s": 23.270921477
+    },
+    {
+      "instance_id": "ice-charge-a-5197cc6465fcccde",
+      "nonce": "5197cc6465fcccdefb0a190d48a9732260a6ec143b90a18b32868bb5128819ce",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1536064,
+      "states": 64,
+      "wall_s": 23.25264265
+    },
+    {
+      "instance_id": "ice-charge-a-f5d8bbe266187d57",
+      "nonce": "f5d8bbe266187d57279a03ec76619ed0b19f5841d3f08ffda4aa9dcb70d1cb79",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1508096,
+      "states": 64,
+      "wall_s": 23.284969099
+    },
+    {
+      "instance_id": "ice-charge-a-95966b447e6d5f5d",
+      "nonce": "95966b447e6d5f5d7b460e91fd68116896805fc776c7b96c3ea92da2b629c25e",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1549848,
+      "states": 64,
+      "wall_s": 23.272080707
+    },
+    {
+      "instance_id": "ice-charge-a-04bd0dda00efacee",
+      "nonce": "04bd0dda00efacee019fec53e2c796c466dcc4a743f353736f0f118392d95f0a",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1529242,
+      "states": 64,
+      "wall_s": 23.209258584
+    },
+    {
+      "instance_id": "ice-charge-a-d5fe8e597659bdfd",
+      "nonce": "d5fe8e597659bdfdfe340576d3473422832cec0853a7f9f350d6c5c3412270c0",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1532842,
+      "states": 64,
+      "wall_s": 23.267845279
+    },
+    {
+      "instance_id": "ice-charge-a-dbe39db10eaa50d4",
+      "nonce": "dbe39db10eaa50d422fa97017830943f40e0485d1443e6e23ed1ed418ca0e8e6",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1534534,
+      "states": 64,
+      "wall_s": 23.259117477
+    },
+    {
+      "instance_id": "ice-charge-a-23578229123fdb10",
+      "nonce": "23578229123fdb10a612fb0b1d50ee6bdf1216c5a97e359f6bb9c4eae186335f",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1522668,
+      "states": 64,
+      "wall_s": 23.209459683
+    },
+    {
+      "instance_id": "ice-charge-a-498214ae780cd1d5",
+      "nonce": "498214ae780cd1d5983323992cac1527d2e9d6b21747074a38b5ff09db6cefcc",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1531972,
+      "states": 64,
+      "wall_s": 23.257244878
+    },
+    {
+      "instance_id": "ice-charge-a-c486fa8287249900",
+      "nonce": "c486fa82872499002db55f54429c580b6fcd79b40f18cc5ae3ce4b465a4b1788",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1528764,
+      "states": 64,
+      "wall_s": 23.272664097
+    },
+    {
+      "instance_id": "ice-charge-a-23e1c6ffe969aebd",
+      "nonce": "23e1c6ffe969aebd095117658540181a96a875ec148beccafd16943f0bb1bd20",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1538110,
+      "states": 64,
+      "wall_s": 23.209806589
+    },
+    {
+      "instance_id": "ice-charge-a-d74640e4fb791cd0",
+      "nonce": "d74640e4fb791cd0c03d62cc13052562fd7ce6601a8574d0a9c96a0d3c1a67d9",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1526530,
+      "states": 64,
+      "wall_s": 23.280051057
+    },
+    {
+      "instance_id": "ice-charge-a-c5f47abaa4d13743",
+      "nonce": "c5f47abaa4d13743f509f6891336adce9b91dd946eb5d7b8dda5a1cb8e2cb29c",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1539584,
+      "states": 64,
+      "wall_s": 23.28082711
+    },
+    {
+      "instance_id": "ice-charge-a-686ae104d132777a",
+      "nonce": "686ae104d132777a0d5322d7cf52ee11d32c038b071d4d2045a489fc1214a8e9",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1530514,
+      "states": 64,
+      "wall_s": 23.205370659
+    },
+    {
+      "instance_id": "ice-charge-a-f6908178c75c26a9",
+      "nonce": "f6908178c75c26a9239baa5e443231fe4f5728a629af9259361a052c22055f10",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1509852,
+      "states": 64,
+      "wall_s": 23.262716479
+    },
+    {
+      "instance_id": "ice-charge-a-ef0b559904b82a57",
+      "nonce": "ef0b559904b82a5781e734c61b382f2276a8ea30f5f92c373274882a60afa1a4",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1534208,
+      "states": 64,
+      "wall_s": 23.268122383
+    },
+    {
+      "instance_id": "ice-charge-a-22b49e4637c454e9",
+      "nonce": "22b49e4637c454e97a6e01de44c9b79b63fe5f052d720a1dc618406d4a13c9c4",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1533890,
+      "states": 64,
+      "wall_s": 23.268727396
+    },
+    {
+      "instance_id": "ice-charge-a-c900edcaff51baea",
+      "nonce": "c900edcaff51baea44e428cd040d95eeb654af4b78e6f4aee7b3a84066a0f764",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1519234,
+      "states": 64,
+      "wall_s": 23.219585465
+    },
+    {
+      "instance_id": "ice-charge-a-afe52c88c5fdbbcd",
+      "nonce": "afe52c88c5fdbbcd050770056968e385625c327d166959351b8c7b8aebfbb097",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1523316,
+      "states": 64,
+      "wall_s": 23.295313593
+    },
+    {
+      "instance_id": "ice-charge-a-83ced0a817a8b5ee",
+      "nonce": "83ced0a817a8b5ee5c777c1e3a032f10719884691415e885f5a952135493c010",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1526052,
+      "states": 64,
+      "wall_s": 23.320131774
+    },
+    {
+      "instance_id": "ice-charge-a-197ebd64bece92b4",
+      "nonce": "197ebd64bece92b401ca493c25bfe37c2765815237fae791371835e558a2f324",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1536092,
+      "states": 64,
+      "wall_s": 23.435494206
+    },
+    {
+      "instance_id": "ice-charge-a-f33fc5b920b23929",
+      "nonce": "f33fc5b920b23929b763c832c0103e5c2c197e168dfe95539060f46fa9dc21b1",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1540128,
+      "states": 64,
+      "wall_s": 23.460791759
+    },
+    {
+      "instance_id": "ice-charge-a-2a22d5118cbcbde5",
+      "nonce": "2a22d5118cbcbde5aed78f862257b34f6c9480131687612119a35d57f4ffc05a",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1535270,
+      "states": 64,
+      "wall_s": 23.476921599
+    },
+    {
+      "instance_id": "ice-charge-a-b67e41f22408a54f",
+      "nonce": "b67e41f22408a54f453422f5b888cafa023fda62e5b76640872c82938c2fcd42",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1519382,
+      "states": 64,
+      "wall_s": 23.402738008
+    },
+    {
+      "instance_id": "ice-charge-a-bdd0835f59476f52",
+      "nonce": "bdd0835f59476f52efda752880a3b6ad0f5bad288ff3a147f91fdcb57730c20e",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1529498,
+      "states": 64,
+      "wall_s": 23.521311365
+    },
+    {
+      "instance_id": "ice-charge-a-7ebf214fa923be01",
+      "nonce": "7ebf214fa923be01bdba8e9109f5fa856140be0d643221502d2f11df06be45f7",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1533234,
+      "states": 64,
+      "wall_s": 23.452266188
+    },
+    {
+      "instance_id": "ice-charge-a-9e8038e562a9c71f",
+      "nonce": "9e8038e562a9c71f614fa5467750cb143c02f88212b55324b95652df5da51ae9",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1523974,
+      "states": 64,
+      "wall_s": 23.420655522
+    },
+    {
+      "instance_id": "ice-charge-a-afa8b225ef34cfb9",
+      "nonce": "afa8b225ef34cfb95384f3017adb55369040bdaac473a5ac1c1d37f1e58bea3d",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1526526,
+      "states": 64,
+      "wall_s": 23.450590514
+    },
+    {
+      "instance_id": "ice-charge-a-23dd8aedcdce95f7",
+      "nonce": "23dd8aedcdce95f7a0813669fdb6715024c2d445ceb07bcd7eb0d6be3549b22e",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1513622,
+      "states": 64,
+      "wall_s": 23.434684222
+    },
+    {
+      "instance_id": "ice-charge-a-c478e396a62118fc",
+      "nonce": "c478e396a62118fcc35efc6ec95c054559c9fb674a4d8d33371d6986d2d0f0f4",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1531184,
+      "states": 64,
+      "wall_s": 23.296624202
+    },
+    {
+      "instance_id": "ice-charge-a-49ec362a97f39da6",
+      "nonce": "49ec362a97f39da6f19c780cc244fd05bf7c7fee9f5c5effcf6198002730eee8",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1541932,
+      "states": 64,
+      "wall_s": 23.291362586
+    },
+    {
+      "instance_id": "ice-charge-a-76e920fd3d8f7b5c",
+      "nonce": "76e920fd3d8f7b5cbfc1a1cc8103ea61ec527d42fa78e3477271345bf1d9e4c3",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1524092,
+      "states": 64,
+      "wall_s": 23.295544627
+    },
+    {
+      "instance_id": "ice-charge-a-1160d2f4eb0c5634",
+      "nonce": "1160d2f4eb0c56342fab3d9269032086a87d1c65af27bb3957bcbdf566c35968",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1540680,
+      "states": 64,
+      "wall_s": 23.283506003
+    },
+    {
+      "instance_id": "ice-charge-a-61b5ae108a70ef32",
+      "nonce": "61b5ae108a70ef32aef159b3e7a8da5f5ce4638d783610fabc22bb1c476b779b",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1538638,
+      "states": 64,
+      "wall_s": 23.281558205
+    },
+    {
+      "instance_id": "ice-charge-a-f170fa6078df38e9",
+      "nonce": "f170fa6078df38e9b3b2e1ba1fbd0e03bbb8338f0140c0ff66266ce859a816be",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1531088,
+      "states": 64,
+      "wall_s": 23.232401578
+    },
+    {
+      "instance_id": "ice-charge-a-c98ff2b705d9aa19",
+      "nonce": "c98ff2b705d9aa194c06de09bda096223ea5f6d7cb95abbe19cdce775780b736",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1543778,
+      "states": 64,
+      "wall_s": 23.263848605
+    },
+    {
+      "instance_id": "ice-charge-a-91c82a15532d60dd",
+      "nonce": "91c82a15532d60dd1774b6ba77bc13bb5f9b8b66d9243f80cec8a6bf3e8e52db",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1532498,
+      "states": 64,
+      "wall_s": 23.250953788
+    },
+    {
+      "instance_id": "ice-charge-a-2b66f72eb053f479",
+      "nonce": "2b66f72eb053f479ccd11d5b6bfc4ec5b71dd55b19ae1efa4dc8d3d545d127fd",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1525410,
+      "states": 64,
+      "wall_s": 23.293315648
+    },
+    {
+      "instance_id": "ice-charge-a-03faf0f8924b22f2",
+      "nonce": "03faf0f8924b22f29a5956f886ac224795d30b62416fce81f13ef25e70fcdf71",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1525080,
+      "states": 64,
+      "wall_s": 23.280904486
+    },
+    {
+      "instance_id": "ice-charge-a-9a7677995cd44dc7",
+      "nonce": "9a7677995cd44dc78e3432699f961e838575dd68f32f1b5e05b017c6706228cb",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1534044,
+      "states": 64,
+      "wall_s": 23.217024591
+    },
+    {
+      "instance_id": "ice-charge-a-a0d69066f1aa0104",
+      "nonce": "a0d69066f1aa0104488d6151bb9a6d82253d602e2f8871e85ae68d4db59bd73a",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1547394,
+      "states": 64,
+      "wall_s": 23.29149383
+    },
+    {
+      "instance_id": "ice-charge-a-93ad5dc94df10819",
+      "nonce": "93ad5dc94df10819a109b0463bb7b8ef446ab918374a99ec20e9e747bc42eb87",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1529134,
+      "states": 64,
+      "wall_s": 23.28587065
+    },
+    {
+      "instance_id": "ice-charge-a-d05210e102c9fb85",
+      "nonce": "d05210e102c9fb857e63eb939dd54b6c633ac489caa5d6bed377ab4fd73a04a4",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1521444,
+      "states": 64,
+      "wall_s": 23.269311757
+    },
+    {
+      "instance_id": "ice-charge-a-4b1300ca0854f634",
+      "nonce": "4b1300ca0854f634102f01e56657c5bb64a84ab8551bb25d0342041da8eeec9f",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1524490,
+      "states": 64,
+      "wall_s": 23.228487348
+    },
+    {
+      "instance_id": "ice-charge-a-3b4b3eb3b58d88a1",
+      "nonce": "3b4b3eb3b58d88a16c4ce4a83d787fdeb1c0eb280b37dd4699abea9fe6cfaafe",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1536532,
+      "states": 64,
+      "wall_s": 23.281622638
+    },
+    {
+      "instance_id": "ice-charge-a-0bc55a77a0a7cc73",
+      "nonce": "0bc55a77a0a7cc73b6f2d33c8b3bf2f2816a346ef2db8182c872f9d144ffa684",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1520452,
+      "states": 64,
+      "wall_s": 23.209211949
+    },
+    {
+      "instance_id": "ice-charge-a-6a69614384c65460",
+      "nonce": "6a69614384c65460f4018c9807452a538b882c28a67d4693b152482c697794cd",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1535738,
+      "states": 64,
+      "wall_s": 23.21675115
+    },
+    {
+      "instance_id": "ice-charge-a-3dca6bcef451ccd1",
+      "nonce": "3dca6bcef451ccd1349fd4b39eadaaba75b1b1149e720fac00d291aa23872852",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1530002,
+      "states": 64,
+      "wall_s": 23.275424158
+    },
+    {
+      "instance_id": "ice-charge-a-51ecb7e702826789",
+      "nonce": "51ecb7e702826789746b4d298498e6c1f98bc7785d23e17321a07c953217aad4",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1526928,
+      "states": 64,
+      "wall_s": 23.277010272
+    },
+    {
+      "instance_id": "ice-charge-a-cdaa6a2fe5d76757",
+      "nonce": "cdaa6a2fe5d767576b1f63be5429bf6eee3057376b9e84e2e97ada64e459c7a6",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1540108,
+      "states": 64,
+      "wall_s": 23.220726557
+    },
+    {
+      "instance_id": "ice-charge-a-49fdb44aa358f0ed",
+      "nonce": "49fdb44aa358f0ed36e898db0b32b313b506509706f173f00dcde7fb8fbcc9a3",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1536598,
+      "states": 64,
+      "wall_s": 23.264301877
+    },
+    {
+      "instance_id": "ice-charge-a-e601f7ad66eabdf2",
+      "nonce": "e601f7ad66eabdf2facac11add018707a70afa835d1bae64eb2e48202b6db362",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1526428,
+      "states": 64,
+      "wall_s": 23.222897294
+    },
+    {
+      "instance_id": "ice-charge-a-bebea539f71cef87",
+      "nonce": "bebea539f71cef87c325600d8434f207612f7267ed55b49033fc8206eb80417b",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1537696,
+      "states": 64,
+      "wall_s": 23.282588319
+    },
+    {
+      "instance_id": "ice-charge-a-2edbb2ff8adfff6e",
+      "nonce": "2edbb2ff8adfff6e943fdf62d3b73c153d44b1b8779326ea1a02e2b30bfca74f",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1540898,
+      "states": 64,
+      "wall_s": 23.263508069
+    },
+    {
+      "instance_id": "ice-charge-a-2160cd9243ce8bc5",
+      "nonce": "2160cd9243ce8bc5a2fc4f16c2b3115b44b7147825cb6b88b84d8ace42fd4e06",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1526382,
+      "states": 64,
+      "wall_s": 23.258971309
+    },
+    {
+      "instance_id": "ice-charge-a-286da913159a121d",
+      "nonce": "286da913159a121dbb32d2b1b67b2a1c93817bcf4fb00f1b69fdce8de5b4e7eb",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1518026,
+      "states": 64,
+      "wall_s": 23.278042968
+    },
+    {
+      "instance_id": "ice-charge-a-426045a75b731f3b",
+      "nonce": "426045a75b731f3ba29369f1506f184c4f8bbcda615c0ec661e04c57fb363fbb",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1516300,
+      "states": 64,
+      "wall_s": 23.264163965
+    },
+    {
+      "instance_id": "ice-charge-a-927a1c9d0f900ebf",
+      "nonce": "927a1c9d0f900ebf43f9e6f43c4965e2dda1ce08c5341d41bb5dbd4486095abc",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1526808,
+      "states": 64,
+      "wall_s": 23.265110991
+    },
+    {
+      "instance_id": "ice-charge-a-829236a4de28c0aa",
+      "nonce": "829236a4de28c0aa3c3499291b14cdd793b4089096132bb9d7bf14420cef6cf3",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1538626,
+      "states": 64,
+      "wall_s": 23.267145318
+    },
+    {
+      "instance_id": "ice-charge-a-801fab3ba54abae9",
+      "nonce": "801fab3ba54abae9f787c14c32b40d2dd55059570b597956b2712b773929b4ed",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1532332,
+      "states": 64,
+      "wall_s": 23.288604048
+    },
+    {
+      "instance_id": "ice-charge-a-8b91201ce6f34a44",
+      "nonce": "8b91201ce6f34a444ca0dfcc1fd0d229682c2ed9698df0c7b504b322f42851c4",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1524728,
+      "states": 64,
+      "wall_s": 23.27848941
+    },
+    {
+      "instance_id": "ice-charge-a-4db22b63e4e53c5b",
+      "nonce": "4db22b63e4e53c5bc1ed0f555090d53fc513762f3dcb320df29c4de0b38c843e",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1523052,
+      "states": 64,
+      "wall_s": 23.220767934
+    },
+    {
+      "instance_id": "ice-charge-a-ede2846abc26fbf0",
+      "nonce": "ede2846abc26fbf06dbb052875b2dd84ff63da83ccaa3238afad2160bbafacf4",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1537506,
+      "states": 64,
+      "wall_s": 23.271608
+    },
+    {
+      "instance_id": "ice-charge-a-5524b4e9a7084430",
+      "nonce": "5524b4e9a7084430797471595a77467f37f09aab3b4926a085a5929d19cece10",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1509328,
+      "states": 64,
+      "wall_s": 23.263038195
+    },
+    {
+      "instance_id": "ice-charge-a-d9094a7cf389fd95",
+      "nonce": "d9094a7cf389fd957d3ea1cbe7cc3eb9b7dcefd85e267dc2b93372b3064fac29",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1521108,
+      "states": 64,
+      "wall_s": 23.212794066
+    },
+    {
+      "instance_id": "ice-charge-a-c6b1550eba4ecbc5",
+      "nonce": "c6b1550eba4ecbc5bacf79f59bcf6593d4b988e1aa359ea70bf8c548b3f7e81a",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1516010,
+      "states": 64,
+      "wall_s": 23.289361394
+    },
+    {
+      "instance_id": "ice-charge-a-13b3d4fc64cf9a6b",
+      "nonce": "13b3d4fc64cf9a6b5b140a33b4ffd5abad47f7bb34e032812d734e1c6f00743b",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1542944,
+      "states": 64,
+      "wall_s": 23.260258774
+    },
+    {
+      "instance_id": "ice-charge-a-d0f807ef1cb8d26e",
+      "nonce": "d0f807ef1cb8d26ec1c6b1a1690a5866d060d738618c59c93641c9ff4fd5de51",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1535718,
+      "states": 64,
+      "wall_s": 23.280027751
+    },
+    {
+      "instance_id": "ice-charge-a-98791ba7d2e06853",
+      "nonce": "98791ba7d2e06853983c8b71be994673009f281f533242024acec1c1ae7f0b7d",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1529916,
+      "states": 64,
+      "wall_s": 23.228859082
+    },
+    {
+      "instance_id": "ice-charge-a-1da394acc377d9ce",
+      "nonce": "1da394acc377d9ce9c34639a99b654f0d04bc8db835211c585119044d6dc47f9",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1549320,
+      "states": 64,
+      "wall_s": 23.27970616
+    },
+    {
+      "instance_id": "ice-charge-a-ac51b2374f7605ac",
+      "nonce": "ac51b2374f7605acdac121e600d8652ffe204d0363fd806ec7a5c87443799961",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1545754,
+      "states": 64,
+      "wall_s": 23.290927656
+    },
+    {
+      "instance_id": "ice-charge-a-7d4d4ededa2cdf47",
+      "nonce": "7d4d4ededa2cdf475618bed6dc6c51680ecdc902d51c7e256df0a60e7c61a483",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1517220,
+      "states": 64,
+      "wall_s": 23.271544552
+    },
+    {
+      "instance_id": "ice-charge-a-dd25ff0e0999ab17",
+      "nonce": "dd25ff0e0999ab17546a06d2182521062f38da69ec920fed089d4faa25aa81e9",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1515712,
+      "states": 64,
+      "wall_s": 23.281069225
+    },
+    {
+      "instance_id": "ice-charge-a-2a48e97f039a4917",
+      "nonce": "2a48e97f039a49177f02802234f88361ca9fc225d30296e18a7f31b3a9de05a5",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "accepted",
+      "best_milli": -1523246,
+      "states": 64,
+      "wall_s": 23.268932824
+    },
+    {
+      "instance_id": "ice-charge-61f3d1145cf083ea",
+      "nonce": "61f3d1145cf083eaad4b636571cf9cf40f0896fd18c8a516caccf2fc39569fad",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1519514,
+      "states": 1,
+      "wall_s": 4.488553162
+    },
+    {
+      "instance_id": "ice-charge-9a1ef5fd87916ad8",
+      "nonce": "9a1ef5fd87916ad874385226aab4e98e3b66d6146d0451f17a945e2fe6375d0c",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1519236,
+      "states": 1,
+      "wall_s": 4.517143674
+    },
+    {
+      "instance_id": "ice-charge-3a1439c959a2fa81",
+      "nonce": "3a1439c959a2fa819289de0584e146513bbe7abd9d82bedee8aa6d4a82ac1acb",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1520392,
+      "states": 1,
+      "wall_s": 4.528028624
+    },
+    {
+      "instance_id": "ice-charge-fe261cc02b864278",
+      "nonce": "fe261cc02b8642783cb866ddc290107c514457498c6b4531a37f8232bf876e91",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1534158,
+      "states": 1,
+      "wall_s": 4.459808725
+    },
+    {
+      "instance_id": "ice-charge-b6acc219a28894c1",
+      "nonce": "b6acc219a28894c1baeba421f8f5f70c1434ee0fea1576c7d2eb09550c0fd172",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1510414,
+      "states": 1,
+      "wall_s": 4.562782025
+    },
+    {
+      "instance_id": "ice-charge-e1908804313f9c92",
+      "nonce": "e1908804313f9c92014695dcfa40645bc8aede1c71a44edc190a39acfcedb78a",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1537506,
+      "states": 1,
+      "wall_s": 4.499289147
+    },
+    {
+      "instance_id": "ice-charge-c0a0462fe61ac16f",
+      "nonce": "c0a0462fe61ac16fb63ef7b000730a68b0af17eceec73961dd20cb382bbd9922",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1521092,
+      "states": 1,
+      "wall_s": 4.496785399
+    },
+    {
+      "instance_id": "ice-charge-a423d59b2462db6a",
+      "nonce": "a423d59b2462db6acde28b7f96943aa56e3b135a053f3b6a6b7d26325f8cf91d",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1523216,
+      "states": 1,
+      "wall_s": 4.39571994
+    },
+    {
+      "instance_id": "ice-charge-608735b8ff26991e",
+      "nonce": "608735b8ff26991eaad32abee3bc6de7e7e850942fb04ba1c274c4ee284a873b",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1533980,
+      "states": 1,
+      "wall_s": 4.449124832
+    },
+    {
+      "instance_id": "ice-charge-3ca832c234e5bcd5",
+      "nonce": "3ca832c234e5bcd5176fd42297ce4c6827d9f9f87d7b1d2d47338296bfe15c00",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1527440,
+      "states": 1,
+      "wall_s": 4.652643232
+    },
+    {
+      "instance_id": "ice-charge-78f6c5a9c8f29a8f",
+      "nonce": "78f6c5a9c8f29a8f51edabf285796f301c44cc4e8fe40c99f383df778b69fd96",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1552704,
+      "states": 1,
+      "wall_s": 4.579890818
+    },
+    {
+      "instance_id": "ice-charge-93881067fbdf7c92",
+      "nonce": "93881067fbdf7c92cecf87b3cba6eaa262142731c4a761bf988ba58f3941cfb6",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1548774,
+      "states": 1,
+      "wall_s": 4.57480329
+    },
+    {
+      "instance_id": "ice-charge-ab076aca96dc0351",
+      "nonce": "ab076aca96dc03517441aba83c1963d0356059794d8eb569473691eea6cdb762",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1535038,
+      "states": 1,
+      "wall_s": 4.574091751
+    },
+    {
+      "instance_id": "ice-charge-4484722e64dc5142",
+      "nonce": "4484722e64dc5142c568c7e34bf1bd3dce29433243ce0121309bfd11865296b5",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1540886,
+      "states": 1,
+      "wall_s": 4.50923941
+    },
+    {
+      "instance_id": "ice-charge-16d12d8bb101f081",
+      "nonce": "16d12d8bb101f081622ac4d0bd1926aded13d38aa3ebd3056a498c2057680937",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1534216,
+      "states": 1,
+      "wall_s": 4.508226493
+    },
+    {
+      "instance_id": "ice-charge-23652f87565fbbb1",
+      "nonce": "23652f87565fbbb1e638c45424dcb26b946d902c4ad03d53797f19c4a4c8dab6",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1532840,
+      "states": 1,
+      "wall_s": 4.492710465
+    },
+    {
+      "instance_id": "ice-charge-65e32c6c44fd5fd9",
+      "nonce": "65e32c6c44fd5fd92fd83349c3326cc9c81403d3393684f89c4184609cbd3b72",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1529746,
+      "states": 1,
+      "wall_s": 4.463080888
+    },
+    {
+      "instance_id": "ice-charge-82c7bf89fb2268bd",
+      "nonce": "82c7bf89fb2268bd87817c05271bd00b8e42663029b49abb05188f2a1420e31a",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1525410,
+      "states": 1,
+      "wall_s": 4.434380625
+    },
+    {
+      "instance_id": "ice-charge-d3515c098f501946",
+      "nonce": "d3515c098f501946002e1ec6e33e1fdb42cd0859331bbf2af9e583794cd74c95",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1511848,
+      "states": 1,
+      "wall_s": 4.444859482
+    },
+    {
+      "instance_id": "ice-charge-0c646fdff2416f38",
+      "nonce": "0c646fdff2416f386417ebc2cbebcbb480cd755aac0b0bb36bc9c3dd09ac33c4",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1515702,
+      "states": 1,
+      "wall_s": 4.458873113
+    },
+    {
+      "instance_id": "ice-charge-26c0a1d74b865793",
+      "nonce": "26c0a1d74b86579354aad0841309cb62d28e5aa1371bce17e0b578606e61850f",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1527720,
+      "states": 1,
+      "wall_s": 4.430360675
+    },
+    {
+      "instance_id": "ice-charge-37e0dbe46cdb8d74",
+      "nonce": "37e0dbe46cdb8d748a50e498a45b8731d99ccb10267c4e65f42ff28363672195",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1535720,
+      "states": 1,
+      "wall_s": 4.563933189
+    },
+    {
+      "instance_id": "ice-charge-1f5dff0a0276b12e",
+      "nonce": "1f5dff0a0276b12e554423cc4a3f464c5a15c60dc71720a8f898a66380585268",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1521064,
+      "states": 1,
+      "wall_s": 4.561438048
+    },
+    {
+      "instance_id": "ice-charge-c92284727fc2c966",
+      "nonce": "c92284727fc2c9661ac69a40567a1e8935fb4c0aaddd3eaa6c29222b925bed20",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1537876,
+      "states": 1,
+      "wall_s": 4.445407358
+    },
+    {
+      "instance_id": "ice-charge-4eff23fd9534710d",
+      "nonce": "4eff23fd9534710dee4c356c1e4497dff563f8f14bc547acaa70833b93a2b4cf",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1535246,
+      "states": 1,
+      "wall_s": 4.537414905
+    },
+    {
+      "instance_id": "ice-charge-a5cd4733a393f346",
+      "nonce": "a5cd4733a393f34617ce7e7facd5a4a5f609699a46898c74f4f25dec8e2742f2",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1543166,
+      "states": 1,
+      "wall_s": 4.54193625
+    },
+    {
+      "instance_id": "ice-charge-6d35d7ad3795aeb2",
+      "nonce": "6d35d7ad3795aeb26ab447f1e4699d80bd86e1ce29ee51011ca7d2f50e90dfbe",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1530646,
+      "states": 1,
+      "wall_s": 4.601315266
+    },
+    {
+      "instance_id": "ice-charge-d671f205970273c1",
+      "nonce": "d671f205970273c10a3455183caed99ad7557d9036af1e5e4fe1f4fa12436377",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1521336,
+      "states": 1,
+      "wall_s": 4.514649074
+    },
+    {
+      "instance_id": "ice-charge-4d74b0c8453c28f3",
+      "nonce": "4d74b0c8453c28f3f830e52692eca17c4a66a3c9e4916ede315a30d6fce8c2af",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1540456,
+      "states": 1,
+      "wall_s": 4.516265769
+    },
+    {
+      "instance_id": "ice-charge-58ade61fd000ba35",
+      "nonce": "58ade61fd000ba358e8611ef6ce8a8636ce027cce709364684c8450b0e7d8d09",
+      "policy_id": "rp2-cpu-sa-r1-s72155",
+      "terminal": "evaluation_limit",
+      "best_milli": -1532452,
+      "states": 1,
+      "wall_s": 4.641185182
+    },
+    {
+      "instance_id": "ice-charge-61f3d1145cf083ea",
+      "nonce": "61f3d1145cf083eaad4b636571cf9cf40f0896fd18c8a516caccf2fc39569fad",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1522662,
+      "states": 64,
+      "wall_s": 23.405110988
+    },
+    {
+      "instance_id": "ice-charge-9a1ef5fd87916ad8",
+      "nonce": "9a1ef5fd87916ad874385226aab4e98e3b66d6146d0451f17a945e2fe6375d0c",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1523762,
+      "states": 64,
+      "wall_s": 23.3040466
+    },
+    {
+      "instance_id": "ice-charge-3a1439c959a2fa81",
+      "nonce": "3a1439c959a2fa819289de0584e146513bbe7abd9d82bedee8aa6d4a82ac1acb",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1522132,
+      "states": 64,
+      "wall_s": 23.292656337
+    },
+    {
+      "instance_id": "ice-charge-fe261cc02b864278",
+      "nonce": "fe261cc02b8642783cb866ddc290107c514457498c6b4531a37f8232bf876e91",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1537506,
+      "states": 64,
+      "wall_s": 23.311247766
+    },
+    {
+      "instance_id": "ice-charge-b6acc219a28894c1",
+      "nonce": "b6acc219a28894c1baeba421f8f5f70c1434ee0fea1576c7d2eb09550c0fd172",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1512654,
+      "states": 64,
+      "wall_s": 23.282676647
+    },
+    {
+      "instance_id": "ice-charge-e1908804313f9c92",
+      "nonce": "e1908804313f9c92014695dcfa40645bc8aede1c71a44edc190a39acfcedb78a",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1543668,
+      "states": 64,
+      "wall_s": 23.285615041
+    },
+    {
+      "instance_id": "ice-charge-c0a0462fe61ac16f",
+      "nonce": "c0a0462fe61ac16fb63ef7b000730a68b0af17eceec73961dd20cb382bbd9922",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1523952,
+      "states": 64,
+      "wall_s": 23.243491102
+    },
+    {
+      "instance_id": "ice-charge-a423d59b2462db6a",
+      "nonce": "a423d59b2462db6acde28b7f96943aa56e3b135a053f3b6a6b7d26325f8cf91d",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1525482,
+      "states": 64,
+      "wall_s": 23.248211445
+    },
+    {
+      "instance_id": "ice-charge-608735b8ff26991e",
+      "nonce": "608735b8ff26991eaad32abee3bc6de7e7e850942fb04ba1c274c4ee284a873b",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1535952,
+      "states": 64,
+      "wall_s": 23.246049493
+    },
+    {
+      "instance_id": "ice-charge-3ca832c234e5bcd5",
+      "nonce": "3ca832c234e5bcd5176fd42297ce4c6827d9f9f87d7b1d2d47338296bfe15c00",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1530804,
+      "states": 64,
+      "wall_s": 23.309647642
+    },
+    {
+      "instance_id": "ice-charge-78f6c5a9c8f29a8f",
+      "nonce": "78f6c5a9c8f29a8f51edabf285796f301c44cc4e8fe40c99f383df778b69fd96",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1553894,
+      "states": 64,
+      "wall_s": 23.243896089
+    },
+    {
+      "instance_id": "ice-charge-93881067fbdf7c92",
+      "nonce": "93881067fbdf7c92cecf87b3cba6eaa262142731c4a761bf988ba58f3941cfb6",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1552360,
+      "states": 64,
+      "wall_s": 23.240145298
+    },
+    {
+      "instance_id": "ice-charge-ab076aca96dc0351",
+      "nonce": "ab076aca96dc03517441aba83c1963d0356059794d8eb569473691eea6cdb762",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1537534,
+      "states": 64,
+      "wall_s": 23.280626682
+    },
+    {
+      "instance_id": "ice-charge-4484722e64dc5142",
+      "nonce": "4484722e64dc5142c568c7e34bf1bd3dce29433243ce0121309bfd11865296b5",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1544386,
+      "states": 64,
+      "wall_s": 23.303519056
+    },
+    {
+      "instance_id": "ice-charge-16d12d8bb101f081",
+      "nonce": "16d12d8bb101f081622ac4d0bd1926aded13d38aa3ebd3056a498c2057680937",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1536056,
+      "states": 64,
+      "wall_s": 23.295271065
+    },
+    {
+      "instance_id": "ice-charge-23652f87565fbbb1",
+      "nonce": "23652f87565fbbb1e638c45424dcb26b946d902c4ad03d53797f19c4a4c8dab6",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1535778,
+      "states": 64,
+      "wall_s": 23.309662603
+    },
+    {
+      "instance_id": "ice-charge-65e32c6c44fd5fd9",
+      "nonce": "65e32c6c44fd5fd92fd83349c3326cc9c81403d3393684f89c4184609cbd3b72",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1530102,
+      "states": 64,
+      "wall_s": 23.318176797
+    },
+    {
+      "instance_id": "ice-charge-82c7bf89fb2268bd",
+      "nonce": "82c7bf89fb2268bd87817c05271bd00b8e42663029b49abb05188f2a1420e31a",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1528030,
+      "states": 64,
+      "wall_s": 23.308289171
+    },
+    {
+      "instance_id": "ice-charge-d3515c098f501946",
+      "nonce": "d3515c098f501946002e1ec6e33e1fdb42cd0859331bbf2af9e583794cd74c95",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1514410,
+      "states": 64,
+      "wall_s": 23.30468814
+    },
+    {
+      "instance_id": "ice-charge-0c646fdff2416f38",
+      "nonce": "0c646fdff2416f386417ebc2cbebcbb480cd755aac0b0bb36bc9c3dd09ac33c4",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1517698,
+      "states": 64,
+      "wall_s": 23.290918319
+    },
+    {
+      "instance_id": "ice-charge-26c0a1d74b865793",
+      "nonce": "26c0a1d74b86579354aad0841309cb62d28e5aa1371bce17e0b578606e61850f",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1528968,
+      "states": 64,
+      "wall_s": 23.249306945
+    },
+    {
+      "instance_id": "ice-charge-37e0dbe46cdb8d74",
+      "nonce": "37e0dbe46cdb8d748a50e498a45b8731d99ccb10267c4e65f42ff28363672195",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1539236,
+      "states": 64,
+      "wall_s": 23.303956291
+    },
+    {
+      "instance_id": "ice-charge-1f5dff0a0276b12e",
+      "nonce": "1f5dff0a0276b12e554423cc4a3f464c5a15c60dc71720a8f898a66380585268",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1521080,
+      "states": 64,
+      "wall_s": 23.258692966
+    },
+    {
+      "instance_id": "ice-charge-c92284727fc2c966",
+      "nonce": "c92284727fc2c9661ac69a40567a1e8935fb4c0aaddd3eaa6c29222b925bed20",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1539510,
+      "states": 64,
+      "wall_s": 23.240849066
+    },
+    {
+      "instance_id": "ice-charge-4eff23fd9534710d",
+      "nonce": "4eff23fd9534710dee4c356c1e4497dff563f8f14bc547acaa70833b93a2b4cf",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1537200,
+      "states": 64,
+      "wall_s": 23.307665814
+    },
+    {
+      "instance_id": "ice-charge-a5cd4733a393f346",
+      "nonce": "a5cd4733a393f34617ce7e7facd5a4a5f609699a46898c74f4f25dec8e2742f2",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1545550,
+      "states": 64,
+      "wall_s": 23.245737111
+    },
+    {
+      "instance_id": "ice-charge-6d35d7ad3795aeb2",
+      "nonce": "6d35d7ad3795aeb26ab447f1e4699d80bd86e1ce29ee51011ca7d2f50e90dfbe",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1534718,
+      "states": 64,
+      "wall_s": 23.246093545
+    },
+    {
+      "instance_id": "ice-charge-d671f205970273c1",
+      "nonce": "d671f205970273c10a3455183caed99ad7557d9036af1e5e4fe1f4fa12436377",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1523964,
+      "states": 64,
+      "wall_s": 23.249508697
+    },
+    {
+      "instance_id": "ice-charge-4d74b0c8453c28f3",
+      "nonce": "4d74b0c8453c28f3f830e52692eca17c4a66a3c9e4916ede315a30d6fce8c2af",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1542242,
+      "states": 64,
+      "wall_s": 23.247815756
+    },
+    {
+      "instance_id": "ice-charge-58ade61fd000ba35",
+      "nonce": "58ade61fd000ba358e8611ef6ce8a8636ce027cce709364684c8450b0e7d8d09",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "terminal": "evaluation_limit",
+      "best_milli": -1534060,
+      "states": 64,
+      "wall_s": 23.24612691
+    }
+  ]
+}

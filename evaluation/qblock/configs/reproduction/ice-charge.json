@@ -3,7 +3,7 @@
   "ticket": "QUI-2232 (RP-2)",
   "protocol": "QUI-2230 (RP-0)",
   "cell": "ice-charge",
-  "frozen_on": "2026-11-10",
+  "frozen_on": "2026-11-12",
   "pass_rule": {
     "statement": "Reproduced when the Tier label under rule v3 is the same, the mean energy gap is within two archived standard deviations of the archived mean, and the time to target is within a factor of 2 of the archived value. Otherwise not reproduced, or incomplete when a measure cannot be computed.",
     "tier_rule_version": 3,
@@ -38,16 +38,16 @@
   },
   "policies": {
     "file": "ice-charge.policies.json",
-    "blake3": "be3bf35100920f0dc00c90e15e9fef6a515bc25a3e67b84db872bf0a544ee23c",
+    "blake3": "ec5316aa9359ccdae5ef7c0a7cc5a1e49c5c99ad53921adf5adf2f16e39d7671",
     "cpu": {
       "policy_id": "rp2-cpu-sa-r1-s72155",
       "substitutes_for": "glasssa depth-2s-100",
-      "difference": "quip-cpu-sa default schedule and seed instead of the glasssa schedule (b0 0.1, bk 0.4, b1 2.5, unit 62, seed 1)"
+      "difference": "quip-cpu-sa 0.3.6-rc5 with its default schedule and seed instead of the glasssa schedule (b0 0.1, bk 0.4, b1 2.5, unit 62, seed 1)"
     },
     "cuda": {
-      "policy_id": "rp2-cuda-sa-r64-s65536",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
       "substitutes_for": "round4-cuda-harness m100/sf-s65536",
-      "difference": "quip-cuda-sa default schedule and seed, one job at a time, and no greedy or loop descent after the anneal"
+      "difference": "quip-cuda-msa-descent 0.3.6-rc3 (the msa kernel, then the msa-nat-loop/1 host greedy and loop descent) with its default schedule, the job seed, tiles recovered from the couplings, and one job at a time"
     }
   },
   "cohort": {

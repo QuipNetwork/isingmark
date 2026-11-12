@@ -13,8 +13,8 @@
       "preparation": "cold"
     },
     {
-      "policy_id": "rp2-cuda-sa-r64-s65536",
-      "backend": "cuda",
+      "policy_id": "rp2-cuda-msa-descent-r64-s65536",
+      "backend": "cuda-msa-descent",
       "num_reads": 64,
       "num_sweeps": 65536,
       "anneal_time_us": 0,
