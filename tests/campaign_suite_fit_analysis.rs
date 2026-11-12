@@ -1078,3 +1078,23 @@ fn the_csv_marks_a_scaled_beat_run() {
     assert_eq!(a_line[column("tier_beat_wall")], "scaled");
     assert_eq!(a_line[column("tier_speed_wall")], "measured");
 }
+
+#[test]
+fn the_speed_text_rounds_walls_to_milliseconds() {
+    let qpu = reference(30, 0.25);
+    let cpu = run(
+        ClassicalDevice::Cpu,
+        "cpu",
+        30,
+        23.274_044_127_499_998,
+        every(-1),
+    );
+    let cuda = run(ClassicalDevice::Cuda, "cuda", 30, 1.0, every(1));
+    let label = tier(&qpu, &[cpu, cuda]).expect("a reference has a tier");
+    assert!(
+        label.reason.contains("at 23.274 s per model"),
+        "{}",
+        label.reason
+    );
+    assert!(!label.reason.contains("23.27404"), "{}", label.reason);
+}
