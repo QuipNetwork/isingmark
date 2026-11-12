@@ -17,7 +17,7 @@ use isingmark::{
 };
 use serde_json::{json, Value};
 
-const FROZEN_DIGEST: &str = "3612cf987508cdaae5f58708cfa6176edf1c9c290dbf1db447f54ef6de69af13";
+const FROZEN_DIGEST: &str = "17d59fe92cea8070c68037bbd2ecb88b54f065981e23a177c940949f5317fa2c";
 
 fn nonce(byte: u8) -> String {
     format!("{byte:02x}").repeat(32)
@@ -217,7 +217,10 @@ async fn the_control_arm_is_scored_against_qpu80_pp() {
     }
     assert_eq!(comparison.fresh_verdict, "incomplete: waiting on RP-6");
     let text = markdown(&comparison);
-    assert!(text.contains("| CPU | `p-cpu` | 2 | 0 / 1 / 1 |"), "{text}");
+    assert!(
+        text.contains("| CPU | `p-cpu` | 2 | 0 / 1 / 1 | 0 |"),
+        "{text}"
+    );
     assert!(
         text.contains("Fresh verdict: incomplete: waiting on RP-6"),
         "{text}"
@@ -269,4 +272,78 @@ fn the_ice_charge_frozen_file_is_pinned() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("evaluation/qblock/configs/reproduction/ice-charge.json");
     assert_eq!(digest(&path), FROZEN_DIGEST);
+}
+
+/// Rewrite the trials of one campaign output, keeping the traces.
+fn edit_trials(dir: &Path, edit: impl FnOnce(&mut Vec<Value>)) {
+    let path = dir.join("campaign.json");
+    let mut file: Value = serde_json::from_slice(&fs::read(&path).expect("read")).expect("json");
+    let trials = file["trials"].as_array_mut().expect("trials");
+    edit(trials);
+    write(&path, &file);
+}
+
+#[tokio::test]
+async fn a_control_arm_without_trials_is_refused() {
+    let s = setup(2).await;
+    edit_trials(&s.control, |trials| {
+        trials.retain(|t| t["policy_id"] != "p-cuda");
+    });
+    let error = compare(&s.frozen, std::slice::from_ref(&s.control), &[]).expect_err("arm");
+    assert!(
+        error.to_string().contains("no control trials for p-cuda"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn a_trial_of_another_policy_is_refused() {
+    let s = setup(2).await;
+    edit_trials(&s.control, |trials| {
+        for trial in trials.iter_mut().filter(|t| t["policy_id"] == "p-cuda") {
+            trial["policy_id"] = json!("p-old");
+        }
+    });
+    let error = compare(&s.frozen, std::slice::from_ref(&s.control), &[]).expect_err("policy");
+    assert!(
+        error
+            .to_string()
+            .contains("policy p-old is not in the frozen file"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn a_control_arm_that_misses_an_archived_model_is_refused() {
+    let s = setup(2).await;
+    edit_trials(&s.control, |trials| {
+        let first = trials
+            .iter()
+            .position(|t| t["policy_id"] == "p-cpu")
+            .expect("a cpu trial");
+        trials.remove(first);
+    });
+    let error = compare(&s.frozen, std::slice::from_ref(&s.control), &[]).expect_err("coverage");
+    assert!(
+        error
+            .to_string()
+            .contains("p-cpu covers 1 of 2 archived models"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn a_control_directory_given_twice_is_refused() {
+    let s = setup(2).await;
+    let twice = [s.control.clone(), s.control.clone()];
+    let error = compare(&s.frozen, &twice, &[]).expect_err("duplicate");
+    assert!(error.to_string().contains("more than one trial"), "{error}");
+}
+
+#[tokio::test]
+async fn a_fresh_cohort_with_a_repeated_model_is_refused() {
+    let s = setup(4).await;
+    let twice = [s.fresh.clone(), s.fresh.clone()];
+    let error = compare(&s.frozen, std::slice::from_ref(&s.control), &twice).expect_err("repeat");
+    assert!(error.to_string().contains("more than one trial"), "{error}");
 }

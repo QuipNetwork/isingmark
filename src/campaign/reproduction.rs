@@ -3,8 +3,8 @@
 //!
 //! The frozen file (for example `evaluation/qblock/configs/reproduction/ice-charge.json`) holds
 //! the pass rule, the archived values, the policy ids of the CPU and CUDA arms, and the digests
-//! of the inputs. Paths in it are relative to the repository root, the working directory of the
-//! command. The command reads `campaign.json` and each trial's `events.jsonl` from every output
+//! of the inputs. `policies.file` is relative to the frozen file. `control.index` is relative to
+//! the working directory, so run the command from the repository root. The command reads `campaign.json` and each trial's `events.jsonl` from every output
 //! directory, keeps the lowest recomputed energy and the wall of the first batch receipt per
 //! trial, and compares two cohorts:
 //!
@@ -140,6 +140,8 @@ pub struct ControlArm {
     pub qpu_wins: usize,
     pub ties: usize,
     pub classical_wins: usize,
+    /// Models without a recomputed energy, counted as no win for either side.
+    pub missing: usize,
     /// Models at or below `qpu80_pp`, the archive's reach count (ties count).
     pub at_or_below: usize,
     /// More than half of the common models are at or below the target.
@@ -342,7 +344,7 @@ fn control_arm(
             .map(|trial| (trial.nonce.clone(), trial.best_milli))
             .collect(),
     };
-    let (mut qpu_wins, mut ties, mut classical_wins, mut common) = (0, 0, 0, 0);
+    let (mut qpu_wins, mut ties, mut classical_wins, mut missing, mut common) = (0, 0, 0, 0, 0);
     for trial in trials {
         let Some(target) = reference.energies_milli.get(&trial.nonce) else {
             continue;
@@ -351,7 +353,8 @@ fn control_arm(
         match trial.best_milli {
             Some(energy) if energy < *target => classical_wins += 1,
             Some(energy) if energy == *target => ties += 1,
-            _ => qpu_wins += 1,
+            Some(_) => qpu_wins += 1,
+            None => missing += 1,
         }
     }
     let at_or_below = classical_wins + ties;
@@ -361,6 +364,7 @@ fn control_arm(
         qpu_wins,
         ties,
         classical_wins,
+        missing,
         at_or_below,
         reached,
         time_to_target_s: reached.then_some(summary.median_wall_s).flatten(),
@@ -457,10 +461,51 @@ fn verdict(checks: &[Check]) -> String {
     }
 }
 
+/// One frozen arm and its trials.
+type Arm<'a> = (ClassicalDevice, &'a str, Vec<&'a TrialResult>);
+
+/// Split the trials of one cohort into the frozen arms. No trials gives no arms. Otherwise every
+/// trial belongs to a frozen policy, both arms have trials, and no arm repeats a model.
+fn split_arms<'a>(
+    trials: &'a [TrialResult],
+    arms: &[(ClassicalDevice, &'a str)],
+    cohort: &str,
+) -> Result<Vec<Arm<'a>>, CampaignError> {
+    if trials.is_empty() {
+        return Ok(Vec::new());
+    }
+    if let Some(stray) = trials
+        .iter()
+        .find(|t| arms.iter().all(|(_, id)| t.policy_id != *id))
+    {
+        return Err(invalid(format!(
+            "{cohort} trial {}: policy {} is not in the frozen file",
+            stray.instance_id, stray.policy_id
+        )));
+    }
+    let mut split = Vec::new();
+    for &(device, policy_id) in arms {
+        let arm: Vec<&TrialResult> = trials.iter().filter(|t| t.policy_id == policy_id).collect();
+        if arm.is_empty() {
+            return Err(invalid(format!("no {cohort} trials for {policy_id}")));
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        if let Some(repeat) = arm.iter().find(|t| !seen.insert(t.nonce.as_str())) {
+            return Err(invalid(format!(
+                "{policy_id} has more than one trial of model {}",
+                repeat.nonce
+            )));
+        }
+        split.push((device, policy_id, arm));
+    }
+    Ok(split)
+}
+
 /// Compare the control and fresh campaign outputs with the frozen archived row.
 ///
 /// # Errors
-/// A digest mismatch with the frozen file, a missing arm, a wrong cohort size, or a read failure.
+/// A digest mismatch with the frozen file, a missing arm, a trial of another policy, a repeated
+/// or missing model, a wrong cohort size, or a read failure.
 pub fn compare(
     frozen_path: &Path,
     control_dirs: &[PathBuf],
@@ -492,14 +537,7 @@ pub fn compare(
 
     let mut control = BTreeMap::new();
     let mut runs = Vec::new();
-    for (device, policy_id) in arms {
-        let trials: Vec<&TrialResult> = control_trials
-            .iter()
-            .filter(|t| t.policy_id == policy_id)
-            .collect();
-        if trials.is_empty() {
-            continue;
-        }
+    for (device, policy_id, trials) in split_arms(&control_trials, &arms, "control")? {
         if let Some(stray) = trials
             .iter()
             .find(|t| !reference.energies_milli.contains_key(&t.nonce))
@@ -507,6 +545,13 @@ pub fn compare(
             return Err(invalid(format!(
                 "control trial {} is not an archived model",
                 stray.instance_id
+            )));
+        }
+        if trials.len() != reference.energies_milli.len() {
+            return Err(invalid(format!(
+                "{policy_id} covers {} of {} archived models",
+                trials.len(),
+                reference.energies_milli.len()
             )));
         }
         let (arm, run) = control_arm(&reference, device, policy_id, &trials);
@@ -522,14 +567,7 @@ pub fn compare(
     };
 
     let mut fresh = BTreeMap::new();
-    for (device, policy_id) in arms {
-        let trials: Vec<&TrialResult> = fresh_trials
-            .iter()
-            .filter(|t| t.policy_id == policy_id)
-            .collect();
-        if trials.is_empty() {
-            continue;
-        }
+    for (device, policy_id, trials) in split_arms(&fresh_trials, &arms, "fresh")? {
         if trials.len() != frozen.cohort.count {
             return Err(invalid(format!(
                 "{policy_id} has {} fresh trials, the frozen cohort has {}",
@@ -576,19 +614,20 @@ pub fn markdown(comparison: &Comparison) -> String {
         "# Reproduction of `{}`\n\n## Control arm: archived models\n\n",
         comparison.cell
     );
-    out.push_str("| Device | Policy | Models | QPU / tie / classical | Gap mean (sd) | Median energy | Median wall s | Time to target s |\n");
-    out.push_str("|---|---|---:|---|---|---:|---:|---:|\n");
+    out.push_str("| Device | Policy | Models | QPU / tie / classical | No state | Gap mean (sd) | Median energy | Median wall s | Time to target s |\n");
+    out.push_str("|---|---|---:|---|---:|---|---:|---:|---:|\n");
     for arm in comparison.control.values() {
         let s = &arm.summary;
         let _ = writeln!(
             out,
-            "| {} | `{}` | {} | {} / {} / {} | {} | {} | {} | {} |",
+            "| {} | `{}` | {} | {} / {} / {} | {} | {} | {} | {} | {} |",
             s.device.label(),
             s.policy_id,
             s.trials,
             arm.qpu_wins,
             arm.ties,
             arm.classical_wins,
+            arm.missing,
             arm.gap.map_or_else(
                 || "n/a".to_owned(),
                 |g| format!("{:+.3} ({:.3})", g.mean_units, g.sd_units)
