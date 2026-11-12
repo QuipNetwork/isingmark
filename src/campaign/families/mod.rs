@@ -22,8 +22,25 @@ pub const FIXED_FAMILY: &str = "ising-fixed";
 /// The only revision of the explicit control.
 pub const FIXED_REVISION: &str = "1";
 
-/// The canonical families this build supports. SC-8 and later add entries.
-const PRODUCTION: &[CanonicalFamily] = &[];
+/// The canonical families this build supports.
+const PRODUCTION: &[CanonicalFamily] = &[CanonicalFamily {
+    contract: &ising_generators::ice::CHARGED_ICE_V1,
+    check_witness: charged_ice::check_witness,
+}];
+
+mod charged_ice {
+    use ising_generators::instance::Instance as Generated;
+
+    /// `quip/charged-ice@1` has no hard constraint. The generator documents its charge
+    /// defects as information only, never part of acceptance, so every state passes.
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "the signature is the WitnessCheck every canonical family shares"
+    )]
+    pub(super) fn check_witness(_instance: &Generated, _spins: &[i8]) -> Result<(), String> {
+        Ok(())
+    }
+}
 
 /// Resolve a family id and revision to its evaluator.
 #[derive(Debug, Clone, Copy)]

@@ -107,6 +107,7 @@ static CHAIN: Construction = Construction {
     check_topology: any_topology,
     generate: chain_generate,
     check_metadata: no_metadata,
+    feasible: None,
 };
 
 static CONTRACT: Contract = Contract {

@@ -6,10 +6,12 @@ use std::{error::Error, fmt, io};
 use contracts::EvalError;
 
 pub mod analysis;
+pub mod cohort;
 pub mod contracts;
 pub mod families;
 pub mod instance;
 pub mod protocol;
+pub mod reproduction;
 pub mod runner;
 pub mod timing;
 pub mod trace;

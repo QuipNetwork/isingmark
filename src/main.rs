@@ -93,6 +93,18 @@ async fn run_campaign_command(args: CampaignArgs) -> ExitCode {
             Err(error) => campaign_failure(&error),
         };
     }
+    if let Some(CampaignCommand::Cohort(inputs)) = args.command {
+        return cohort(inputs);
+    }
+    if let Some(CampaignCommand::ReproduceReport(inputs)) = args.command {
+        return match reproduce_report(&inputs) {
+            Ok(summary) => match write_campaign_json(&summary) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => campaign_failure(&error),
+            },
+            Err(error) => campaign_failure(&error),
+        };
+    }
     if let Some(CampaignCommand::Serve(inputs)) = args.command {
         return match serve_campaign(
             &inputs.into_config(false),
@@ -132,6 +144,51 @@ async fn run_campaign_command(args: CampaignArgs) -> ExitCode {
         }
         Err(error) => campaign_failure(&error),
     }
+}
+
+fn cohort(inputs: isingmark::cli::CohortArgs) -> ExitCode {
+    let request = isingmark::campaign::cohort::CohortRequest {
+        recipe: inputs.recipe,
+        count: inputs.count,
+        topology: inputs.topology,
+        max_energy: inputs.max_energy,
+        policies: inputs.policies,
+        out: inputs.out,
+    };
+    match isingmark::campaign::cohort::write_cohort(
+        &isingmark::campaign::families::FamilyRegistry::production(),
+        &request,
+    ) {
+        Ok(record) => match write_campaign_json(&record) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => campaign_failure(&error),
+        },
+        Err(error) => campaign_failure(&error),
+    }
+}
+
+fn reproduce_report(
+    inputs: &isingmark::cli::ReproduceReportArgs,
+) -> Result<serde_json::Value, isingmark::campaign::CampaignError> {
+    use isingmark::campaign::reproduction::{compare, markdown};
+    if inputs.out.exists() {
+        return Err(isingmark::campaign::CampaignError::InvalidRun(format!(
+            "{} exists; the report is written only into a new directory",
+            inputs.out.display()
+        )));
+    }
+    let comparison = compare(&inputs.frozen, &inputs.control, &inputs.fresh)?;
+    std::fs::create_dir_all(&inputs.out)?;
+    let mut json = serde_json::to_vec_pretty(&comparison)?;
+    json.push(b'\n');
+    std::fs::write(inputs.out.join("comparison.json"), json)?;
+    std::fs::write(inputs.out.join("comparison.md"), markdown(&comparison))?;
+    Ok(serde_json::json!({
+        "control_verdict": comparison.control_verdict,
+        "fresh_verdict": comparison.fresh_verdict,
+        "checks": comparison.checks,
+        "out": inputs.out,
+    }))
 }
 
 fn write_campaign_json(

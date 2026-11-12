@@ -91,6 +91,49 @@ pub enum CampaignCommand {
     FamilyCheck(FamilyCheckArgs),
     /// Resolve a policy panel for one family and report missing slots without starting a solver.
     PortfolioCheck(PortfolioCheckArgs),
+    /// Generate a fresh cohort of canonical instances and a manifest that lists them.
+    Cohort(CohortArgs),
+    /// Compare reproduction campaign outputs with a frozen archived row and write the verdict.
+    ReproduceReport(ReproduceReportArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ReproduceReportArgs {
+    /// Frozen comparison file, for example
+    /// `evaluation/qblock/configs/reproduction/ice-charge.json`. Run from the repository root.
+    #[arg(long)]
+    pub frozen: PathBuf,
+    /// Campaign output directory of the control arm (the archived models). Repeatable.
+    #[arg(long)]
+    pub control: Vec<PathBuf>,
+    /// Campaign output directory of the fresh cohort. Repeatable.
+    #[arg(long)]
+    pub fresh: Vec<PathBuf>,
+    /// New directory for `comparison.json` and `comparison.md`.
+    #[arg(long)]
+    pub out: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct CohortArgs {
+    /// Registered recipe alias, for example `ice-charge`.
+    #[arg(long)]
+    pub recipe: String,
+    /// Number of instances. Nonce `i` follows the cohort nonce rule for `i` in `0..count`.
+    #[arg(long)]
+    pub count: u32,
+    /// Base topology spec, for example `fixtures/suite-live-2026-09-21.spec.json`.
+    #[arg(long)]
+    pub topology: PathBuf,
+    /// Objective threshold of every instance, in natural energy units.
+    #[arg(long, allow_negative_numbers = true)]
+    pub max_energy: f64,
+    /// Campaign manifest without `instances`; the cohort writes it with them added.
+    #[arg(long)]
+    pub policies: PathBuf,
+    /// New directory for the instances, `manifest.json`, and `cohort.json`.
+    #[arg(long)]
+    pub out: PathBuf,
 }
 
 #[derive(Debug, Args)]

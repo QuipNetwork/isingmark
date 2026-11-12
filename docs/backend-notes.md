@@ -103,6 +103,11 @@ With `int8` coefficients, their messages use 3,797,256, 3,799,885, and
 These sizes leave at least 394,308 bytes below the session limit.
 Measure larger models through `quip-cuda-msa bench`.
 
+`cuda-msa-descent` runs `quip-cuda-msa-descent`, which is the same kernel
+followed by host greedy and loop descent on each job. The miner rescores every
+returned state exactly. Release v0.3.6-rc3 of `quip-solver-cuda` is the first
+release that publishes it.
+
 The throughput command exits nonzero if it completes zero jobs and rejects
 at least one job. It still writes the records and summary for diagnosis.
 

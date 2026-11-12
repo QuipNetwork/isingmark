@@ -406,12 +406,22 @@ for p in data:
 binaries_for() {
   case "$1" in
   quip-solver-cpu) echo "quip-cpu-sa quip-cpu-gibbs quip-cpu-sb" ;;
-  quip-solver-cuda) echo "quip-cuda-sa quip-cuda-gibbs" ;;
+  quip-solver-cuda) echo "quip-cuda-sa quip-cuda-gibbs quip-cuda-msa quip-cuda-msa-descent" ;;
   quip-solver-metal) echo "quip-metal-sa quip-metal-gibbs" ;;
   *)
     echo "error: unknown repo name: $1" >&2
     return 1
     ;;
+  esac
+}
+
+# Binaries that older releases do not publish. A missing asset is skipped with a
+# warning instead of failing the fetch. quip-cuda-msa-descent first ships in
+# quip-solver-cuda v0.3.6-rc3.
+optional_binary() {
+  case "$1" in
+  quip-cuda-msa | quip-cuda-msa-descent) return 0 ;;
+  *) return 1 ;;
   esac
 }
 
@@ -464,7 +474,7 @@ echo
 # host triple; the saved file does not.
 fetch_repo() {
   local name="$1" tag="$2"
-  local proj bin asset url
+  local proj bin asset url part status
   proj="$(repo_project_path "${name}")"
   for bin in $(binaries_for "${name}"); do
     asset="${bin}-${os_tag}-${arch}"
@@ -474,10 +484,22 @@ fetch_repo() {
       continue
     fi
     echo "fetch ${asset} -> ${DEST}/${bin}"
-    if ! curl --fail --location --silent --show-error --output "${DEST}/${bin}" "${url}"; then
-      echo "error: could not download ${asset} from ${name} at ${tag}" >&2
+    # Download to a part file so that a failed fetch keeps the previous copy.
+    part="${DEST}/.${bin}.part"
+    if ! status="$(curl --fail --location --silent --show-error \
+      --write-out '%{http_code}' --output "${part}" "${url}")"; then
+      rm -f "${part}"
+      if optional_binary "${bin}" && [[ "${status}" == "404" ]]; then
+        # The tag does not publish this binary. A copy from an earlier tag
+        # would not match the other binaries, so remove it.
+        rm -f "${DEST}/${bin}"
+        echo "warning: ${name} ${tag} publishes no ${asset}; skipped" >&2
+        continue
+      fi
+      echo "error: could not download ${asset} from ${name} at ${tag} (HTTP ${status:-none})" >&2
       return 1
     fi
+    mv -f "${part}" "${DEST}/${bin}"
     chmod +x "${DEST}/${bin}"
   done
 }
@@ -512,6 +534,8 @@ miner_names=(
   quip-metal-gibbs
   quip-cuda-sa
   quip-cuda-gibbs
+  quip-cuda-msa
+  quip-cuda-msa-descent
 )
 
 echo
