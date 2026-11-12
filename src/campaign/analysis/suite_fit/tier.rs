@@ -450,7 +450,7 @@ pub fn tier(reference: &QpuReference, runs: &[ClassicalRun]) -> Option<TierLabel
     let estimated = |estimated: bool| if estimated { " (estimated wall)" } else { "" };
     let reason = format!(
         "Beat test: {} `{}`{} {verb} the QPU, below the reference on {} of {} models. \
-         Speed test: {} `{}` {} at {} s per model{}, {:.1} times the QPU wall of {} s.",
+         Speed test: {} `{}` {} at {:.3} s per model{}, {:.1} times the QPU wall of {:.3} s.",
         run.device.label(),
         run.name,
         estimated(run.estimated),
