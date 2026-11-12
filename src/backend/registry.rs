@@ -242,6 +242,13 @@ const BUILTINS: &[BuiltinEntry] = &[
         kind: BackendKind::Sweeping,
         node_capacity_flag: Some("--max-nodes"),
     },
+    // The `cuda-msa` kernel followed by host greedy and loop descent on each job.
+    BuiltinEntry {
+        name: "cuda-msa-descent",
+        bin_name: "quip-cuda-msa-descent",
+        kind: BackendKind::Sweeping,
+        node_capacity_flag: Some("--max-nodes"),
+    },
     BuiltinEntry {
         name: "metal",
         bin_name: "quip-metal-sa",
@@ -277,7 +284,8 @@ const BUILTINS: &[BuiltinEntry] = &[
 /// Build the registry of built-in backends (`cpu-sa`, `cpu-gibbs`, `cpu-fsa`,
 /// `cpu-msa`, `cpu-sb`, `cpu-bsb`, `cpu-hdsb`, `cpu-hbsb`, `cpu-gbsb`,
 /// `cpu-gdsb`, `cpu-tedsb`, `cpu-sbqa`, `cpu-ggdsb`, `cpu-mps`, `cpu-mfa`,
-/// `cpu-flatiron`, `cuda`, `cuda-gibbs`, `cuda-msa`, `metal`, `dwave`, `beit`, `cuopt`),
+/// `cpu-flatiron`, `cuda`, `cuda-gibbs`, `cuda-msa`, `cuda-msa-descent`, `metal`, `dwave`,
+/// `beit`, `cuopt`),
 /// resolving each binary from `$PATH`.
 ///
 /// A backend whose binary is not on `$PATH` still gets an entry: `bin` falls
@@ -437,6 +445,11 @@ mod tests {
                 ("cuda", "quip-cuda-sa", BackendKind::Sweeping),
                 ("cuda-gibbs", "quip-cuda-gibbs", BackendKind::Sweeping),
                 ("cuda-msa", "quip-cuda-msa", BackendKind::Sweeping),
+                (
+                    "cuda-msa-descent",
+                    "quip-cuda-msa-descent",
+                    BackendKind::Sweeping
+                ),
                 ("metal", "quip-metal-sa", BackendKind::Sweeping),
                 ("dwave", "quip-dwave-qa", BackendKind::Annealing),
                 ("beit", "quip-beit-sa", BackendKind::Sweeping),
@@ -453,12 +466,11 @@ mod tests {
     fn only_the_cuda_backends_declare_a_node_capacity_flag() {
         let registry = builtin_registry();
         for spec in &registry {
-            let expected =
-                if spec.name == "cuda" || spec.name == "cuda-gibbs" || spec.name == "cuda-msa" {
-                    Some("--max-nodes")
-                } else {
-                    None
-                };
+            let expected = if spec.name.starts_with("cuda") {
+                Some("--max-nodes")
+            } else {
+                None
+            };
             assert_eq!(
                 spec.node_capacity_flag.as_deref(),
                 expected,

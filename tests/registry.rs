@@ -59,10 +59,10 @@ fn missing_binary_probe_returns_not_found_and_never_panics() {
     assert!(matches!(check_err, ProbeError::NotFound(_)));
 }
 
-/// The built-in registry produces exactly the twenty-three documented backends,
+/// The built-in registry produces exactly the twenty-four documented backends,
 /// in order — no more, no fewer, and none renamed.
 #[test]
-fn builtin_registry_contains_exactly_the_twenty_three_documented_backends_in_order() {
+fn builtin_registry_contains_exactly_the_twenty_four_documented_backends_in_order() {
     let registry = builtin_registry();
     let names: Vec<&str> = registry.iter().map(|spec| spec.name.as_str()).collect();
     assert_eq!(
@@ -87,6 +87,7 @@ fn builtin_registry_contains_exactly_the_twenty_three_documented_backends_in_ord
             "cuda",
             "cuda-gibbs",
             "cuda-msa",
+            "cuda-msa-descent",
             "metal",
             "dwave",
             "beit",
