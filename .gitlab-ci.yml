@@ -50,6 +50,9 @@ clippy:
 
 test:
   stage: test
+  tags:
+    - docker
+    - amd64
   before_script:
     - rustc --version
     - cargo --version
